@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Akun Saya{% endblock %}
+{% block content %}
+<h3 class="mb-3">Akun Saya</h3>
+<div class="card p-4" style="max-width: 480px;">
+  <p><strong>Username:</strong> {{ current_user.username }}</p>
+  <p><strong>Nama:</strong> {{ current_user.nama }}</p>
+  <hr>
+  <h6>Ubah Password</h6>
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Password Baru</label>
+      <input type="password" name="password_baru" class="form-control" minlength="6" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Konfirmasi Password Baru</label>
+      <input type="password" name="password_konfirmasi" class="form-control" minlength="6" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Ubah Password</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-4">
+    <div class="card p-4 mt-5">
+      <h4 class="mb-3 text-center">📋 MN Portal</h4>
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input type="text" name="username" class="form-control" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" name="password" id="password" class="form-control" required>
+          <div class="form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="showPassword">
+            <label class="form-check-label small" for="showPassword">Tampilkan password</label>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Masuk</button>
+      </form>
+      <p class="text-muted small mt-3 mb-0 text-center">Default: admin / admin123</p>
+      <p class="text-center small mt-2 mb-0"><a href="{{ url_for('pegawai_login') }}">Login sebagai pegawai &raquo;</a></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('showPassword').addEventListener('change', function () {
+  document.getElementById('password').type = this.checked ? 'text' : 'password';
+});
+</script>
+{% endblock %}

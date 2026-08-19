@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Absen Sekarang{% endblock %}
+{% block content %}
+<h3 class="mb-3">Halo, {{ current_user.nama }} 👋</h3>
+<p class="text-muted">{{ hari_ini.strftime('%A, %d-%m-%Y') }}</p>
+
+<div class="card p-4 text-center mb-3">
+  {% if absen and absen.jam_masuk and absen.jam_pulang %}
+    <h5 class="text-success mb-2">✅ Absensi hari ini sudah lengkap</h5>
+    <p class="mb-0">Masuk: <strong>{{ absen.jam_masuk }}</strong> &nbsp;|&nbsp; Pulang: <strong>{{ absen.jam_pulang }}</strong></p>
+  {% elif absen and absen.jam_masuk %}
+    <h5 class="mb-2">Anda sudah absen masuk pukul <strong>{{ absen.jam_masuk }}</strong></h5>
+    <p class="text-muted">Klik tombol di bawah ini saat Anda akan pulang.</p>
+    <button id="btnAbsen" class="btn btn-warning btn-lg px-5 py-3" data-aksi="pulang">📍 Absen Pulang Sekarang</button>
+  {% elif absen and absen.status != 'Hadir' %}
+    <h5 class="mb-2">Status hari ini: <span class="badge bg-info text-dark">{{ absen.status }}</span></h5>
+    <p class="text-muted mb-0">Pengajuan Anda untuk hari ini sudah disetujui.</p>
+  {% else %}
+    <p class="text-muted">Anda belum absen masuk hari ini.</p>
+    <button id="btnAbsen" class="btn btn-primary btn-lg px-5 py-3" data-aksi="masuk">📍 Absen Masuk Sekarang</button>
+  {% endif %}
+
+  <div id="hasilAbsen" class="mt-3"></div>
+
+  {% if settings.kantor_lat and settings.kantor_lng %}
+  <p class="text-muted small mt-3 mb-0">Absen hanya bisa dilakukan dalam radius {{ settings.radius_kantor_meter }} meter dari kantor.</p>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <a href="{{ url_for('pegawai_riwayat') }}" class="card p-3 text-decoration-none text-dark d-block">
+      <strong>📅 Riwayat Absensi</strong>
+      <div class="text-muted small">Lihat riwayat kehadiran Anda</div>
+    </a>
+  </div>
+  <div class="col-md-6">
+    <a href="{{ url_for('pegawai_izin') }}" class="card p-3 text-decoration-none text-dark d-block">
+      <strong>📝 Ajukan Izin/Sakit/Cuti</strong>
+      <div class="text-muted small">Kirim permohonan ke admin</div>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const btn = document.getElementById('btnAbsen');
+if (btn) {
+  btn.addEventListener('click', function () {
+    const hasil = document.getElementById('hasilAbsen');
+    if (!navigator.geolocation) {
+      hasil.innerHTML = '<div class="alert alert-danger">Perangkat/browser Anda tidak mendukung GPS.</div>';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Mendeteksi lokasi...';
+    hasil.innerHTML = '';
+
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      btn.textContent = 'Mengirim...';
+      fetch('{{ url_for("pegawai_absen") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      })
+        .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+          if (res.ok && res.data.success) {
+            hasil.innerHTML = '<div class="alert alert-success">' + res.data.message + '</div>';
+            setTimeout(function () { window.location.reload(); }, 1200);
+          } else {
+            hasil.innerHTML = '<div class="alert alert-danger">' + res.data.message + '</div>';
+            btn.disabled = false;
+            btn.textContent = btn.dataset.aksi === 'masuk' ? '📍 Absen Masuk Sekarang' : '📍 Absen Pulang Sekarang';
+          }
+        })
+        .catch(function () {
+          hasil.innerHTML = '<div class="alert alert-danger">Gagal menghubungi server. Coba lagi.</div>';
+          btn.disabled = false;
+          btn.textContent = btn.dataset.aksi === 'masuk' ? '📍 Absen Masuk Sekarang' : '📍 Absen Pulang Sekarang';
+        });
+    }, function (err) {
+      let pesan = 'Tidak bisa mengambil lokasi.';
+      if (err.code === err.PERMISSION_DENIED) {
+        pesan = 'Izin lokasi ditolak. Aktifkan izin lokasi untuk browser ini di pengaturan HP Anda.';
+      } else if (err.code === err.TIMEOUT) {
+        pesan = 'Waktu deteksi lokasi habis. Pastikan GPS aktif lalu coba lagi.';
+      }
+      hasil.innerHTML = '<div class="alert alert-danger">' + pesan + '</div>';
+      btn.disabled = false;
+      btn.textContent = btn.dataset.aksi === 'masuk' ? '📍 Absen Masuk Sekarang' : '📍 Absen Pulang Sekarang';
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+}
+</script>
+{% endblock %}

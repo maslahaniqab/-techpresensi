@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Koreksi Absensi{% endblock %}
+{% block content %}
+<h3 class="mb-3">{{ 'Edit Data Absensi' if att else 'Tambah/Koreksi Data Absensi' }}</h3>
+<p class="text-muted">Absensi normal sekarang dilakukan mandiri oleh pegawai lewat akunnya masing-masing (dengan lokasi GPS). Gunakan form ini hanya untuk menambahkan data yang terlewat atau mengoreksi kesalahan.</p>
+
+<div class="card p-4" style="max-width: 560px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Karyawan</label>
+      <select name="employee_id" class="form-select" required>
+        <option value="">- Pilih Karyawan -</option>
+        {% for e in employees %}
+        <option value="{{ e.id }}" {{ 'selected' if att and att.employee_id == e.id else '' }}>{{ e.nama }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Tanggal</label>
+        <input type="date" name="tanggal" class="form-control" required
+               value="{{ att.tanggal.isoformat() if att else tanggal_default }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Status</label>
+        <select name="status" id="status" class="form-select" required>
+          {% for s in ['Hadir','Sakit','Izin','Cuti','Alpha'] %}
+          <option value="{{ s }}" {{ 'selected' if att and att.status == s else '' }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Masuk</label>
+        <input type="time" name="jam_masuk" id="jam_masuk" class="form-control" value="{{ att.jam_masuk if att else '' }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Pulang</label>
+        <input type="time" name="jam_pulang" id="jam_pulang" class="form-control" value="{{ att.jam_pulang if att else '' }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Catatan</label>
+      <input type="text" name="catatan" class="form-control" value="{{ att.catatan if att else '' }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Simpan</button>
+    <a href="{{ url_for('absensi_list') }}" class="btn btn-outline-secondary">Batal</a>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleJam() {
+  const isHadir = document.getElementById('status').value === 'Hadir';
+  document.getElementById('jam_masuk').disabled = !isHadir;
+  document.getElementById('jam_pulang').disabled = !isHadir;
+}
+document.getElementById('status').addEventListener('change', toggleJam);
+toggleJam();
+</script>
+{% endblock %}

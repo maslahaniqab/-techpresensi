@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Slip Gaji{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+  <h3 class="mb-0">Slip Gaji</h3>
+  <div>
+    <button onclick="window.print()" class="btn btn-outline-secondary">Cetak</button>
+    <a href="{{ url_for('penggajian_list', bulan=p.bulan, tahun=p.tahun) }}" class="btn btn-outline-secondary">Kembali</a>
+  </div>
+</div>
+
+<div class="card p-4" style="max-width: 700px;">
+  <div class="text-center mb-3">
+    {% if settings.logo_filename %}
+    <img src="{{ url_for('static', filename='uploads/' + settings.logo_filename) }}" alt="Logo" style="max-height:80px; max-width:180px;" class="mb-2">
+    {% endif %}
+    {% if settings.alamat_perusahaan or settings.kontak_perusahaan or settings.instagram_perusahaan %}
+    <div class="fw-semibold">{{ settings.nama_perusahaan }}</div>
+    <div class="small text-muted">
+      {{ settings.alamat_perusahaan }}{% if settings.kontak_perusahaan %} {{ settings.kontak_perusahaan }}{% endif %}
+      {% if settings.instagram_perusahaan %}<br>IG: {{ settings.instagram_perusahaan }}{% endif %}
+    </div>
+    <hr>
+    {% endif %}
+  </div>
+
+  <h5 class="text-center mb-1">SLIP GAJI {{ settings.nama_perusahaan|upper }}</h5>
+  <p class="text-center text-muted mb-4">Periode {{ periode_awal | tanggal_panjang }} - {{ periode_akhir | tanggal_panjang }}</p>
+
+  <table class="table table-borderless mb-3">
+    <tr><td class="text-muted" style="width:180px;">Nama Karyawan</td><td>: {{ p.employee.nama }}</td></tr>
+    <tr><td class="text-muted">Jabatan</td><td>: {{ p.employee.jabatan or '-' }}</td></tr>
+    <tr><td class="text-muted">Status</td><td>: {{ p.tipe_pegawai }}</td></tr>
+  </table>
+
+  <table class="table table-sm mb-3">
+    <tr><td>Hari Hadir</td><td class="text-end">{{ p.total_hadir }} hari</td></tr>
+    <tr><td>Sakit</td><td class="text-end">{{ p.total_sakit }} hari</td></tr>
+    <tr><td>Izin</td><td class="text-end">{{ p.total_izin }} hari</td></tr>
+    <tr><td>Cuti</td><td class="text-end">{{ p.total_cuti }} hari</td></tr>
+    <tr><td>Alpha (tanpa keterangan)</td><td class="text-end">{{ p.total_alpha }} hari</td></tr>
+    <tr><td>Total Keterlambatan</td><td class="text-end">{{ p.total_telat_menit }} menit</td></tr>
+    <tr><td>Total Lembur</td><td class="text-end">{{ p.total_lembur_menit }} menit</td></tr>
+  </table>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-sm mb-3">
+      <thead>
+        <tr><th colspan="2">RINCIAN GAJI</th></tr>
+      </thead>
+      <tbody>
+        {% if p.tipe_pegawai == 'Freelance' %}
+        <tr>
+          <td>Upah Kerja ({{ p.total_hadir }} hari &times; {{ tarif_unit_efektif | rupiah }})</td>
+          <td class="text-end">{{ p.upah_freelance | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Lembur / Over Time</td>
+          <td class="text-end">{{ p.uang_lembur | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Achieve Target</td>
+          <td class="text-end">{{ p.bonus_target | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Co-Host</td>
+          <td class="text-end">{{ p.co_host_fee | rupiah }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td>Gaji Pokok</td>
+          <td class="text-end">{{ p.gaji_pokok | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Tj. Makan &amp; Transport</td>
+          <td class="text-end">{{ (p.tunjangan_makan + p.tunjangan_transport) | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Lembur Harian</td>
+          <td class="text-end">{{ p.uang_lembur | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Bonus</td>
+          <td class="text-end">{{ p.bonus_target | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Potongan Alpha</td>
+          <td class="text-end text-danger">- {{ p.potongan_alpha | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Potongan Keterlambatan</td>
+          <td class="text-end text-danger">- {{ p.potongan_telat | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Jaminan Kecelakaan Kerja (JKK)</td>
+          <td class="text-end text-danger">- {{ p.bpjs_jkk | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Jaminan Kematian (JKM)</td>
+          <td class="text-end text-danger">- {{ p.bpjs_jkm | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Jaminan Hari Tua (JHT)</td>
+          <td class="text-end text-danger">- {{ p.bpjs_jht | rupiah }}</td>
+        </tr>
+        <tr>
+          <td>Jaminan Kesehatan</td>
+          <td class="text-end text-danger">- {{ p.bpjs_kesehatan | rupiah }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <table class="table mb-1">
+    <tr class="fs-5 fw-bold">
+      <td>{{ 'GAJI BRUTO' if p.tipe_pegawai == 'Freelance' else 'PENERIMAAN BERSIH' }}</td>
+      <td class="text-end">{{ p.gaji_bersih | rupiah }}</td>
+    </tr>
+  </table>
+  <p class="fst-italic text-center mb-3">{{ p.gaji_bersih | terbilang }}</p>
+
+  <p class="text-end text-muted mb-3">{{ settings.kota_perusahaan }}, {{ periode_akhir | tanggal_panjang }}</p>
+
+  {% if p.status != 'Dibayar' %}
+  <form method="post" action="{{ url_for('penggajian_bayar', payroll_id=p.id) }}" class="no-print"
+        onsubmit="return confirm('Tandai slip gaji ini sudah dibayar?');">
+    <button type="submit" class="btn btn-success w-100">Tandai Sudah Dibayar</button>
+  </form>
+  {% else %}
+  <p class="text-muted small text-center mb-0">Dibayar pada {{ p.tanggal_dibayar.strftime('%d-%m-%Y %H:%M') }}</p>
+  {% endif %}
+</div>
+{% endblock %}

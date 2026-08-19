@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Pengaturan{% endblock %}
+{% block content %}
+<h3 class="mb-3">Pengaturan</h3>
+<div class="card p-4" style="max-width: 640px;">
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">Nama Perusahaan</label>
+      <input type="text" name="nama_perusahaan" class="form-control" value="{{ settings.nama_perusahaan }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Logo Perusahaan</label>
+      {% if settings.logo_filename %}
+      <div class="mb-2">
+        <img src="{{ url_for('static', filename='uploads/' + settings.logo_filename) }}" alt="Logo" style="max-height:70px; max-width:160px;" class="border rounded p-1">
+      </div>
+      {% endif %}
+      <input type="file" name="logo" class="form-control" accept=".png,.jpg,.jpeg,.webp">
+      <div class="form-text">Format PNG/JPG/WEBP. Logo ini akan muncul di header slip gaji.</div>
+    </div>
+    <div class="row">
+      <div class="col-md-8 mb-3">
+        <label class="form-label">Alamat Perusahaan</label>
+        <input type="text" name="alamat_perusahaan" class="form-control" value="{{ settings.alamat_perusahaan }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Kota (untuk tanda tangan slip)</label>
+        <input type="text" name="kota_perusahaan" class="form-control" value="{{ settings.kota_perusahaan }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Kontak (No. HP/Email)</label>
+        <input type="text" name="kontak_perusahaan" class="form-control" value="{{ settings.kontak_perusahaan }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Instagram</label>
+        <input type="text" name="instagram_perusahaan" class="form-control" value="{{ settings.instagram_perusahaan }}">
+      </div>
+    </div>
+    <hr>
+    <label class="form-label fw-semibold">Lokasi Kantor (untuk absen GPS pegawai)</label>
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label class="form-label small">Latitude</label>
+        <input type="text" name="kantor_lat" id="kantor_lat" class="form-control" value="{{ settings.kantor_lat if settings.kantor_lat is not none else '' }}" placeholder="-6.914744">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label small">Longitude</label>
+        <input type="text" name="kantor_lng" id="kantor_lng" class="form-control" value="{{ settings.kantor_lng if settings.kantor_lng is not none else '' }}" placeholder="107.609810">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label small">Radius (meter)</label>
+        <input type="number" name="radius_kantor_meter" class="form-control" min="10" value="{{ settings.radius_kantor_meter }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <button type="button" id="btnLokasiSekarang" class="btn btn-sm btn-outline-secondary">📍 Gunakan Lokasi Saat Ini</button>
+      <span id="lokasiStatus" class="small text-muted ms-2"></span>
+      <div class="form-text">Berdiri di lokasi kantor lalu klik tombol ini untuk mengisi otomatis. Kosongkan latitude/longitude jika tidak ingin membatasi lokasi absen.</div>
+    </div>
+    <hr>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Masuk Standar</label>
+        <input type="time" name="jam_masuk_standar" class="form-control" value="{{ settings.jam_masuk_standar }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Pulang Standar</label>
+        <input type="time" name="jam_pulang_standar" class="form-control" value="{{ settings.jam_pulang_standar }}">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Hari Kerja per Bulan</label>
+      <input type="number" name="hari_kerja_per_bulan" class="form-control" min="1" max="31" value="{{ settings.hari_kerja_per_bulan }}">
+      <div class="form-text">Dipakai untuk menghitung potongan per hari Alpha (gaji pokok ÷ hari kerja).</div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Toleransi Telat (menit)</label>
+        <input type="number" name="toleransi_telat_menit" class="form-control" min="0" value="{{ settings.toleransi_telat_menit }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Minimal Lembur Dihitung (menit)</label>
+        <input type="number" name="toleransi_lembur_menit" class="form-control" min="0" value="{{ settings.toleransi_lembur_menit }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Denda Telat / menit (Rp)</label>
+        <input type="number" name="denda_telat_per_menit" class="form-control" min="0" value="{{ settings.denda_telat_per_menit }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Upah Lembur / jam (Rp)</label>
+        <input type="number" name="upah_lembur_per_jam" class="form-control" min="0" value="{{ settings.upah_lembur_per_jam }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Tarif Harian Freelance (Rp)</label>
+        <input type="number" name="tarif_harian_freelance" class="form-control" min="0" value="{{ settings.tarif_harian_freelance }}">
+        <div class="form-text">Dikalikan jumlah hari hadir untuk karyawan Freelance (bisa di-override per karyawan).</div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Bonus Pencapaian Target (Rp)</label>
+        <input type="number" name="bonus_target_tercapai" class="form-control" min="0" value="{{ settings.bonus_target_tercapai }}">
+        <div class="form-text">Ditambahkan otomatis jika karyawan ditandai "Tercapai".</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Upah Lembur Freelance / jam (Rp)</label>
+        <input type="number" name="upah_lembur_freelance_per_jam" class="form-control" min="0" value="{{ settings.upah_lembur_freelance_per_jam }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Fee Co-Host (Rp)</label>
+        <input type="number" name="tarif_co_host" class="form-control" min="0" value="{{ settings.tarif_co_host }}">
+        <div class="form-text">Ditambahkan jika karyawan Freelance ditandai "Co-Host Bulan Ini: Ya".</div>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Simpan Pengaturan</button>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('btnLokasiSekarang').addEventListener('click', function () {
+  const status = document.getElementById('lokasiStatus');
+  if (!navigator.geolocation) {
+    status.textContent = 'Browser tidak mendukung GPS.';
+    return;
+  }
+  status.textContent = 'Mendeteksi lokasi...';
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    document.getElementById('kantor_lat').value = pos.coords.latitude.toFixed(6);
+    document.getElementById('kantor_lng').value = pos.coords.longitude.toFixed(6);
+    status.textContent = 'Lokasi berhasil diisi. Jangan lupa klik Simpan Pengaturan.';
+  }, function () {
+    status.textContent = 'Gagal mendapatkan lokasi. Pastikan izin lokasi diaktifkan.';
+  }, { enableHighAccuracy: true, timeout: 15000 });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Pengajuan Izin{% endblock %}
+{% block content %}
+<h3 class="mb-3">Pengajuan Izin / Sakit / Cuti</h3>
+
+<div class="card p-3 mb-3">
+  <div class="btn-group" role="group">
+    <a href="{{ url_for('pengajuan_izin_list', status='Menunggu') }}" class="btn btn-sm {{ 'btn-primary' if status_filter == 'Menunggu' else 'btn-outline-primary' }}">
+      Menunggu {% if jumlah_menunggu %}({{ jumlah_menunggu }}){% endif %}
+    </a>
+    <a href="{{ url_for('pengajuan_izin_list', status='Disetujui') }}" class="btn btn-sm {{ 'btn-primary' if status_filter == 'Disetujui' else 'btn-outline-primary' }}">Disetujui</a>
+    <a href="{{ url_for('pengajuan_izin_list', status='Ditolak') }}" class="btn btn-sm {{ 'btn-primary' if status_filter == 'Ditolak' else 'btn-outline-primary' }}">Ditolak</a>
+  </div>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Diajukan</th>
+          <th>Nama</th>
+          <th>Untuk Tanggal</th>
+          <th>Jenis</th>
+          <th>Alasan</th>
+          <th>Status</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pengajuan %}
+        <tr>
+          <td>{{ p.tanggal_diajukan.strftime('%d-%m-%Y %H:%M') }}</td>
+          <td>{{ p.employee.nama }}</td>
+          <td>{{ p.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ p.jenis }}</td>
+          <td>{{ p.alasan or '-' }}</td>
+          <td>
+            {% if p.status == 'Disetujui' %}
+              <span class="badge bg-success">Disetujui</span>
+            {% elif p.status == 'Ditolak' %}
+              <span class="badge bg-danger">Ditolak</span>
+            {% else %}
+              <span class="badge bg-secondary">Menunggu</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if p.status == 'Menunggu' %}
+            <form method="post" action="{{ url_for('pengajuan_izin_setujui', pid=p.id) }}" class="d-inline"
+                  onsubmit="return confirm('Setujui pengajuan {{ p.employee.nama }}? Data absensi tanggal {{ p.tanggal.strftime('%d-%m-%Y') }} akan otomatis terisi.');">
+              <button type="submit" class="btn btn-sm btn-success">Setujui</button>
+            </form>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#tolak{{ p.id }}">Tolak</button>
+            <div class="collapse mt-2" id="tolak{{ p.id }}">
+              <form method="post" action="{{ url_for('pengajuan_izin_tolak', pid=p.id) }}" class="d-flex gap-2">
+                <input type="text" name="catatan_admin" class="form-control form-control-sm" placeholder="Alasan penolakan (opsional)">
+                <button type="submit" class="btn btn-sm btn-danger text-nowrap">Kirim</button>
+              </form>
+            </div>
+            {% else %}
+            <span class="text-muted small">{{ p.catatan_admin or '-' }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Tidak ada pengajuan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

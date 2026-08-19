@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h3 class="mb-4">Dashboard</h3>
+<div class="row g-3">
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="text-muted small">Karyawan Aktif</div>
+      <div class="fs-3 fw-bold">{{ total_karyawan }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="text-muted small">Absen Hari Ini</div>
+      <div class="fs-3 fw-bold">{{ absen_hari_ini }} / {{ total_karyawan }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="text-muted small">Hadir Hari Ini</div>
+      <div class="fs-3 fw-bold text-success">{{ hadir_hari_ini }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="text-muted small">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
+      <div class="fs-5 fw-bold text-primary">{{ total_gaji_bulan_ini | rupiah }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-md-3">
+    <div class="card p-4 text-center">
+      <h5>Lihat Absensi</h5>
+      <p class="text-muted small">Pantau & koreksi absensi harian</p>
+      <a href="{{ url_for('absensi_list') }}" class="btn btn-primary">Buka Absensi</a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-4 text-center">
+      <h5>Pengajuan Izin</h5>
+      <p class="text-muted small">
+        {% if pending_izin_count %}
+          <span class="text-danger fw-semibold">{{ pending_izin_count }} menunggu persetujuan</span>
+        {% else %}
+          Tidak ada pengajuan menunggu
+        {% endif %}
+      </p>
+      <a href="{{ url_for('pengajuan_izin_list') }}" class="btn btn-outline-primary">Buka Pengajuan</a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-4 text-center">
+      <h5>Tambah Karyawan</h5>
+      <p class="text-muted small">Daftarkan karyawan baru</p>
+      <a href="{{ url_for('karyawan_tambah') }}" class="btn btn-outline-primary">Tambah Karyawan</a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-4 text-center">
+      <h5>Proses Gaji</h5>
+      <p class="text-muted small">Generate slip gaji bulan ini</p>
+      <a href="{{ url_for('penggajian_list') }}" class="btn btn-outline-primary">Buka Penggajian</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

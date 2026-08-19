@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if karyawan else 'Tambah' }} Karyawan{% endblock %}
+{% block content %}
+<h3 class="mb-3">{{ 'Edit Karyawan' if karyawan else 'Tambah Karyawan' }}</h3>
+<div class="card p-4" style="max-width: 640px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Nama Lengkap</label>
+      <input type="text" name="nama" class="form-control" required value="{{ karyawan.nama if karyawan else '' }}">
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jabatan</label>
+        <select name="jabatan" class="form-select">
+          <option value="">- Pilih Jabatan -</option>
+          {% for j in jabatan_list %}
+          <option value="{{ j }}" {{ 'selected' if karyawan and karyawan.jabatan == j else '' }}>{{ j }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">No. HP</label>
+        <input type="text" name="no_hp" class="form-control" value="{{ karyawan.no_hp if karyawan else '' }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-control" value="{{ karyawan.email or '' if karyawan else '' }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Alamat</label>
+        <input type="text" name="alamat" class="form-control" value="{{ karyawan.alamat if karyawan else '' }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Nomor Rekening</label>
+        <input type="text" name="nomor_rekening" class="form-control" value="{{ karyawan.nomor_rekening if karyawan else '' }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Status Pegawai</label>
+        <select name="tipe_pegawai" id="tipe_pegawai" class="form-select">
+          {% set tp = karyawan.tipe_pegawai if karyawan else 'Karyawan Tetap' %}
+          <option value="Karyawan Tetap" {{ 'selected' if tp == 'Karyawan Tetap' else '' }}>Karyawan Tetap</option>
+          <option value="Probation" {{ 'selected' if tp == 'Probation' else '' }}>Probation</option>
+          <option value="Freelance" {{ 'selected' if tp == 'Freelance' else '' }}>Freelance</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="area_bulanan" class="border rounded p-3 mb-3">
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Gaji Pokok (Rp)</label>
+          <input type="number" name="gaji_pokok" id="gaji_pokok" class="form-control hitung-total" min="0"
+                 value="{{ karyawan.gaji_pokok if karyawan else 0 }}">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Tunjangan Makan (Rp)</label>
+          <input type="number" name="tunjangan_makan" id="tunjangan_makan" class="form-control hitung-total" min="0"
+                 value="{{ karyawan.tunjangan_makan if karyawan else 0 }}">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label">Tunjangan Transport (Rp)</label>
+          <input type="number" name="tunjangan_transport" id="tunjangan_transport" class="form-control hitung-total" min="0"
+                 value="{{ karyawan.tunjangan_transport if karyawan else 0 }}">
+        </div>
+      </div>
+      <div class="alert alert-info mb-3 py-2">
+        Total Gaji Pokok + Tunjangan: <strong id="total_gaji">Rp 0</strong>
+      </div>
+      <label class="form-label fw-semibold">Potongan BPJS (Rp) <span class="text-muted fw-normal">- boleh 0 jika belum ikut BPJS</span></label>
+      <div class="row">
+        <div class="col-md-3 mb-2">
+          <label class="form-label small">JKK</label>
+          <input type="number" name="bpjs_jkk" class="form-control" min="0" value="{{ karyawan.bpjs_jkk if karyawan else 0 }}">
+        </div>
+        <div class="col-md-3 mb-2">
+          <label class="form-label small">JKM</label>
+          <input type="number" name="bpjs_jkm" class="form-control" min="0" value="{{ karyawan.bpjs_jkm if karyawan else 0 }}">
+        </div>
+        <div class="col-md-3 mb-2">
+          <label class="form-label small">JHT</label>
+          <input type="number" name="bpjs_jht" class="form-control" min="0" value="{{ karyawan.bpjs_jht if karyawan else 0 }}">
+        </div>
+        <div class="col-md-3 mb-2">
+          <label class="form-label small">Kesehatan</label>
+          <input type="number" name="bpjs_kesehatan" class="form-control" min="0" value="{{ karyawan.bpjs_kesehatan if karyawan else 0 }}">
+        </div>
+      </div>
+    </div>
+
+    <div id="area_freelance" class="border rounded p-3 mb-3 d-none">
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Tarif per Hari/Unit Kerja (Rp)</label>
+          <input type="number" name="tarif_unit_freelance" class="form-control" min="0"
+                 value="{{ karyawan.tarif_unit_freelance if karyawan else 0 }}" placeholder="0 = pakai tarif default">
+          <div class="form-text">Kosongkan/isi 0 untuk memakai tarif default di menu Pengaturan.</div>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Co-Host Bulan Ini?</label>
+          <select name="co_host_bulan_ini" class="form-select">
+            <option value="Tidak" {{ 'selected' if karyawan and karyawan.co_host_bulan_ini == 'Tidak' else '' }}>Tidak</option>
+            <option value="Ya" {{ 'selected' if karyawan and karyawan.co_host_bulan_ini == 'Ya' else '' }}>Ya (+ fee co-host)</option>
+          </select>
+        </div>
+      </div>
+      <div class="alert alert-secondary mb-0 py-2">
+        Gaji freelance = (jumlah hari hadir &times; tarif per hari) + lembur + bonus target + fee co-host (jika ada).
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Status Karyawan</label>
+      <select name="status" class="form-select">
+        <option value="Aktif" {{ 'selected' if karyawan and karyawan.status == 'Aktif' else '' }}>Aktif</option>
+        <option value="Nonaktif" {{ 'selected' if karyawan and karyawan.status == 'Nonaktif' else '' }}>Nonaktif</option>
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Pencapaian Target Bulan Ini</label>
+      <select name="target_tercapai" class="form-select">
+        <option value="Tidak Tercapai" {{ 'selected' if karyawan and karyawan.target_tercapai == 'Tidak Tercapai' else '' }}>Tidak Tercapai</option>
+        <option value="Tercapai" {{ 'selected' if karyawan and karyawan.target_tercapai == 'Tercapai' else '' }}>Tercapai (+ bonus)</option>
+      </select>
+      <div class="form-text">Jika "Tercapai", bonus akan otomatis ditambahkan saat generate slip gaji (besaran bonus diatur di menu Pengaturan).</div>
+    </div>
+
+    <div class="border rounded p-3 mb-3">
+      <label class="form-label fw-semibold mb-2">Akun Login Pegawai</label>
+      <p class="text-muted small">Karyawan login di halaman pegawai memakai <strong>No. HP</strong> di atas sebagai username, dan password di bawah ini.</p>
+      <div class="row">
+        <div class="col-md-6 mb-2">
+          <label class="form-label small">{{ 'Ganti Password' if karyawan and karyawan.password_hash else 'Buat Password' }}</label>
+          <input type="password" name="password_baru" class="form-control" placeholder="Kosongkan jika tidak ingin diubah" minlength="6">
+        </div>
+      </div>
+      {% if karyawan and karyawan.password_hash %}
+      <div class="text-success small">✓ Akun pegawai sudah aktif (punya password).</div>
+      {% elif karyawan %}
+      <div class="text-muted small">Karyawan ini belum bisa login karena belum ada password.</div>
+      {% endif %}
+    </div>
+
+    <button type="submit" class="btn btn-primary">Simpan</button>
+    <a href="{{ url_for('karyawan_list') }}" class="btn btn-outline-secondary">Batal</a>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function formatRupiah(angka) {
+  return "Rp " + Math.round(angka).toLocaleString('id-ID');
+}
+function hitungTotal() {
+  const pokok = parseFloat(document.getElementById('gaji_pokok').value) || 0;
+  const makan = parseFloat(document.getElementById('tunjangan_makan').value) || 0;
+  const transport = parseFloat(document.getElementById('tunjangan_transport').value) || 0;
+  document.getElementById('total_gaji').textContent = formatRupiah(pokok + makan + transport);
+}
+function toggleTipe() {
+  const tipe = document.getElementById('tipe_pegawai').value;
+  document.getElementById('area_bulanan').classList.toggle('d-none', tipe === 'Freelance');
+  document.getElementById('area_freelance').classList.toggle('d-none', tipe !== 'Freelance');
+}
+document.querySelectorAll('.hitung-total').forEach(el => el.addEventListener('input', hitungTotal));
+document.getElementById('tipe_pegawai').addEventListener('change', toggleTipe);
+hitungTotal();
+toggleTipe();
+</script>
+{% endblock %}

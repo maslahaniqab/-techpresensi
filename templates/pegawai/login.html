@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Login Pegawai{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-4">
+    <div class="card p-4 mt-5">
+      <h4 class="mb-1 text-center">📋 Presensi Maslaha Niqab</h4>
+      <p class="text-center text-muted small fst-italic mb-4">Awali hari ini dengan Bismillah</p>
+      <form method="post">
+        <div class="mb-3">
+          <label class="form-label">No. HP</label>
+          <input type="text" name="no_hp" class="form-control" required autofocus placeholder="Contoh: 08xxxxxxxxxx">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" name="password" id="password" class="form-control" required>
+          <div class="form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="showPassword">
+            <label class="form-check-label small" for="showPassword">Tampilkan password</label>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Masuk</button>
+      </form>
+      <p class="text-muted small mt-3 mb-0 text-center">Belum punya akun? Hubungi admin/HR untuk dibuatkan.</p>
+      <p class="text-center small mt-2 mb-0"><a href="{{ url_for('login') }}">Login sebagai admin &raquo;</a></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('showPassword').addEventListener('change', function () {
+  document.getElementById('password').type = this.checked ? 'text' : 'password';
+});
+</script>
+{% endblock %}

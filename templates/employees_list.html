@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Karyawan{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Data Karyawan</h3>
+  <a href="{{ url_for('karyawan_tambah') }}" class="btn btn-primary">+ Tambah Karyawan</a>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Nama</th>
+          <th>Jabatan</th>
+          <th>No. HP</th>
+          <th>Tipe</th>
+          <th>Gaji Pokok</th>
+          <th>Status</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in karyawan %}
+        <tr>
+          <td>{{ k.nama }}</td>
+          <td>{{ k.jabatan or '-' }}</td>
+          <td>{{ k.no_hp or '-' }}</td>
+          <td>
+            {% if k.tipe_pegawai == 'Freelance' %}
+              <span class="badge bg-info text-dark">Freelance</span>
+            {% elif k.tipe_pegawai == 'Probation' %}
+              <span class="badge bg-warning text-dark">Probation</span>
+            {% else %}
+              <span class="badge bg-primary">Karyawan Tetap</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if k.tipe_pegawai == 'Freelance' %}
+              <span class="text-muted">per hari kerja</span>
+            {% else %}
+              {{ (k.gaji_pokok + k.tunjangan_makan + k.tunjangan_transport) | rupiah }}
+            {% endif %}
+          </td>
+          <td>
+            {% if k.status == 'Aktif' %}
+              <span class="badge bg-success">Aktif</span>
+            {% else %}
+              <span class="badge bg-secondary">Nonaktif</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('karyawan_edit', emp_id=k.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+            <form method="post" action="{{ url_for('karyawan_hapus', emp_id=k.id) }}" class="d-inline"
+                  onsubmit="return confirm('Hapus karyawan {{ k.nama }}? Semua riwayat absensi & gaji ikut terhapus.');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Belum ada data karyawan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

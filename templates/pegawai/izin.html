@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Ajukan Izin{% endblock %}
+{% block content %}
+<h3 class="mb-3">Ajukan Izin / Sakit / Cuti</h3>
+
+<div class="card p-4 mb-3" style="max-width: 560px;">
+  <form method="post">
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Tanggal</label>
+        <input type="date" name="tanggal" class="form-control" required>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jenis</label>
+        <select name="jenis" class="form-select" required>
+          <option value="Sakit">Sakit</option>
+          <option value="Izin">Izin</option>
+          <option value="Cuti">Cuti</option>
+        </select>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Alasan</label>
+      <textarea name="alasan" class="form-control" rows="3" placeholder="Jelaskan alasan pengajuan Anda"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Kirim Pengajuan</button>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h6 class="mb-3">Riwayat Pengajuan Saya</h6>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Tanggal Diajukan</th>
+          <th>Untuk Tanggal</th>
+          <th>Jenis</th>
+          <th>Alasan</th>
+          <th>Status</th>
+          <th>Catatan Admin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in riwayat %}
+        <tr>
+          <td>{{ p.tanggal_diajukan.strftime('%d-%m-%Y') }}</td>
+          <td>{{ p.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ p.jenis }}</td>
+          <td>{{ p.alasan or '-' }}</td>
+          <td>
+            {% if p.status == 'Disetujui' %}
+              <span class="badge bg-success">Disetujui</span>
+            {% elif p.status == 'Ditolak' %}
+              <span class="badge bg-danger">Ditolak</span>
+            {% else %}
+              <span class="badge bg-secondary">Menunggu</span>
+            {% endif %}
+          </td>
+          <td>{{ p.catatan_admin or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada pengajuan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
