@@ -62,13 +62,24 @@
     <hr>
     <div class="row">
       <div class="col-md-6 mb-3">
-        <label class="form-label">Jam Masuk Standar</label>
+        <label class="form-label">Jam Masuk Standar (Karyawan Tetap/Probation)</label>
         <input type="time" name="jam_masuk_standar" class="form-control" value="{{ settings.jam_masuk_standar }}">
       </div>
       <div class="col-md-6 mb-3">
-        <label class="form-label">Jam Pulang Standar</label>
+        <label class="form-label">Jam Pulang Standar (Karyawan Tetap/Probation)</label>
         <input type="time" name="jam_pulang_standar" class="form-control" value="{{ settings.jam_pulang_standar }}">
       </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Masuk Standar (Freelance)</label>
+        <input type="time" name="jam_masuk_standar_freelance" class="form-control" value="{{ settings.jam_masuk_standar_freelance }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Pulang Standar (Freelance)</label>
+        <input type="time" name="jam_pulang_standar_freelance" class="form-control" value="{{ settings.jam_pulang_standar_freelance }}">
+      </div>
+      <div class="form-text mb-3">Jadwal freelance sering berbeda dari karyawan tetap, sehingga keterlambatan &amp; peringatan pulang cepat dihitung terpisah menggunakan jam ini.</div>
     </div>
     <div class="mb-3">
       <label class="form-label">Hari Kerja per Bulan</label>
@@ -79,6 +90,7 @@
       <div class="col-md-6 mb-3">
         <label class="form-label">Toleransi Telat (menit)</label>
         <input type="number" name="toleransi_telat_menit" class="form-control" min="0" value="{{ settings.toleransi_telat_menit }}">
+        <div class="form-text">Contoh: jam masuk standar 07:00 + toleransi 5 menit = batas 07:05. Absen setelah itu dihitung terlambat.</div>
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label">Minimal Lembur Dihitung (menit)</label>

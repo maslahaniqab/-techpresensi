@@ -28,10 +28,19 @@
     <input type="hidden" name="bulan" value="{{ bulan }}">
     <input type="hidden" name="tahun" value="{{ tahun }}">
     <button type="submit" class="btn btn-primary">
-      Generate / Perbarui Slip Gaji {{ bulan_nama[bulan] }} {{ tahun }}
+      Generate / Perbarui Slip Karyawan Tetap &amp; Probation
     </button>
     <span class="text-muted small">Dihitung otomatis dari data absensi bulan ini. Slip yang sudah "Dibayar" tidak akan ditimpa.</span>
   </form>
+</div>
+
+<div class="card p-3 mb-3">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <a href="{{ url_for('penggajian_freelance_review', bulan=bulan, tahun=tahun) }}" class="btn btn-outline-primary">
+      Review &amp; Generate Slip Freelance
+    </a>
+    <span class="text-muted small">Cek/koreksi dulu jumlah hari kerja tiap freelancer sebelum slip dibuat.</span>
+  </div>
 </div>
 
 <div class="card p-3">

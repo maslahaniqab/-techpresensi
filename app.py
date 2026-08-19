@@ -152,16 +152,22 @@ def create_app():
 
     def parse_hhmm(value):
         try:
-            h, m = value.split(":")
-            return int(h) * 60 + int(m)
-        except (ValueError, AttributeError):
+            parts = value.split(":")
+            return int(parts[0]) * 60 + int(parts[1])
+        except (ValueError, AttributeError, IndexError, TypeError):
             return None
 
-    def hitung_telat_lembur(jam_masuk, jam_pulang, settings):
+    def standar_jam_pegawai(settings, tipe_pegawai):
+        if tipe_pegawai == "Freelance":
+            return settings.jam_masuk_standar_freelance, settings.jam_pulang_standar_freelance
+        return settings.jam_masuk_standar, settings.jam_pulang_standar
+
+    def hitung_telat_lembur(jam_masuk, jam_pulang, settings, tipe_pegawai="Karyawan Tetap"):
         telat = 0
         lembur = 0
-        standar_masuk = parse_hhmm(settings.jam_masuk_standar)
-        standar_pulang = parse_hhmm(settings.jam_pulang_standar)
+        jam_masuk_standar, jam_pulang_standar = standar_jam_pegawai(settings, tipe_pegawai)
+        standar_masuk = parse_hhmm(jam_masuk_standar)
+        standar_pulang = parse_hhmm(jam_pulang_standar)
         actual_masuk = parse_hhmm(jam_masuk)
         actual_pulang = parse_hhmm(jam_pulang)
 
@@ -176,6 +182,15 @@ def create_app():
                 lembur = selisih
 
         return telat, lembur
+
+    def cek_pulang_cepat(jam_pulang, settings, tipe_pegawai="Karyawan Tetap"):
+        _, jam_pulang_standar = standar_jam_pegawai(settings, tipe_pegawai)
+        standar_pulang = parse_hhmm(jam_pulang_standar)
+        actual_pulang = parse_hhmm(jam_pulang)
+        if standar_pulang is None or actual_pulang is None:
+            return 0
+        selisih = standar_pulang - actual_pulang
+        return selisih if selisih > 0 else 0
 
     with app.app_context():
         db.create_all()
@@ -389,7 +404,9 @@ def create_app():
 
             telat, lembur = (0, 0)
             if status == "Hadir":
-                telat, lembur = hitung_telat_lembur(jam_masuk, jam_pulang, settings)
+                emp_koreksi = db.session.get(Employee, employee_id)
+                tipe_koreksi = emp_koreksi.tipe_pegawai if emp_koreksi else "Karyawan Tetap"
+                telat, lembur = hitung_telat_lembur(jam_masuk, jam_pulang, settings, tipe_koreksi)
             else:
                 jam_masuk, jam_pulang = None, None
 
@@ -510,11 +527,12 @@ def create_app():
                 ), 400
 
         hari_ini = date.today()
-        jam_sekarang = datetime.now().strftime("%H:%M")
+        jam_sekarang = datetime.now().strftime("%H:%M:%S")
+        tipe_pegawai = current_user.tipe_pegawai
         att = Attendance.query.filter_by(employee_id=current_user.id, tanggal=hari_ini).first()
 
         if not att or not att.jam_masuk:
-            telat, _ = hitung_telat_lembur(jam_sekarang, None, settings)
+            telat, _ = hitung_telat_lembur(jam_sekarang, None, settings, tipe_pegawai)
             if not att:
                 att = Attendance(employee_id=current_user.id, tanggal=hari_ini)
                 db.session.add(att)
@@ -524,16 +542,23 @@ def create_app():
             att.lokasi_masuk_lat = lat
             att.lokasi_masuk_lng = lng
             db.session.commit()
-            return jsonify(success=True, aksi="masuk", message=f"Absen masuk berhasil pukul {jam_sekarang}.")
+            pesan = f"Absen masuk berhasil pukul {jam_sekarang}."
+            if telat > 0:
+                pesan += f" Anda terlambat {telat} menit."
+            return jsonify(success=True, aksi="masuk", message=pesan, telat=telat)
 
         if not att.jam_pulang:
-            _, lembur = hitung_telat_lembur(att.jam_masuk, jam_sekarang, settings)
+            _, lembur = hitung_telat_lembur(att.jam_masuk, jam_sekarang, settings, tipe_pegawai)
+            pulang_cepat = cek_pulang_cepat(jam_sekarang, settings, tipe_pegawai)
             att.jam_pulang = jam_sekarang
             att.lembur_menit = lembur
             att.lokasi_pulang_lat = lat
             att.lokasi_pulang_lng = lng
             db.session.commit()
-            return jsonify(success=True, aksi="pulang", message=f"Absen pulang berhasil pukul {jam_sekarang}.")
+            pesan = f"Absen pulang berhasil pukul {jam_sekarang}."
+            if pulang_cepat > 0:
+                pesan += f" ⚠️ Anda pulang {pulang_cepat} menit lebih awal dari jam standar."
+            return jsonify(success=True, aksi="pulang", message=pesan, pulang_cepat=pulang_cepat)
 
         return jsonify(success=False, message="Anda sudah absen masuk & pulang hari ini."), 400
 
@@ -619,7 +644,9 @@ def create_app():
         awal = date(tahun, bulan, 1)
         akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
 
-        employees = Employee.query.filter_by(status="Aktif").all()
+        employees = Employee.query.filter(
+            Employee.status == "Aktif", Employee.tipe_pegawai != "Freelance"
+        ).all()
         for emp in employees:
             absensi = Attendance.query.filter(
                 Attendance.employee_id == emp.id,
@@ -640,42 +667,29 @@ def create_app():
             ) if emp.target_tercapai == "Tercapai" else 0
 
             co_host_fee = 0
-            bpjs_jkk = bpjs_jkm = bpjs_jht = bpjs_kesehatan = 0
+            upah_freelance = 0
 
-            if emp.tipe_pegawai == "Freelance":
-                potongan_alpha = 0
-                potongan_telat = 0
-                tarif_unit = emp.tarif_unit_freelance or settings.tarif_harian_freelance or 0
-                upah_freelance = total_hadir * tarif_unit
-                uang_lembur = round(
-                    (total_lembur_menit / 60) * (settings.upah_lembur_freelance_per_jam or 0)
-                )
-                co_host_fee = (settings.tarif_co_host or 0) if emp.co_host_bulan_ini == "Ya" else 0
+            total_pokok = emp.gaji_pokok + emp.tunjangan_makan + emp.tunjangan_transport
+            hari_kerja = settings.hari_kerja_per_bulan or 22
+            gaji_harian = total_pokok / hari_kerja if hari_kerja else 0
 
-                gaji_bersih = upah_freelance + uang_lembur + bonus_target + co_host_fee
-            else:
-                total_pokok = emp.gaji_pokok + emp.tunjangan_makan + emp.tunjangan_transport
-                hari_kerja = settings.hari_kerja_per_bulan or 22
-                gaji_harian = total_pokok / hari_kerja if hari_kerja else 0
+            potongan_alpha = round(total_alpha * gaji_harian)
+            potongan_telat = total_telat_menit * (settings.denda_telat_per_menit or 0)
+            uang_lembur = round((total_lembur_menit / 60) * (settings.upah_lembur_per_jam or 0))
 
-                potongan_alpha = round(total_alpha * gaji_harian)
-                potongan_telat = total_telat_menit * (settings.denda_telat_per_menit or 0)
-                uang_lembur = round((total_lembur_menit / 60) * (settings.upah_lembur_per_jam or 0))
-                upah_freelance = 0
+            bpjs_jkk = emp.bpjs_jkk or 0
+            bpjs_jkm = emp.bpjs_jkm or 0
+            bpjs_jht = emp.bpjs_jht or 0
+            bpjs_kesehatan = emp.bpjs_kesehatan or 0
 
-                bpjs_jkk = emp.bpjs_jkk or 0
-                bpjs_jkm = emp.bpjs_jkm or 0
-                bpjs_jht = emp.bpjs_jht or 0
-                bpjs_kesehatan = emp.bpjs_kesehatan or 0
-
-                gaji_bersih = (
-                    total_pokok
-                    - potongan_alpha
-                    - potongan_telat
-                    - bpjs_jkk - bpjs_jkm - bpjs_jht - bpjs_kesehatan
-                    + uang_lembur
-                    + bonus_target
-                )
+            gaji_bersih = (
+                total_pokok
+                - potongan_alpha
+                - potongan_telat
+                - bpjs_jkk - bpjs_jkm - bpjs_jht - bpjs_kesehatan
+                + uang_lembur
+                + bonus_target
+            )
 
             gaji_bersih = max(gaji_bersih, 0)
 
@@ -713,7 +727,123 @@ def create_app():
             payroll.gaji_bersih = gaji_bersih
 
         db.session.commit()
-        flash(f"Slip gaji {BULAN_NAMA[bulan]} {tahun} berhasil dibuat/diperbarui.", "success")
+        flash(f"Slip gaji Karyawan Tetap/Probation {BULAN_NAMA[bulan]} {tahun} berhasil dibuat/diperbarui.", "success")
+        return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
+
+    @app.route("/penggajian/freelance-review")
+    @admin_required
+    def penggajian_freelance_review():
+        bulan = int(request.args.get("bulan", date.today().month))
+        tahun = int(request.args.get("tahun", date.today().year))
+        settings = get_settings()
+
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+
+        freelancer_rows = []
+        employees = Employee.query.filter_by(status="Aktif", tipe_pegawai="Freelance").order_by(Employee.nama).all()
+        for emp in employees:
+            absensi = Attendance.query.filter(
+                Attendance.employee_id == emp.id,
+                Attendance.tanggal >= awal,
+                Attendance.tanggal <= akhir,
+            ).all()
+            total_hadir = sum(1 for a in absensi if a.status == "Hadir")
+            existing_payroll = Payroll.query.filter_by(employee_id=emp.id, bulan=bulan, tahun=tahun).first()
+            tarif_unit = emp.tarif_unit_freelance or settings.tarif_harian_freelance or 0
+            freelancer_rows.append({
+                "employee": emp,
+                "hari_kerja_absensi": total_hadir,
+                "tarif_unit": tarif_unit,
+                "sudah_dibayar": bool(existing_payroll and existing_payroll.status == "Dibayar"),
+            })
+
+        return render_template(
+            "payroll_freelance_review.html",
+            rows=freelancer_rows,
+            bulan=bulan,
+            tahun=tahun,
+            bulan_nama=BULAN_NAMA,
+        )
+
+    @app.route("/penggajian/freelance-generate", methods=["POST"])
+    @admin_required
+    def penggajian_freelance_generate():
+        bulan = int(request.form["bulan"])
+        tahun = int(request.form["tahun"])
+        settings = get_settings()
+
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+
+        employees = Employee.query.filter_by(status="Aktif", tipe_pegawai="Freelance").all()
+        for emp in employees:
+            hari_kerja_input = request.form.get(f"hari_kerja_{emp.id}")
+            if hari_kerja_input is None:
+                continue
+            hari_kerja = int(hari_kerja_input or 0)
+
+            absensi = Attendance.query.filter(
+                Attendance.employee_id == emp.id,
+                Attendance.tanggal >= awal,
+                Attendance.tanggal <= akhir,
+            ).all()
+            total_hadir = sum(1 for a in absensi if a.status == "Hadir")
+            total_sakit = sum(1 for a in absensi if a.status == "Sakit")
+            total_izin = sum(1 for a in absensi if a.status == "Izin")
+            total_cuti = sum(1 for a in absensi if a.status == "Cuti")
+            total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+            total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
+            total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
+
+            bonus_target = (
+                settings.bonus_target_tercapai or 0
+            ) if emp.target_tercapai == "Tercapai" else 0
+
+            tarif_unit = emp.tarif_unit_freelance or settings.tarif_harian_freelance or 0
+            upah_freelance = hari_kerja * tarif_unit
+            uang_lembur = round(
+                (total_lembur_menit / 60) * (settings.upah_lembur_freelance_per_jam or 0)
+            )
+            co_host_fee = (settings.tarif_co_host or 0) if emp.co_host_bulan_ini == "Ya" else 0
+
+            gaji_bersih = max(upah_freelance + uang_lembur + bonus_target + co_host_fee, 0)
+
+            payroll = Payroll.query.filter_by(
+                employee_id=emp.id, bulan=bulan, tahun=tahun
+            ).first()
+            if not payroll:
+                payroll = Payroll(employee_id=emp.id, bulan=bulan, tahun=tahun)
+                db.session.add(payroll)
+
+            if payroll.status == "Dibayar":
+                continue  # jangan timpa slip yang sudah dibayar
+
+            payroll.gaji_pokok = 0
+            payroll.tunjangan_makan = 0
+            payroll.tunjangan_transport = 0
+            payroll.tipe_pegawai = emp.tipe_pegawai
+            payroll.total_hadir = hari_kerja
+            payroll.total_sakit = total_sakit
+            payroll.total_izin = total_izin
+            payroll.total_cuti = total_cuti
+            payroll.total_alpha = total_alpha
+            payroll.total_telat_menit = total_telat_menit
+            payroll.total_lembur_menit = total_lembur_menit
+            payroll.potongan_alpha = 0
+            payroll.potongan_telat = 0
+            payroll.uang_lembur = uang_lembur
+            payroll.upah_freelance = upah_freelance
+            payroll.bonus_target = bonus_target
+            payroll.co_host_fee = co_host_fee
+            payroll.bpjs_jkk = 0
+            payroll.bpjs_jkm = 0
+            payroll.bpjs_jht = 0
+            payroll.bpjs_kesehatan = 0
+            payroll.gaji_bersih = gaji_bersih
+
+        db.session.commit()
+        flash(f"Slip gaji Freelance {BULAN_NAMA[bulan]} {tahun} berhasil dibuat/diperbarui.", "success")
         return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
     @app.route("/penggajian/<int:payroll_id>")
@@ -755,6 +885,8 @@ def create_app():
             settings.nama_perusahaan = request.form.get("nama_perusahaan", "").strip()
             settings.jam_masuk_standar = request.form.get("jam_masuk_standar")
             settings.jam_pulang_standar = request.form.get("jam_pulang_standar")
+            settings.jam_masuk_standar_freelance = request.form.get("jam_masuk_standar_freelance")
+            settings.jam_pulang_standar_freelance = request.form.get("jam_pulang_standar_freelance")
             settings.hari_kerja_per_bulan = int(request.form.get("hari_kerja_per_bulan") or 22)
             settings.toleransi_telat_menit = int(request.form.get("toleransi_telat_menit") or 0)
             settings.toleransi_lembur_menit = int(request.form.get("toleransi_lembur_menit") or 30)

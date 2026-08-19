@@ -33,11 +33,11 @@
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Jam Masuk</label>
-        <input type="time" name="jam_masuk" id="jam_masuk" class="form-control" value="{{ att.jam_masuk if att else '' }}">
+        <input type="time" name="jam_masuk" id="jam_masuk" class="form-control" value="{{ att.jam_masuk[:5] if att and att.jam_masuk else '' }}">
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label">Jam Pulang</label>
-        <input type="time" name="jam_pulang" id="jam_pulang" class="form-control" value="{{ att.jam_pulang if att else '' }}">
+        <input type="time" name="jam_pulang" id="jam_pulang" class="form-control" value="{{ att.jam_pulang[:5] if att and att.jam_pulang else '' }}">
       </div>
     </div>
     <div class="mb-3">
