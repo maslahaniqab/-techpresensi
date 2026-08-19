@@ -170,3 +170,28 @@ class PengajuanIzin(db.Model):
     tanggal_diproses = db.Column(db.DateTime)
 
     employee = db.relationship("Employee", backref="pengajuan_izin")
+
+
+class LaporanPekerjaan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    isi_laporan = db.Column(db.Text, nullable=False)
+    tanggal_dibuat = db.Column(db.DateTime, default=now_wib)
+
+    employee = db.relationship("Employee", backref="laporan_pekerjaan")
+
+
+class PengajuanLembur(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    jam_mulai = db.Column(db.String(5), nullable=False)
+    jam_selesai = db.Column(db.String(5), nullable=False)
+    alasan = db.Column(db.String(512))
+    status = db.Column(db.String(16), default="Menunggu")  # Menunggu / Disetujui / Ditolak
+    catatan_admin = db.Column(db.String(256))
+    tanggal_diajukan = db.Column(db.DateTime, default=now_wib)
+    tanggal_diproses = db.Column(db.DateTime)
+
+    employee = db.relationship("Employee", backref="pengajuan_lembur")

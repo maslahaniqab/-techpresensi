@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Laporan Pekerjaan{% endblock %}
+{% block content %}
+<h3 class="mb-3">Laporan Pekerjaan</h3>
+
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label">Karyawan</label>
+      <select name="employee_id" class="form-select" onchange="this.form.submit()">
+        <option value="">- Semua Karyawan -</option>
+        {% for e in employees %}
+        <option value="{{ e.id }}" {{ 'selected' if employee_id == e.id else '' }}>{{ e.nama }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width:130px;">Tanggal</th>
+          <th>Nama</th>
+          <th>Isi Laporan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in laporan %}
+        <tr>
+          <td>{{ l.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ l.employee.nama }}</td>
+          <td style="white-space: pre-wrap;">{{ l.isi_laporan }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="text-center text-muted py-4">Belum ada laporan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

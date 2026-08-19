@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Pengajuan Lembur{% endblock %}
+{% block content %}
+<h3 class="mb-3">Pengajuan Lembur</h3>
+
+<div class="card p-4 mb-3" style="max-width: 560px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Tanggal</label>
+      <input type="date" name="tanggal" class="form-control" required>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Mulai</label>
+        <input type="time" name="jam_mulai" class="form-control" required>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Jam Selesai</label>
+        <input type="time" name="jam_selesai" class="form-control" required>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Alasan</label>
+      <textarea name="alasan" class="form-control" rows="3" placeholder="Jelaskan alasan pengajuan lembur Anda"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Kirim Pengajuan</button>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h6 class="mb-3">Riwayat Pengajuan Lembur Saya</h6>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Diajukan</th>
+          <th>Untuk Tanggal</th>
+          <th>Jam</th>
+          <th>Alasan</th>
+          <th>Status</th>
+          <th>Catatan Admin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in riwayat %}
+        <tr>
+          <td>{{ l.tanggal_diajukan.strftime('%d-%m-%Y') }}</td>
+          <td>{{ l.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ l.jam_mulai }} - {{ l.jam_selesai }}</td>
+          <td>{{ l.alasan or '-' }}</td>
+          <td>
+            {% if l.status == 'Disetujui' %}
+              <span class="badge bg-success">Disetujui</span>
+            {% elif l.status == 'Ditolak' %}
+              <span class="badge bg-danger">Ditolak</span>
+            {% else %}
+              <span class="badge bg-secondary">Menunggu</span>
+            {% endif %}
+          </td>
+          <td>{{ l.catatan_admin or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada pengajuan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -30,7 +30,10 @@ from flask_login import (
 from werkzeug.utils import secure_filename
 from xhtml2pdf import pisa
 
-from models import db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin
+from models import (
+    db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
+    LaporanPekerjaan, PengajuanLembur,
+)
 
 BULAN_NAMA = [
     "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -704,6 +707,161 @@ def create_app():
         )
         return render_template("pegawai/izin.html", riwayat=riwayat)
 
+    @app.route("/pegawai/akun", methods=["GET", "POST"])
+    @pegawai_required
+    def pegawai_akun():
+        if request.method == "POST":
+            password_baru = request.form.get("password_baru", "")
+            password_konfirmasi = request.form.get("password_konfirmasi", "")
+            if len(password_baru) < 6:
+                flash("Password baru minimal 6 karakter.", "danger")
+            elif password_baru != password_konfirmasi:
+                flash("Konfirmasi password tidak cocok.", "danger")
+            else:
+                current_user.set_password(password_baru)
+                db.session.commit()
+                flash("Password berhasil diubah.", "success")
+            return redirect(url_for("pegawai_akun"))
+        return render_template("pegawai/akun.html")
+
+    @app.route("/pegawai/laporan", methods=["GET", "POST"])
+    @pegawai_required
+    def pegawai_laporan():
+        if request.method == "POST":
+            try:
+                tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal = None
+            isi_laporan = request.form.get("isi_laporan", "").strip()
+
+            if not tanggal or not isi_laporan:
+                flash("Lengkapi tanggal dan isi laporan.", "danger")
+            else:
+                db.session.add(
+                    LaporanPekerjaan(employee_id=current_user.id, tanggal=tanggal, isi_laporan=isi_laporan)
+                )
+                db.session.commit()
+                flash("Laporan pekerjaan berhasil dikirim.", "success")
+            return redirect(url_for("pegawai_laporan"))
+
+        riwayat = (
+            LaporanPekerjaan.query.filter_by(employee_id=current_user.id)
+            .order_by(LaporanPekerjaan.tanggal.desc())
+            .limit(30)
+            .all()
+        )
+        return render_template("pegawai/laporan.html", riwayat=riwayat, tanggal_default=today_wib().isoformat())
+
+    @app.route("/pegawai/lembur", methods=["GET", "POST"])
+    @pegawai_required
+    def pegawai_lembur():
+        if request.method == "POST":
+            try:
+                tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal = None
+            jam_mulai = request.form.get("jam_mulai") or None
+            jam_selesai = request.form.get("jam_selesai") or None
+            alasan = request.form.get("alasan", "").strip()
+
+            durasi_valid = False
+            if jam_mulai and jam_selesai:
+                try:
+                    hm, mm = jam_mulai.split(":")
+                    hs, ms = jam_selesai.split(":")
+                    durasi_valid = (int(hs) * 60 + int(ms)) > (int(hm) * 60 + int(mm))
+                except ValueError:
+                    durasi_valid = False
+
+            if not tanggal or not jam_mulai or not jam_selesai:
+                flash("Lengkapi tanggal, jam mulai, dan jam selesai.", "danger")
+            elif not durasi_valid:
+                flash("Jam selesai harus lebih besar dari jam mulai.", "danger")
+            else:
+                db.session.add(
+                    PengajuanLembur(
+                        employee_id=current_user.id,
+                        tanggal=tanggal,
+                        jam_mulai=jam_mulai,
+                        jam_selesai=jam_selesai,
+                        alasan=alasan,
+                    )
+                )
+                db.session.commit()
+                flash("Pengajuan lembur berhasil dikirim, menunggu persetujuan admin.", "success")
+            return redirect(url_for("pegawai_lembur"))
+
+        riwayat = (
+            PengajuanLembur.query.filter_by(employee_id=current_user.id)
+            .order_by(PengajuanLembur.tanggal_diajukan.desc())
+            .limit(20)
+            .all()
+        )
+        return render_template("pegawai/lembur.html", riwayat=riwayat)
+
+    # ---------- LAPORAN PEKERJAAN (ADMIN) ----------
+    @app.route("/laporan-pekerjaan")
+    @admin_required
+    def laporan_pekerjaan_list():
+        employee_id = request.args.get("employee_id", type=int)
+        query = LaporanPekerjaan.query.join(Employee)
+        if employee_id:
+            query = query.filter(LaporanPekerjaan.employee_id == employee_id)
+        laporan = query.order_by(LaporanPekerjaan.tanggal.desc()).limit(200).all()
+        employees = Employee.query.order_by(Employee.nama).all()
+        return render_template(
+            "laporan_pekerjaan_list.html", laporan=laporan, employees=employees, employee_id=employee_id
+        )
+
+    # ---------- PENGAJUAN LEMBUR (ADMIN) ----------
+    @app.route("/pengajuan-lembur")
+    @admin_required
+    def pengajuan_lembur_list():
+        status_filter = request.args.get("status", "Menunggu")
+        query = PengajuanLembur.query.join(Employee)
+        if status_filter in ("Menunggu", "Disetujui", "Ditolak"):
+            query = query.filter(PengajuanLembur.status == status_filter)
+        pengajuan = query.order_by(PengajuanLembur.tanggal_diajukan.desc()).all()
+        jumlah_menunggu = PengajuanLembur.query.filter_by(status="Menunggu").count()
+        return render_template(
+            "pengajuan_lembur_list.html",
+            pengajuan=pengajuan,
+            status_filter=status_filter,
+            jumlah_menunggu=jumlah_menunggu,
+        )
+
+    @app.route("/pengajuan-lembur/<int:pid>/setujui", methods=["POST"])
+    @admin_required
+    def pengajuan_lembur_setujui(pid):
+        p = db.session.get(PengajuanLembur, pid) or abort_404()
+        p.status = "Disetujui"
+        p.tanggal_diproses = now_wib()
+
+        hm, mm = p.jam_mulai.split(":")
+        hs, ms = p.jam_selesai.split(":")
+        durasi_menit = (int(hs) * 60 + int(ms)) - (int(hm) * 60 + int(mm))
+
+        att = Attendance.query.filter_by(employee_id=p.employee_id, tanggal=p.tanggal).first()
+        if not att:
+            att = Attendance(employee_id=p.employee_id, tanggal=p.tanggal, status="Hadir")
+            db.session.add(att)
+        att.lembur_menit = (att.lembur_menit or 0) + durasi_menit
+
+        db.session.commit()
+        flash(f"Pengajuan lembur {p.employee.nama} disetujui & ditambahkan ke absensi.", "success")
+        return redirect(url_for("pengajuan_lembur_list"))
+
+    @app.route("/pengajuan-lembur/<int:pid>/tolak", methods=["POST"])
+    @admin_required
+    def pengajuan_lembur_tolak(pid):
+        p = db.session.get(PengajuanLembur, pid) or abort_404()
+        p.status = "Ditolak"
+        p.catatan_admin = request.form.get("catatan_admin", "").strip()
+        p.tanggal_diproses = now_wib()
+        db.session.commit()
+        flash(f"Pengajuan lembur {p.employee.nama} ditolak.", "info")
+        return redirect(url_for("pengajuan_lembur_list"))
+
     # ---------- PENGGAJIAN ----------
     @app.route("/penggajian")
     @admin_required
@@ -1145,12 +1303,15 @@ def create_app():
 
     @app.context_processor
     def inject_globals():
-        pending = 0
+        pending_izin = 0
+        pending_lembur = 0
         if current_user.is_authenticated and getattr(current_user, "role", None) == "admin":
-            pending = PengajuanIzin.query.filter_by(status="Menunggu").count()
+            pending_izin = PengajuanIzin.query.filter_by(status="Menunggu").count()
+            pending_lembur = PengajuanLembur.query.filter_by(status="Menunggu").count()
         return {
             "bulan_nama_list": BULAN_NAMA,
-            "pending_izin_count": pending,
+            "pending_izin_count": pending_izin,
+            "pending_lembur_count": pending_lembur,
             "site_settings": get_settings(),
         }
 

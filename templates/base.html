@@ -38,6 +38,13 @@
             {% if pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('pengajuan_lembur_list') }}">
+            Pengajuan Lembur
+            {% if pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
+          </a>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('laporan_pekerjaan_list') }}">Laporan Pekerjaan</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('penggajian_list') }}">Penggajian</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('pengaturan') }}">Pengaturan</a></li>
       </ul>
@@ -63,9 +70,11 @@
         <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_dashboard') }}">Absen Sekarang</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_riwayat') }}">Riwayat Absensi</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_izin') }}">Ajukan Izin/Sakit/Cuti</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_lembur') }}">Pengajuan Lembur</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_laporan') }}">Laporan Pekerjaan</a></li>
       </ul>
       <ul class="navbar-nav">
-        <li class="nav-item"><span class="nav-link">👤 {{ current_user.nama }}</span></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_akun') }}">👤 {{ current_user.nama }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_logout') }}">Keluar</a></li>
       </ul>
     </div>
