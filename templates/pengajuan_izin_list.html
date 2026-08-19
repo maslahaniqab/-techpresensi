@@ -23,6 +23,7 @@
           <th>Untuk Tanggal</th>
           <th>Jenis</th>
           <th>Alasan</th>
+          <th>Dokumen</th>
           <th>Status</th>
           <th class="text-end">Aksi</th>
         </tr>
@@ -35,6 +36,13 @@
           <td>{{ p.tanggal.strftime('%d-%m-%Y') }}</td>
           <td>{{ p.jenis }}</td>
           <td>{{ p.alasan or '-' }}</td>
+          <td>
+            {% if p.dokumen_filename %}
+            <a href="{{ url_for('static', filename='uploads/izin/' + p.dokumen_filename) }}" target="_blank">Lihat</a>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
           <td>
             {% if p.status == 'Disetujui' %}
               <span class="badge bg-success">Disetujui</span>
@@ -63,7 +71,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="text-center text-muted py-4">Tidak ada pengajuan.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">Tidak ada pengajuan.</td></tr>
         {% endfor %}
       </tbody>
     </table>

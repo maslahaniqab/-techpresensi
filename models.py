@@ -163,6 +163,7 @@ class PengajuanIzin(db.Model):
     tanggal = db.Column(db.Date, nullable=False)
     jenis = db.Column(db.String(16), nullable=False)  # Sakit / Izin / Cuti
     alasan = db.Column(db.String(512))
+    dokumen_filename = db.Column(db.String(256))
     status = db.Column(db.String(16), default="Menunggu")  # Menunggu / Disetujui / Ditolak
     catatan_admin = db.Column(db.String(256))
     tanggal_diajukan = db.Column(db.DateTime, default=now_wib)

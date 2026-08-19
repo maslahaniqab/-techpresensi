@@ -4,7 +4,12 @@
 <h3 class="mb-3">Ajukan Izin / Sakit / Cuti</h3>
 
 <div class="card p-4 mb-3" style="max-width: 560px;">
-  <form method="post">
+  <div class="alert alert-info small mb-3" id="infoDokumen">
+    Untuk pengajuan <strong>Cuti</strong>, unduh dan isi
+    <a href="{{ url_for('static', filename='templates/Surat_Izin_Cuti_Maslaha_Niqab.docx') }}">Template Surat Izin Cuti</a>,
+    lalu unggah hasilnya (boleh foto/scan) di bawah. Untuk <strong>Sakit</strong>, lampirkan surat keterangan dokter/klinik.
+  </div>
+  <form method="post" enctype="multipart/form-data">
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Tanggal</label>
@@ -12,7 +17,7 @@
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label">Jenis</label>
-        <select name="jenis" class="form-select" required>
+        <select name="jenis" id="jenis" class="form-select" required>
           <option value="Sakit">Sakit</option>
           <option value="Izin">Izin</option>
           <option value="Cuti">Cuti</option>
@@ -22,6 +27,11 @@
     <div class="mb-3">
       <label class="form-label">Alasan</label>
       <textarea name="alasan" class="form-control" rows="3" placeholder="Jelaskan alasan pengajuan Anda"></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Dokumen Pendukung</label>
+      <input type="file" name="dokumen" id="dokumen" class="form-control" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+      <div class="form-text">Wajib untuk pengajuan Sakit &amp; Cuti. Format PDF/DOC/DOCX/JPG/PNG.</div>
     </div>
     <button type="submit" class="btn btn-primary">Kirim Pengajuan</button>
   </form>
@@ -37,6 +47,7 @@
           <th>Untuk Tanggal</th>
           <th>Jenis</th>
           <th>Alasan</th>
+          <th>Dokumen</th>
           <th>Status</th>
           <th>Catatan Admin</th>
         </tr>
@@ -49,6 +60,13 @@
           <td>{{ p.jenis }}</td>
           <td>{{ p.alasan or '-' }}</td>
           <td>
+            {% if p.dokumen_filename %}
+            <a href="{{ url_for('static', filename='uploads/izin/' + p.dokumen_filename) }}" target="_blank">Lihat</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+          <td>
             {% if p.status == 'Disetujui' %}
               <span class="badge bg-success">Disetujui</span>
             {% elif p.status == 'Ditolak' %}
@@ -60,10 +78,21 @@
           <td>{{ p.catatan_admin or '-' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada pengajuan.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">Belum ada pengajuan.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDokumenWajib() {
+  const jenis = document.getElementById('jenis').value;
+  document.getElementById('dokumen').required = (jenis === 'Sakit' || jenis === 'Cuti');
+}
+document.getElementById('jenis').addEventListener('change', toggleDokumenWajib);
+toggleDokumenWajib();
+</script>
 {% endblock %}

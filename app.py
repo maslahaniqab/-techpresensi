@@ -103,6 +103,12 @@ def create_app():
     os.makedirs(upload_folder, exist_ok=True)
     app.config["UPLOAD_FOLDER"] = upload_folder
 
+    izin_upload_folder = os.path.join(upload_folder, "izin")
+    os.makedirs(izin_upload_folder, exist_ok=True)
+    app.config["IZIN_UPLOAD_FOLDER"] = izin_upload_folder
+
+    EKSTENSI_DOKUMEN_IZIN = {"pdf", "doc", "docx", "jpg", "jpeg", "png"}
+
     db.init_app(app)
 
     login_manager = LoginManager()
@@ -665,8 +671,19 @@ def create_app():
             except ValueError:
                 tanggal = None
 
+            dokumen_file = request.files.get("dokumen")
+            dokumen_ada = bool(dokumen_file and dokumen_file.filename)
+
             if jenis not in ("Sakit", "Izin", "Cuti") or not tanggal:
                 flash("Lengkapi tanggal dan jenis pengajuan dengan benar.", "danger")
+            elif jenis in ("Sakit", "Cuti") and not dokumen_ada:
+                flash(
+                    "Dokumen wajib dilampirkan untuk pengajuan Sakit atau Cuti "
+                    "(surat izin cuti / surat keterangan dokter).",
+                    "danger",
+                )
+            elif dokumen_ada and dokumen_file.filename.rsplit(".", 1)[-1].lower() not in EKSTENSI_DOKUMEN_IZIN:
+                flash("Format dokumen harus PDF, DOC, DOCX, JPG, atau PNG.", "danger")
             else:
                 sudah_ada = PengajuanIzin.query.filter_by(
                     employee_id=current_user.id, tanggal=tanggal, status="Menunggu"
@@ -674,12 +691,21 @@ def create_app():
                 if sudah_ada:
                     flash("Sudah ada pengajuan untuk tanggal ini yang masih menunggu persetujuan.", "warning")
                 else:
+                    dokumen_filename = None
+                    if dokumen_ada:
+                        ext = dokumen_file.filename.rsplit(".", 1)[-1].lower()
+                        dokumen_filename = secure_filename(
+                            f"izin_{current_user.id}_{tanggal.isoformat()}_{now_wib().strftime('%H%M%S')}.{ext}"
+                        )
+                        dokumen_file.save(os.path.join(app.config["IZIN_UPLOAD_FOLDER"], dokumen_filename))
+
                     db.session.add(
                         PengajuanIzin(
                             employee_id=current_user.id,
                             tanggal=tanggal,
                             jenis=jenis,
                             alasan=request.form.get("alasan", "").strip(),
+                            dokumen_filename=dokumen_filename,
                         )
                     )
                     db.session.commit()
