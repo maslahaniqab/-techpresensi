@@ -1,6 +1,8 @@
 import os
 import math
 import calendar
+import smtplib
+from email.message import EmailMessage
 from functools import wraps
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
@@ -961,11 +963,10 @@ def create_app():
             return os.path.join(app.root_path, uri.lstrip("/"))
         return uri
 
-    @app.route("/penggajian/<int:payroll_id>/pdf")
-    @admin_required
-    def penggajian_pdf(payroll_id):
-        payroll = db.session.get(Payroll, payroll_id) or abort_404()
-        settings = get_settings()
+    def nama_file_slip(payroll):
+        return f"Slip_Gaji_{payroll.employee.nama.replace(' ', '_')}_{BULAN_NAMA[payroll.bulan]}_{payroll.tahun}.pdf"
+
+    def buat_slip_pdf_bytes(payroll, settings):
         periode_awal = date(payroll.tahun, payroll.bulan, 1)
         periode_akhir = date(payroll.tahun, payroll.bulan, calendar.monthrange(payroll.tahun, payroll.bulan)[1])
         tarif_unit_efektif = (
@@ -989,14 +990,67 @@ def create_app():
 
         buffer = BytesIO()
         pisa.CreatePDF(html, dest=buffer, link_callback=pdf_link_callback)
-        buffer.seek(0)
+        return buffer.getvalue()
 
-        filename = f"Slip_Gaji_{payroll.employee.nama.replace(' ', '_')}_{BULAN_NAMA[payroll.bulan]}_{payroll.tahun}.pdf"
-        return Response(
-            buffer.read(),
-            mimetype="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    def kirim_email_slip(payroll, settings):
+        email_tujuan = (payroll.employee.email or "").strip()
+        if not email_tujuan:
+            return False, "Karyawan belum punya alamat email terdaftar."
+
+        smtp_email = os.environ.get("SMTP_EMAIL")
+        smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+        if not smtp_email or not smtp_password:
+            return False, "Pengiriman email belum dikonfigurasi di server (SMTP_EMAIL/SMTP_APP_PASSWORD)."
+
+        pdf_bytes = buat_slip_pdf_bytes(payroll, settings)
+
+        msg = EmailMessage()
+        msg["Subject"] = f"Slip Gaji {BULAN_NAMA[payroll.bulan]} {payroll.tahun} - {settings.nama_perusahaan}"
+        msg["From"] = smtp_email
+        msg["To"] = email_tujuan
+        msg.set_content(
+            f"Halo {payroll.employee.nama},\n\n"
+            f"Berikut slip gaji Anda periode {BULAN_NAMA[payroll.bulan]} {payroll.tahun} dari "
+            f"{settings.nama_perusahaan} (rincian lengkap ada di file PDF terlampir).\n\n"
+            "Status: SUDAH DIBAYAR\n\n"
+            "Terima kasih atas kerja keras Anda selama ini. Jika ada pertanyaan silakan hubungi admin."
         )
+        msg.add_attachment(
+            pdf_bytes, maintype="application", subtype="pdf", filename=nama_file_slip(payroll)
+        )
+
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.send_message(msg)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    @app.route("/penggajian/<int:payroll_id>/pdf")
+    @admin_required
+    def penggajian_pdf(payroll_id):
+        payroll = db.session.get(Payroll, payroll_id) or abort_404()
+        settings = get_settings()
+        pdf_bytes = buat_slip_pdf_bytes(payroll, settings)
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{nama_file_slip(payroll)}"'},
+        )
+
+    @app.route("/penggajian/<int:payroll_id>/kirim-email", methods=["POST"])
+    @admin_required
+    def penggajian_kirim_email(payroll_id):
+        payroll = db.session.get(Payroll, payroll_id) or abort_404()
+        settings = get_settings()
+        berhasil, pesan_error = kirim_email_slip(payroll, settings)
+        if berhasil:
+            flash(f"Slip gaji berhasil dikirim ke email {payroll.employee.email}.", "success")
+        else:
+            flash(f"Gagal mengirim email: {pesan_error}", "danger")
+        return redirect(url_for("penggajian_detail", payroll_id=payroll.id))
 
     @app.route("/penggajian/<int:payroll_id>/bayar", methods=["POST"])
     @admin_required
@@ -1005,7 +1059,21 @@ def create_app():
         payroll.status = "Dibayar"
         payroll.tanggal_dibayar = now_wib()
         db.session.commit()
-        flash(f"Gaji {payroll.employee.nama} ditandai sudah dibayar.", "success")
+
+        settings = get_settings()
+        berhasil, pesan_error = kirim_email_slip(payroll, settings)
+        if berhasil:
+            flash(
+                f"Gaji {payroll.employee.nama} ditandai sudah dibayar. "
+                f"Slip terkirim otomatis ke email {payroll.employee.email}.",
+                "success",
+            )
+        else:
+            flash(
+                f"Gaji {payroll.employee.nama} ditandai sudah dibayar. "
+                f"Email slip tidak terkirim otomatis: {pesan_error}",
+                "warning",
+            )
         return redirect(url_for("penggajian_list", bulan=payroll.bulan, tahun=payroll.tahun))
 
     # ---------- PENGATURAN ----------

@@ -143,6 +143,14 @@
   {% else %}
   <p class="text-danger small text-center mb-0 no-print">No. HP karyawan belum diisi, tidak bisa kirim ke WhatsApp.</p>
   {% endif %}
+
+  {% if p.employee.email %}
+  <form method="post" action="{{ url_for('penggajian_kirim_email', payroll_id=p.id) }}" class="no-print mt-2">
+    <button type="submit" class="btn btn-outline-primary w-100">Kirim Ulang Slip ke Email ({{ p.employee.email }})</button>
+  </form>
+  {% else %}
+  <p class="text-danger small text-center mb-0 mt-2 no-print">Email karyawan belum diisi, tidak bisa kirim slip ke email.</p>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}
