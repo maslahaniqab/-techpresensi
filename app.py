@@ -3,6 +3,7 @@ import math
 import calendar
 from functools import wraps
 from datetime import datetime, date
+from urllib.parse import quote
 
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import (
@@ -136,6 +137,63 @@ def create_app():
 
     app.jinja_env.filters["rupiah"] = rupiah
     app.jinja_env.filters["terbilang"] = terbilang_rupiah
+
+    def buat_pesan_wa_slip(p, settings, tarif_unit_efektif):
+        baris = [
+            f"Halo {p.employee.nama},",
+            "",
+            f"Berikut slip gaji Anda periode {BULAN_NAMA[p.bulan]} {p.tahun} dari {settings.nama_perusahaan}:",
+            "",
+        ]
+        if p.tipe_pegawai == "Freelance":
+            baris += [
+                f"Upah Kerja ({p.total_hadir} hari x {rupiah(tarif_unit_efektif)}): {rupiah(p.upah_freelance)}",
+                f"Lembur/Over Time: {rupiah(p.uang_lembur)}",
+                f"Achieve Target: {rupiah(p.bonus_target)}",
+                f"Co-Host: {rupiah(p.co_host_fee)}",
+            ]
+            label_total = "GAJI BRUTO"
+        else:
+            baris += [
+                f"Gaji Pokok: {rupiah(p.gaji_pokok)}",
+                f"Tj. Makan & Transport: {rupiah(p.tunjangan_makan + p.tunjangan_transport)}",
+                f"Lembur Harian: {rupiah(p.uang_lembur)}",
+                f"Bonus: {rupiah(p.bonus_target)}",
+                f"Potongan Alpha: -{rupiah(p.potongan_alpha)}",
+                f"Potongan Keterlambatan: -{rupiah(p.potongan_telat)}",
+                f"BPJS (JKK+JKM+JHT+Kesehatan): -{rupiah(p.bpjs_jkk + p.bpjs_jkm + p.bpjs_jht + p.bpjs_kesehatan)}",
+            ]
+            label_total = "PENERIMAAN BERSIH"
+        baris += [
+            "",
+            f"{label_total}: {rupiah(p.gaji_bersih)}",
+            f"({terbilang_rupiah(p.gaji_bersih)})",
+            "",
+            "Status: SUDAH DIBAYAR",
+            "",
+            "Terima kasih atas kerja keras Anda selama ini. Mohon dicek kembali, jika ada pertanyaan silakan hubungi admin.",
+        ]
+        return "\n".join(baris)
+
+    def normalisasi_no_hp_wa(no_hp):
+        digit = "".join(ch for ch in (no_hp or "") if ch.isdigit())
+        if not digit:
+            return ""
+        if digit.startswith("0"):
+            digit = "62" + digit[1:]
+        elif not digit.startswith("62"):
+            digit = "62" + digit
+        return digit
+
+    def buat_wa_link(p, settings):
+        if p.status != "Dibayar":
+            return None
+        nomor = normalisasi_no_hp_wa(p.employee.no_hp)
+        if not nomor:
+            return None
+        tarif_unit_efektif = p.employee.tarif_unit_freelance or settings.tarif_harian_freelance or 0
+        pesan = buat_pesan_wa_slip(p, settings, tarif_unit_efektif)
+        return f"https://wa.me/{nomor}?text={quote(pesan)}"
 
     def format_tanggal_panjang(d):
         return f"{d.day:02d} {BULAN_NAMA[d.month]} {d.year}"
@@ -637,6 +695,9 @@ def create_app():
             .order_by(Employee.nama)
             .all()
         )
+        settings = get_settings()
+        for p in payrolls:
+            p.wa_link = buat_wa_link(p, settings)
         total_gaji = sum(p.gaji_bersih for p in payrolls)
         return render_template(
             "payroll_list.html",
@@ -873,6 +934,7 @@ def create_app():
             periode_awal=periode_awal,
             periode_akhir=periode_akhir,
             tarif_unit_efektif=tarif_unit_efektif,
+            wa_link=buat_wa_link(payroll, settings),
         )
 
     @app.route("/penggajian/<int:payroll_id>/bayar", methods=["POST"])

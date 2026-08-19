@@ -88,6 +88,9 @@
           </td>
           <td class="text-end">
             <a href="{{ url_for('penggajian_detail', payroll_id=p.id) }}" class="btn btn-sm btn-outline-primary">Lihat Slip</a>
+            {% if p.wa_link %}
+            <a href="{{ p.wa_link }}" target="_blank" class="btn btn-sm btn-success">Kirim WA</a>
+            {% endif %}
           </td>
         </tr>
         {% else %}
