@@ -1,9 +1,16 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
+
+WIB = ZoneInfo("Asia/Jakarta")
+
+
+def now_wib():
+    return datetime.now(WIB).replace(tzinfo=None)
 
 
 class User(UserMixin, db.Model):
@@ -142,7 +149,7 @@ class Payroll(db.Model):
     gaji_bersih = db.Column(db.Integer, default=0)
 
     status = db.Column(db.String(16), default="Draft")  # Draft / Dibayar
-    tanggal_dibuat = db.Column(db.DateTime, default=datetime.utcnow)
+    tanggal_dibuat = db.Column(db.DateTime, default=now_wib)
     tanggal_dibayar = db.Column(db.DateTime)
 
     __table_args__ = (
@@ -158,7 +165,7 @@ class PengajuanIzin(db.Model):
     alasan = db.Column(db.String(512))
     status = db.Column(db.String(16), default="Menunggu")  # Menunggu / Disetujui / Ditolak
     catatan_admin = db.Column(db.String(256))
-    tanggal_diajukan = db.Column(db.DateTime, default=datetime.utcnow)
+    tanggal_diajukan = db.Column(db.DateTime, default=now_wib)
     tanggal_diproses = db.Column(db.DateTime)
 
     employee = db.relationship("Employee", backref="pengajuan_izin")

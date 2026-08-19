@@ -3,7 +3,18 @@ import math
 import calendar
 from functools import wraps
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from urllib.parse import quote
+
+WIB = ZoneInfo("Asia/Jakarta")
+
+
+def now_wib():
+    return datetime.now(WIB).replace(tzinfo=None)
+
+
+def today_wib():
+    return now_wib().date()
 
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import (
@@ -308,7 +319,7 @@ def create_app():
     @admin_required
     def dashboard():
         total_karyawan = Employee.query.filter_by(status="Aktif").count()
-        hari_ini = date.today()
+        hari_ini = today_wib()
         absen_hari_ini = Attendance.query.filter_by(tanggal=hari_ini).count()
         hadir_hari_ini = Attendance.query.filter_by(tanggal=hari_ini, status="Hadir").count()
 
@@ -375,7 +386,7 @@ def create_app():
     @admin_required
     def karyawan_edit(emp_id):
         emp = db.session.get(Employee, emp_id) or abort_404()
-        hari_ini = date.today()
+        hari_ini = today_wib()
         hari_hadir_bulan_ini = Attendance.query.filter(
             Attendance.employee_id == emp.id,
             Attendance.status == "Hadir",
@@ -434,11 +445,11 @@ def create_app():
     @app.route("/absensi")
     @admin_required
     def absensi_list():
-        tanggal_str = request.args.get("tanggal", date.today().isoformat())
+        tanggal_str = request.args.get("tanggal", today_wib().isoformat())
         try:
             tanggal = datetime.strptime(tanggal_str, "%Y-%m-%d").date()
         except ValueError:
-            tanggal = date.today()
+            tanggal = today_wib()
 
         data = (
             Attendance.query.filter_by(tanggal=tanggal)
@@ -501,7 +512,7 @@ def create_app():
             return redirect(url_for("absensi_list", tanggal=tanggal.isoformat()))
 
         employees = Employee.query.filter_by(status="Aktif").order_by(Employee.nama).all()
-        tanggal_default = request.args.get("tanggal", date.today().isoformat())
+        tanggal_default = request.args.get("tanggal", today_wib().isoformat())
         return render_template(
             "attendance_koreksi.html",
             att=att,
@@ -541,7 +552,7 @@ def create_app():
     def pengajuan_izin_setujui(pid):
         p = db.session.get(PengajuanIzin, pid) or abort_404()
         p.status = "Disetujui"
-        p.tanggal_diproses = datetime.utcnow()
+        p.tanggal_diproses = now_wib()
 
         att = Attendance.query.filter_by(employee_id=p.employee_id, tanggal=p.tanggal).first()
         if not att:
@@ -564,7 +575,7 @@ def create_app():
         p = db.session.get(PengajuanIzin, pid) or abort_404()
         p.status = "Ditolak"
         p.catatan_admin = request.form.get("catatan_admin", "").strip()
-        p.tanggal_diproses = datetime.utcnow()
+        p.tanggal_diproses = now_wib()
         db.session.commit()
         flash(f"Pengajuan {p.employee.nama} ditolak.", "info")
         return redirect(url_for("pengajuan_izin_list"))
@@ -573,7 +584,7 @@ def create_app():
     @app.route("/pegawai")
     @pegawai_required
     def pegawai_dashboard():
-        hari_ini = date.today()
+        hari_ini = today_wib()
         absen = Attendance.query.filter_by(employee_id=current_user.id, tanggal=hari_ini).first()
         settings = get_settings()
         return render_template("pegawai/dashboard.html", absen=absen, settings=settings, hari_ini=hari_ini)
@@ -597,8 +608,8 @@ def create_app():
                     message=f"Anda berjarak {int(jarak)} meter dari kantor (maksimal {radius} meter). Absen ditolak.",
                 ), 400
 
-        hari_ini = date.today()
-        jam_sekarang = datetime.now().strftime("%H:%M:%S")
+        hari_ini = today_wib()
+        jam_sekarang = now_wib().strftime("%H:%M:%S")
         tipe_pegawai = current_user.tipe_pegawai
         att = Attendance.query.filter_by(employee_id=current_user.id, tanggal=hari_ini).first()
 
@@ -687,8 +698,8 @@ def create_app():
     @app.route("/penggajian")
     @admin_required
     def penggajian_list():
-        bulan = int(request.args.get("bulan", date.today().month))
-        tahun = int(request.args.get("tahun", date.today().year))
+        bulan = int(request.args.get("bulan", today_wib().month))
+        tahun = int(request.args.get("tahun", today_wib().year))
         payrolls = (
             Payroll.query.filter_by(bulan=bulan, tahun=tahun)
             .join(Employee)
@@ -807,8 +818,8 @@ def create_app():
     @app.route("/penggajian/freelance-review")
     @admin_required
     def penggajian_freelance_review():
-        bulan = int(request.args.get("bulan", date.today().month))
-        tahun = int(request.args.get("tahun", date.today().year))
+        bulan = int(request.args.get("bulan", today_wib().month))
+        tahun = int(request.args.get("tahun", today_wib().year))
         settings = get_settings()
 
         awal = date(tahun, bulan, 1)
@@ -942,7 +953,7 @@ def create_app():
     def penggajian_bayar(payroll_id):
         payroll = db.session.get(Payroll, payroll_id) or abort_404()
         payroll.status = "Dibayar"
-        payroll.tanggal_dibayar = datetime.utcnow()
+        payroll.tanggal_dibayar = now_wib()
         db.session.commit()
         flash(f"Gaji {payroll.employee.nama} ditandai sudah dibayar.", "success")
         return redirect(url_for("penggajian_list", bulan=payroll.bulan, tahun=payroll.tahun))
