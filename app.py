@@ -791,17 +791,13 @@ def create_app():
 
         employees = Employee.query.filter_by(status="Aktif", tipe_pegawai="Freelance").all()
         for emp in employees:
-            hari_kerja_input = request.form.get(f"hari_kerja_{emp.id}")
-            if hari_kerja_input is None:
-                continue
-            hari_kerja = int(hari_kerja_input or 0)
-
             absensi = Attendance.query.filter(
                 Attendance.employee_id == emp.id,
                 Attendance.tanggal >= awal,
                 Attendance.tanggal <= akhir,
             ).all()
             total_hadir = sum(1 for a in absensi if a.status == "Hadir")
+            hari_kerja = total_hadir
             total_sakit = sum(1 for a in absensi if a.status == "Sakit")
             total_izin = sum(1 for a in absensi if a.status == "Izin")
             total_cuti = sum(1 for a in absensi if a.status == "Cuti")

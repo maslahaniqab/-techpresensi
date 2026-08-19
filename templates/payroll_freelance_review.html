@@ -6,9 +6,9 @@
 
 <div class="card p-3 mb-3">
   <p class="mb-0 small text-muted">
-    Jumlah hari kerja otomatis diambil dari absensi "Hadir" bulan ini, tapi bisa Anda koreksi manual di bawah
-    (misalnya karena ada tanggal merah/libur nasional yang perlu disesuaikan). Total = jumlah hari kerja &times; tarif per hari.
-    Lembur, bonus target, dan fee co-host tetap dihitung otomatis seperti biasa dan ditambahkan ke slip.
+    Jumlah hari kerja diambil otomatis &amp; final dari data absensi "Hadir" pegawai bulan ini (sama seperti yang tampil di riwayat absensi pegawai) dan
+    <strong>tidak bisa diedit manual</strong> agar selalu sesuai dengan absen masuk yang sebenarnya.
+    Total = jumlah hari kerja &times; tarif per hari. Lembur, bonus target, dan fee co-host tetap dihitung otomatis seperti biasa dan ditambahkan ke slip.
   </p>
 </div>
 
@@ -23,7 +23,7 @@
           <tr>
             <th>Nama</th>
             <th>Jabatan</th>
-            <th>Jumlah Hari Kerja</th>
+            <th>Jumlah Hari Kerja (dari Absensi)</th>
             <th>Tarif / Hari</th>
             <th>Estimasi Upah Kerja</th>
           </tr>
@@ -33,22 +33,13 @@
           <tr>
             <td>{{ row.employee.nama }}</td>
             <td>{{ row.employee.jabatan or '-' }}</td>
-            <td style="max-width: 140px;">
-              {% if row.sudah_dibayar %}
-                <input type="number" class="form-control" value="{{ row.hari_kerja_absensi }}" disabled>
-                <input type="hidden" name="hari_kerja_{{ row.employee.id }}" value="{{ row.hari_kerja_absensi }}">
-              {% else %}
-                <input type="number" name="hari_kerja_{{ row.employee.id }}" class="form-control hari-kerja-input"
-                       data-tarif="{{ row.tarif_unit }}" data-target="total_{{ row.employee.id }}"
-                       min="0" value="{{ row.hari_kerja_absensi }}">
-              {% endif %}
-            </td>
+            <td>{{ row.hari_kerja_absensi }} hari</td>
             <td>{{ row.tarif_unit | rupiah }}</td>
             <td>
               {% if row.sudah_dibayar %}
                 <span class="badge bg-success">Sudah Dibayar</span>
               {% else %}
-                <strong id="total_{{ row.employee.id }}">{{ (row.hari_kerja_absensi * row.tarif_unit) | rupiah }}</strong>
+                <strong>{{ (row.hari_kerja_absensi * row.tarif_unit) | rupiah }}</strong>
               {% endif %}
             </td>
           </tr>
@@ -63,19 +54,4 @@
   <button type="submit" class="btn btn-primary">Generate Slip Freelance</button>
   <a href="{{ url_for('penggajian_list', bulan=bulan, tahun=tahun) }}" class="btn btn-outline-secondary">Batal</a>
 </form>
-{% endblock %}
-
-{% block scripts %}
-<script>
-function formatRupiah(angka) {
-  return "Rp " + Math.round(angka).toLocaleString('id-ID');
-}
-document.querySelectorAll('.hari-kerja-input').forEach(function (el) {
-  el.addEventListener('input', function () {
-    const tarif = parseFloat(el.dataset.tarif) || 0;
-    const hari = parseFloat(el.value) || 0;
-    document.getElementById(el.dataset.target).textContent = formatRupiah(hari * tarif);
-  });
-});
-</script>
 {% endblock %}
