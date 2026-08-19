@@ -95,8 +95,9 @@
       <div class="row">
         <div class="col-md-6 mb-3">
           <label class="form-label">Tarif per Hari/Unit Kerja (Rp)</label>
-          <input type="number" name="tarif_unit_freelance" class="form-control" min="0"
-                 value="{{ karyawan.tarif_unit_freelance if karyawan else 0 }}" placeholder="0 = pakai tarif default">
+          <input type="number" name="tarif_unit_freelance" id="tarif_unit_freelance" class="form-control" min="0"
+                 value="{{ karyawan.tarif_unit_freelance if karyawan else 0 }}" placeholder="0 = pakai tarif default"
+                 data-tarif-default="{{ site_settings.tarif_harian_freelance or 0 }}">
           <div class="form-text">Kosongkan/isi 0 untuk memakai tarif default di menu Pengaturan.</div>
         </div>
         <div class="col-md-6 mb-3">
@@ -107,6 +108,13 @@
           </select>
         </div>
       </div>
+      {% if karyawan %}
+      <div class="alert alert-info py-2 mb-2">
+        Jumlah hari hadir bulan ini (dari absensi): <strong>{{ hari_hadir_bulan_ini }} hari</strong><br>
+        Estimasi Upah Kerja Bulan Ini: <strong id="estimasi_upah_freelance">Rp 0</strong>
+        <div class="form-text mb-0">Otomatis dihitung ulang dari absensi &amp; diverifikasi/dikoreksi lagi saat proses Generate Slip Freelance.</div>
+      </div>
+      {% endif %}
       <div class="alert alert-secondary mb-0 py-2">
         Gaji freelance = (jumlah hari hadir &times; tarif per hari) + lembur + bonus target + fee co-host (jika ada).
       </div>
@@ -171,5 +179,20 @@ document.querySelectorAll('.hitung-total').forEach(el => el.addEventListener('in
 document.getElementById('tipe_pegawai').addEventListener('change', toggleTipe);
 hitungTotal();
 toggleTipe();
+
+const hariHadirBulanIni = {{ hari_hadir_bulan_ini | default(0) }};
+const tarifInput = document.getElementById('tarif_unit_freelance');
+const estimasiEl = document.getElementById('estimasi_upah_freelance');
+function hitungEstimasiFreelance() {
+  if (!tarifInput || !estimasiEl) return;
+  const tarifDiisi = parseFloat(tarifInput.value) || 0;
+  const tarifDefault = parseFloat(tarifInput.dataset.tarifDefault) || 0;
+  const tarif = tarifDiisi || tarifDefault;
+  estimasiEl.textContent = formatRupiah(hariHadirBulanIni * tarif);
+}
+if (tarifInput) {
+  tarifInput.addEventListener('input', hitungEstimasiFreelance);
+  hitungEstimasiFreelance();
+}
 </script>
 {% endblock %}

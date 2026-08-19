@@ -317,11 +317,21 @@ def create_app():
     @admin_required
     def karyawan_edit(emp_id):
         emp = db.session.get(Employee, emp_id) or abort_404()
+        hari_ini = date.today()
+        hari_hadir_bulan_ini = Attendance.query.filter(
+            Attendance.employee_id == emp.id,
+            Attendance.status == "Hadir",
+            db.extract("month", Attendance.tanggal) == hari_ini.month,
+            db.extract("year", Attendance.tanggal) == hari_ini.year,
+        ).count()
         if request.method == "POST":
             no_hp = request.form.get("no_hp", "").strip()
             if no_hp and Employee.query.filter(Employee.no_hp == no_hp, Employee.id != emp.id).first():
                 flash("No. HP sudah dipakai karyawan lain. Gunakan nomor lain agar login tidak tertukar.", "danger")
-                return render_template("employee_form.html", karyawan=emp, jabatan_list=JABATAN_LIST)
+                return render_template(
+                    "employee_form.html", karyawan=emp, jabatan_list=JABATAN_LIST,
+                    hari_hadir_bulan_ini=hari_hadir_bulan_ini,
+                )
 
             emp.nama = request.form["nama"].strip()
             emp.jabatan = request.form.get("jabatan", "").strip()
@@ -347,7 +357,10 @@ def create_app():
             db.session.commit()
             flash(f"Data {emp.nama} berhasil diperbarui.", "success")
             return redirect(url_for("karyawan_list"))
-        return render_template("employee_form.html", karyawan=emp, jabatan_list=JABATAN_LIST)
+        return render_template(
+            "employee_form.html", karyawan=emp, jabatan_list=JABATAN_LIST,
+            hari_hadir_bulan_ini=hari_hadir_bulan_ini,
+        )
 
     @app.route("/karyawan/<int:emp_id>/hapus", methods=["POST"])
     @admin_required
