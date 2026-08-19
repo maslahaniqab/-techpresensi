@@ -16,7 +16,9 @@ def now_wib():
 def today_wib():
     return now_wib().date()
 
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from io import BytesIO
+
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, Response
 from flask_login import (
     LoginManager,
     login_user,
@@ -24,6 +26,7 @@ from flask_login import (
     current_user,
 )
 from werkzeug.utils import secure_filename
+from xhtml2pdf import pisa
 
 from models import db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin
 
@@ -155,33 +158,13 @@ def create_app():
     app.jinja_env.filters["rupiah"] = rupiah
     app.jinja_env.filters["terbilang"] = terbilang_rupiah
 
-    def buat_pesan_wa_slip(p, settings, tarif_unit_efektif):
+    def buat_pesan_wa_slip(p, settings):
+        label_total = "GAJI BRUTO" if p.tipe_pegawai == "Freelance" else "PENERIMAAN BERSIH"
         baris = [
             f"Halo {p.employee.nama},",
             "",
-            f"Berikut slip gaji Anda periode {BULAN_NAMA[p.bulan]} {p.tahun} dari {settings.nama_perusahaan}:",
-            "",
-        ]
-        if p.tipe_pegawai == "Freelance":
-            baris += [
-                f"Upah Kerja ({p.total_hadir} hari x {rupiah(tarif_unit_efektif)}): {rupiah(p.upah_freelance)}",
-                f"Lembur/Over Time: {rupiah(p.uang_lembur)}",
-                f"Achieve Target: {rupiah(p.bonus_target)}",
-                f"Co-Host: {rupiah(p.co_host_fee)}",
-            ]
-            label_total = "GAJI BRUTO"
-        else:
-            baris += [
-                f"Gaji Pokok: {rupiah(p.gaji_pokok)}",
-                f"Tj. Makan & Transport: {rupiah(p.tunjangan_makan + p.tunjangan_transport)}",
-                f"Lembur Harian: {rupiah(p.uang_lembur)}",
-                f"Bonus: {rupiah(p.bonus_target)}",
-                f"Potongan Alpha: -{rupiah(p.potongan_alpha)}",
-                f"Potongan Keterlambatan: -{rupiah(p.potongan_telat)}",
-                f"BPJS (JKK+JKM+JHT+Kesehatan): -{rupiah(p.bpjs_jkk + p.bpjs_jkm + p.bpjs_jht + p.bpjs_kesehatan)}",
-            ]
-            label_total = "PENERIMAAN BERSIH"
-        baris += [
+            f"Berikut slip gaji Anda periode {BULAN_NAMA[p.bulan]} {p.tahun} dari {settings.nama_perusahaan} "
+            "(rincian lengkap ada di file PDF terlampir).",
             "",
             f"{label_total}: {rupiah(p.gaji_bersih)}",
             f"({terbilang_rupiah(p.gaji_bersih)})",
@@ -208,8 +191,7 @@ def create_app():
         nomor = normalisasi_no_hp_wa(p.employee.no_hp)
         if not nomor:
             return None
-        tarif_unit_efektif = p.employee.tarif_unit_freelance or settings.tarif_harian_freelance or 0
-        pesan = buat_pesan_wa_slip(p, settings, tarif_unit_efektif)
+        pesan = buat_pesan_wa_slip(p, settings)
         return f"https://wa.me/{nomor}?text={quote(pesan)}"
 
     def format_tanggal_panjang(d):
@@ -972,6 +954,48 @@ def create_app():
             periode_akhir=periode_akhir,
             tarif_unit_efektif=tarif_unit_efektif,
             wa_link=buat_wa_link(payroll, settings),
+        )
+
+    def pdf_link_callback(uri, rel):
+        if uri.startswith("/static/"):
+            return os.path.join(app.root_path, uri.lstrip("/"))
+        return uri
+
+    @app.route("/penggajian/<int:payroll_id>/pdf")
+    @admin_required
+    def penggajian_pdf(payroll_id):
+        payroll = db.session.get(Payroll, payroll_id) or abort_404()
+        settings = get_settings()
+        periode_awal = date(payroll.tahun, payroll.bulan, 1)
+        periode_akhir = date(payroll.tahun, payroll.bulan, calendar.monthrange(payroll.tahun, payroll.bulan)[1])
+        tarif_unit_efektif = (
+            payroll.employee.tarif_unit_freelance or settings.tarif_harian_freelance or 0
+        )
+        logo_path = None
+        if settings.logo_filename:
+            candidate = os.path.join(app.config["UPLOAD_FOLDER"], settings.logo_filename)
+            if os.path.exists(candidate):
+                logo_path = candidate
+
+        html = render_template(
+            "payroll_slip_pdf.html",
+            p=payroll,
+            settings=settings,
+            periode_awal=periode_awal,
+            periode_akhir=periode_akhir,
+            tarif_unit_efektif=tarif_unit_efektif,
+            logo_path=logo_path,
+        )
+
+        buffer = BytesIO()
+        pisa.CreatePDF(html, dest=buffer, link_callback=pdf_link_callback)
+        buffer.seek(0)
+
+        filename = f"Slip_Gaji_{payroll.employee.nama.replace(' ', '_')}_{BULAN_NAMA[payroll.bulan]}_{payroll.tahun}.pdf"
+        return Response(
+            buffer.read(),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     @app.route("/penggajian/<int:payroll_id>/bayar", methods=["POST"])

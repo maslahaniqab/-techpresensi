@@ -4,6 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3 no-print">
   <h3 class="mb-0">Slip Gaji</h3>
   <div>
+    <a href="{{ url_for('penggajian_pdf', payroll_id=p.id) }}" class="btn btn-outline-primary">Unduh PDF</a>
     <button onclick="window.print()" class="btn btn-outline-secondary">Cetak</button>
     <a href="{{ url_for('penggajian_list', bulan=p.bulan, tahun=p.tahun) }}" class="btn btn-outline-secondary">Kembali</a>
   </div>
@@ -130,8 +131,14 @@
   {% else %}
   <p class="text-muted small text-center mb-2">Dibayar pada {{ p.tanggal_dibayar.strftime('%d-%m-%Y %H:%M') }}</p>
   {% if wa_link %}
+  <div class="alert alert-warning small no-print mb-2">
+    WhatsApp tidak mengizinkan file dilampirkan otomatis lewat link. Langkahnya:
+    <strong>1)</strong> klik "Unduh PDF" di atas dulu,
+    <strong>2)</strong> klik "Buka WhatsApp" di bawah ini,
+    <strong>3)</strong> lampirkan file PDF yang sudah diunduh ke chat WhatsApp yang terbuka.
+  </div>
   <a href="{{ wa_link }}" target="_blank" class="btn btn-success w-100 no-print">
-    Kirim Slip ke WhatsApp
+    Buka WhatsApp
   </a>
   {% else %}
   <p class="text-danger small text-center mb-0 no-print">No. HP karyawan belum diisi, tidak bisa kirim ke WhatsApp.</p>
