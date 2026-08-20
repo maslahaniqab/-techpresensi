@@ -30,22 +30,35 @@
     <div class="collapse navbar-collapse" id="navMenu">
       <ul class="navbar-nav me-auto">
         <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('karyawan_list') }}">Karyawan</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('absensi_list') }}">Absensi</a></li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('pengajuan_izin_list') }}">
-            Pengajuan Izin
-            {% if pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+            Karyawan
+            {% if pending_izin_count or pending_lembur_count %}<span class="badge bg-danger">{{ pending_izin_count + pending_lembur_count }}</span>{% endif %}
           </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('karyawan_list') }}">Data Karyawan</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('absensi_list') }}">Absensi</a></li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('pengajuan_izin_list') }}">
+                Pengajuan Izin
+                {% if pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('pengajuan_lembur_list') }}">
+                Pengajuan Lembur
+                {% if pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
+              </a>
+            </li>
+            <li><a class="dropdown-item" href="{{ url_for('laporan_pekerjaan_list') }}">Laporan Pekerjaan</a></li>
+          </ul>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('pengajuan_lembur_list') }}">
-            Pengajuan Lembur
-            {% if pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
-          </a>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Keuangan</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('penggajian_list') }}">Penggajian</a></li>
+          </ul>
         </li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('laporan_pekerjaan_list') }}">Laporan Pekerjaan</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('penggajian_list') }}">Penggajian</a></li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Marketing</a>
           <ul class="dropdown-menu">
@@ -54,9 +67,9 @@
             <li><a class="dropdown-item" href="{{ url_for('marketing_proyeksi') }}">Proyeksi Budget Iklan</a></li>
           </ul>
         </li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pengaturan') }}">Pengaturan</a></li>
       </ul>
-      <ul class="navbar-nav">
+      <ul class="navbar-nav align-items-lg-center">
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('pengaturan') }}" title="Pengaturan">⚙️</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('akun') }}">👤 {{ current_user.nama }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}">Keluar</a></li>
       </ul>
