@@ -302,6 +302,21 @@ def create_app():
             return f(*args, **kwargs)
         return wrapper
 
+    def marketing_required(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for("login"))
+            role = getattr(current_user, "role", None)
+            if role == "admin":
+                return f(*args, **kwargs)
+            if role == "pegawai" and current_user.akses_marketing:
+                return f(*args, **kwargs)
+            if role == "pegawai":
+                return redirect(url_for("pegawai_dashboard"))
+            return redirect(url_for("login"))
+        return wrapper
+
     def rupiah(value):
         try:
             value = int(value or 0)
@@ -405,6 +420,12 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        kolom_employee = {c["name"] for c in db.inspect(db.engine).get_columns("employee")}
+        if "akses_marketing" not in kolom_employee:
+            db.session.execute(db.text(
+                "ALTER TABLE employee ADD COLUMN akses_marketing BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -514,6 +535,7 @@ def create_app():
                 tarif_unit_freelance=int(request.form.get("tarif_unit_freelance") or 0),
                 co_host_bulan_ini=request.form.get("co_host_bulan_ini", "Tidak"),
                 status=request.form.get("status", "Aktif"),
+                akses_marketing=request.form.get("akses_marketing") == "on",
             )
             password_baru = request.form.get("password_baru", "")
             if password_baru:
@@ -562,6 +584,7 @@ def create_app():
             emp.tarif_unit_freelance = int(request.form.get("tarif_unit_freelance") or 0)
             emp.co_host_bulan_ini = request.form.get("co_host_bulan_ini", "Tidak")
             emp.status = request.form.get("status", "Aktif")
+            emp.akses_marketing = request.form.get("akses_marketing") == "on"
             password_baru = request.form.get("password_baru", "")
             if password_baru:
                 emp.set_password(password_baru)
@@ -1441,7 +1464,7 @@ def create_app():
             pass
 
     @app.route("/marketing/iklan")
-    @admin_required
+    @marketing_required
     def marketing_iklan_dashboard():
         marketplace_filter = request.args.get("marketplace", "Semua")
         hari_ini = today_wib()
@@ -1547,7 +1570,7 @@ def create_app():
         return token, headers, rows_bersih, None
 
     @app.route("/marketing/iklan/upload", methods=["GET", "POST"])
-    @admin_required
+    @marketing_required
     def marketing_iklan_upload():
         bersihkan_tmp_iklan_lama()
         if request.method == "POST":
@@ -1583,7 +1606,7 @@ def create_app():
         return render_template("marketing/iklan_upload.html", marketplace_list=MARKETPLACE_LIST)
 
     @app.route("/marketing/iklan/konfirmasi", methods=["POST"])
-    @admin_required
+    @marketing_required
     def marketing_iklan_konfirmasi():
         token = request.form.get("token", "")
         path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"iklan_{token}.json")
@@ -1654,7 +1677,7 @@ def create_app():
         return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
 
     @app.route("/marketing/iklan/manual", methods=["POST"])
-    @admin_required
+    @marketing_required
     def marketing_iklan_manual():
         marketplace = request.form.get("marketplace", "")
         try:
@@ -1682,7 +1705,7 @@ def create_app():
         return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
 
     @app.route("/marketing/iklan/hapus/<int:iklan_id>", methods=["POST"])
-    @admin_required
+    @marketing_required
     def marketing_iklan_hapus(iklan_id):
         data = db.session.get(IklanMarketplace, iklan_id)
         if data:
@@ -1695,7 +1718,7 @@ def create_app():
         return redirect(url_for("marketing_iklan_dashboard"))
 
     @app.route("/marketing/produk/upload", methods=["GET", "POST"])
-    @admin_required
+    @marketing_required
     def marketing_produk_upload():
         bersihkan_tmp_iklan_lama()
         if request.method == "POST":
@@ -1731,7 +1754,7 @@ def create_app():
         return render_template("marketing/produk_upload.html", marketplace_list=MARKETPLACE_LIST)
 
     @app.route("/marketing/produk/konfirmasi", methods=["POST"])
-    @admin_required
+    @marketing_required
     def marketing_produk_konfirmasi():
         token = request.form.get("token", "")
         path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produk_{token}.json")
@@ -1806,7 +1829,7 @@ def create_app():
         return redirect(url_for("marketing_produk_dashboard", marketplace=marketplace))
 
     @app.route("/marketing/produk")
-    @admin_required
+    @marketing_required
     def marketing_produk_dashboard():
         hari_ini = today_wib()
         marketplace_filter = request.args.get("marketplace", "Semua")
@@ -1907,7 +1930,7 @@ def create_app():
         )
 
     @app.route("/marketing/proyeksi")
-    @admin_required
+    @marketing_required
     def marketing_proyeksi():
         hari_ini = today_wib()
         periode_hari = 30

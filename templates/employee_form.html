@@ -151,6 +151,12 @@
       {% elif karyawan %}
       <div class="text-muted small">Karyawan ini belum bisa login karena belum ada password.</div>
       {% endif %}
+      <div class="form-check mt-3">
+        <input type="checkbox" name="akses_marketing" id="akses_marketing" class="form-check-input"
+               {{ 'checked' if karyawan and karyawan.akses_marketing else '' }}>
+        <label class="form-check-label" for="akses_marketing">Akses Menu Marketing</label>
+        <div class="form-text">Jika dicentang, karyawan ini bisa membuka menu Marketing (Analisa Iklan, Performa Produk, Proyeksi Budget) saat login di halaman pegawai.</div>
+      </div>
     </div>
 
     <button type="submit" class="btn btn-primary">Simpan</button>

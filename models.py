@@ -78,6 +78,7 @@ class Employee(UserMixin, db.Model):
     tarif_unit_freelance = db.Column(db.Integer, nullable=False, default=0)  # 0 = pakai default di Pengaturan
     co_host_bulan_ini = db.Column(db.String(8), default="Tidak")  # Ya / Tidak
     status = db.Column(db.String(16), default="Aktif")  # Aktif / Nonaktif
+    akses_marketing = db.Column(db.Boolean, default=False, nullable=False)
 
     attendances = db.relationship(
         "Attendance", backref="employee", cascade="all, delete-orphan"
