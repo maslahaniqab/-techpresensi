@@ -218,6 +218,17 @@ class ProdukIklan(db.Model):
     )
 
 
+class ItemLabaRugi(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bulan = db.Column(db.Integer, nullable=False)
+    tahun = db.Column(db.Integer, nullable=False)
+    kelompok = db.Column(db.String(32), nullable=False)
+    # Pendapatan / Beban Pokok Penjualan / Pendapatan Non Operasional / Beban Non Operasional
+    deskripsi = db.Column(db.String(128), nullable=False)
+    jumlah = db.Column(db.Integer, nullable=False, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class PengeluaranOperasional(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tanggal = db.Column(db.Date, nullable=False)

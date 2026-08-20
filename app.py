@@ -41,7 +41,7 @@ from xhtml2pdf import pisa
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
-    PengeluaranOperasional,
+    PengeluaranOperasional, ItemLabaRugi,
 )
 
 BULAN_NAMA = [
@@ -68,6 +68,45 @@ KATEGORI_PENGELUARAN_RUTIN = [
     "Listrik",
     "Air",
 ]
+
+KELOMPOK_LABA_RUGI = [
+    "Pendapatan",
+    "Beban Pokok Penjualan",
+    "Pendapatan Non Operasional",
+    "Beban Non Operasional",
+]
+
+PRESET_LABA_RUGI = {
+    "Pendapatan": [
+        "Penjualan",
+        "Diskon Penjualan",
+        "Beban Diskon Shopee",
+        "Beban Diskon Tokopedia",
+        "Beban Diskon TikTok Shop",
+        "Beban Diskon Lazada",
+    ],
+    "Beban Pokok Penjualan": [
+        "Beban Pokok Penjualan (HPP)",
+        "Beban Ongkir Shopee",
+        "Beban Ongkir Tokopedia",
+        "Beban Ongkir TikTok Shop",
+        "Beban Ongkir Lazada",
+        "Biaya Layanan & Tambahan Shopee",
+        "Biaya Layanan & Tambahan Tokopedia",
+        "Biaya Layanan & Tambahan TikTok Shop",
+        "Biaya Layanan & Tambahan Lazada",
+        "Beban Kelebihan/Kekurangan Ongkir",
+        "Beban Affiliasi Shopee",
+    ],
+    "Pendapatan Non Operasional": [
+        "Pendapatan Bunga Bank",
+        "Pendapatan Lain-lain",
+    ],
+    "Beban Non Operasional": [
+        "Beban Administrasi Bank",
+        "Beban Lain-lain",
+    ],
+}
 
 MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
 
@@ -1536,6 +1575,203 @@ def create_app():
         db.session.commit()
         flash("Pengeluaran dihapus.", "info")
         return redirect(url_for("pengeluaran_list", bulan=bulan, tahun=tahun))
+
+    # ---------- KEUANGAN: LABA/RUGI ----------
+    def hitung_labarugi_periode(bulan, tahun):
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+
+        pendapatan_items = [
+            (i.deskripsi, i.jumlah)
+            for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Pendapatan")
+            .order_by(ItemLabaRugi.id).all()
+        ]
+        hpp_items = [
+            (i.deskripsi, i.jumlah)
+            for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Pokok Penjualan")
+            .order_by(ItemLabaRugi.id).all()
+        ]
+        pendapatan_non_op_items = [
+            (i.deskripsi, i.jumlah)
+            for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Pendapatan Non Operasional")
+            .order_by(ItemLabaRugi.id).all()
+        ]
+        beban_non_op_items = [
+            (i.deskripsi, i.jumlah)
+            for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Non Operasional")
+            .order_by(ItemLabaRugi.id).all()
+        ]
+
+        total_pendapatan = sum(v for _, v in pendapatan_items)
+        total_hpp = sum(v for _, v in hpp_items)
+        laba_kotor = total_pendapatan - total_hpp
+
+        iklan_by_mp = {}
+        for r in IklanMarketplace.query.filter(
+            IklanMarketplace.tanggal >= awal, IklanMarketplace.tanggal <= akhir
+        ).all():
+            iklan_by_mp[r.marketplace] = iklan_by_mp.get(r.marketplace, 0) + (r.biaya or 0)
+
+        gaji_total = sum(p.gaji_bersih or 0 for p in Payroll.query.filter_by(bulan=bulan, tahun=tahun).all())
+
+        opex_by_kategori = {}
+        for r in PengeluaranOperasional.query.filter(
+            PengeluaranOperasional.tanggal >= awal, PengeluaranOperasional.tanggal <= akhir
+        ).all():
+            opex_by_kategori[r.kategori] = opex_by_kategori.get(r.kategori, 0) + (r.jumlah or 0)
+
+        total_beban_operasional = sum(iklan_by_mp.values()) + gaji_total + sum(opex_by_kategori.values())
+        pendapatan_operasional = laba_kotor - total_beban_operasional
+
+        total_pendapatan_non_op = sum(v for _, v in pendapatan_non_op_items)
+        total_beban_non_op = sum(v for _, v in beban_non_op_items)
+        laba_bersih = pendapatan_operasional + total_pendapatan_non_op - total_beban_non_op
+
+        return {
+            "bulan": bulan,
+            "tahun": tahun,
+            "pendapatan_items": pendapatan_items,
+            "total_pendapatan": total_pendapatan,
+            "hpp_items": hpp_items,
+            "total_hpp": total_hpp,
+            "laba_kotor": laba_kotor,
+            "iklan_by_mp": iklan_by_mp,
+            "gaji_total": gaji_total,
+            "opex_by_kategori": opex_by_kategori,
+            "total_beban_operasional": total_beban_operasional,
+            "pendapatan_operasional": pendapatan_operasional,
+            "pendapatan_non_op_items": pendapatan_non_op_items,
+            "total_pendapatan_non_op": total_pendapatan_non_op,
+            "beban_non_op_items": beban_non_op_items,
+            "total_beban_non_op": total_beban_non_op,
+            "laba_bersih": laba_bersih,
+        }
+
+    def _nilai_item(items, label):
+        for l, v in items:
+            if l == label:
+                return v
+        return 0
+
+    @app.route("/keuangan/laba-rugi")
+    @admin_required
+    def laba_rugi():
+        dari_bulan = int(request.args.get("dari_bulan", today_wib().month))
+        dari_tahun = int(request.args.get("dari_tahun", today_wib().year))
+        sampai_bulan = int(request.args.get("sampai_bulan", today_wib().month))
+        sampai_tahun = int(request.args.get("sampai_tahun", today_wib().year))
+
+        periode_list = []
+        b, t = dari_bulan, dari_tahun
+        while (t, b) <= (sampai_tahun, sampai_bulan) and len(periode_list) < 12:
+            periode_list.append((b, t))
+            b += 1
+            if b > 12:
+                b = 1
+                t += 1
+        if not periode_list:
+            periode_list = [(sampai_bulan, sampai_tahun)]
+
+        data_per_periode = [hitung_labarugi_periode(b, t) for b, t in periode_list]
+
+        def kumpulkan_label(kunci):
+            labels = []
+            for d in data_per_periode:
+                for label, _ in d[kunci]:
+                    if label not in labels:
+                        labels.append(label)
+            return labels
+
+        pendapatan_labels = kumpulkan_label("pendapatan_items")
+        hpp_labels = kumpulkan_label("hpp_items")
+        non_op_pendapatan_labels = kumpulkan_label("pendapatan_non_op_items")
+        non_op_beban_labels = kumpulkan_label("beban_non_op_items")
+
+        marketplace_labels = []
+        for d in data_per_periode:
+            for mp in d["iklan_by_mp"]:
+                if mp not in marketplace_labels:
+                    marketplace_labels.append(mp)
+
+        opex_labels = []
+        for d in data_per_periode:
+            for kat in d["opex_by_kategori"]:
+                if kat not in opex_labels:
+                    opex_labels.append(kat)
+
+        return render_template(
+            "laba_rugi.html",
+            periode_list=periode_list,
+            data_per_periode=data_per_periode,
+            pendapatan_labels=pendapatan_labels,
+            hpp_labels=hpp_labels,
+            marketplace_labels=marketplace_labels,
+            opex_labels=opex_labels,
+            non_op_pendapatan_labels=non_op_pendapatan_labels,
+            non_op_beban_labels=non_op_beban_labels,
+            nilai=_nilai_item,
+            dari_bulan=dari_bulan,
+            dari_tahun=dari_tahun,
+            sampai_bulan=sampai_bulan,
+            sampai_tahun=sampai_tahun,
+        )
+
+    @app.route("/keuangan/laba-rugi/input", methods=["GET", "POST"])
+    @admin_required
+    def laba_rugi_input():
+        if request.method == "POST":
+            try:
+                bulan = int(request.form.get("bulan"))
+                tahun = int(request.form.get("tahun"))
+            except (TypeError, ValueError):
+                bulan = tahun = None
+
+            kelompok = request.form.get("kelompok", "")
+            deskripsi = request.form.get("deskripsi", "").strip()
+            if deskripsi == "__lainnya__":
+                deskripsi = request.form.get("deskripsi_manual", "").strip()
+
+            try:
+                jumlah = int(request.form.get("jumlah") or 0)
+            except ValueError:
+                jumlah = 0
+
+            if not bulan or not tahun or kelompok not in KELOMPOK_LABA_RUGI or not deskripsi or jumlah == 0:
+                flash("Lengkapi bulan, tahun, kelompok, deskripsi, dan jumlah (tidak boleh 0).", "danger")
+            else:
+                db.session.add(
+                    ItemLabaRugi(bulan=bulan, tahun=tahun, kelompok=kelompok, deskripsi=deskripsi, jumlah=jumlah)
+                )
+                db.session.commit()
+                flash("Item berhasil dicatat.", "success")
+                return redirect(url_for("laba_rugi_input", bulan=bulan, tahun=tahun))
+            return redirect(url_for("laba_rugi_input"))
+
+        bulan = int(request.args.get("bulan", today_wib().month))
+        tahun = int(request.args.get("tahun", today_wib().year))
+        items = (
+            ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun)
+            .order_by(ItemLabaRugi.kelompok, ItemLabaRugi.id)
+            .all()
+        )
+        return render_template(
+            "laba_rugi_input.html",
+            items=items,
+            bulan=bulan,
+            tahun=tahun,
+            kelompok_list=KELOMPOK_LABA_RUGI,
+            preset=PRESET_LABA_RUGI,
+        )
+
+    @app.route("/keuangan/laba-rugi/input/<int:iid>/hapus", methods=["POST"])
+    @admin_required
+    def laba_rugi_hapus(iid):
+        i = db.session.get(ItemLabaRugi, iid) or abort_404()
+        bulan, tahun = i.bulan, i.tahun
+        db.session.delete(i)
+        db.session.commit()
+        flash("Item dihapus.", "info")
+        return redirect(url_for("laba_rugi_input", bulan=bulan, tahun=tahun))
 
     # ---------- PENGATURAN ----------
     @app.route("/pengaturan", methods=["GET", "POST"])

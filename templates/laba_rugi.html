@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Laporan Laba/Rugi{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+  <h3 class="mb-0">Laporan Laba/Rugi</h3>
+  <div>
+    <button onclick="window.print()" class="btn btn-outline-secondary">Cetak</button>
+    <a href="{{ url_for('laba_rugi_input') }}" class="btn btn-outline-primary">Input Pendapatan &amp; HPP</a>
+  </div>
+</div>
+
+<div class="card p-3 mb-3 no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small">Dari Bulan</label>
+      <select name="dari_bulan" class="form-select">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}" {{ 'selected' if i == dari_bulan else '' }}>{{ bulan_nama_list[i] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Tahun</label>
+      <input type="number" name="dari_tahun" class="form-control" value="{{ dari_tahun }}" style="width: 100px;">
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Sampai Bulan</label>
+      <select name="sampai_bulan" class="form-select">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}" {{ 'selected' if i == sampai_bulan else '' }}>{{ bulan_nama_list[i] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Tahun</label>
+      <input type="number" name="sampai_tahun" class="form-control" value="{{ sampai_tahun }}" style="width: 100px;">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-outline-primary">Tampilkan</button>
+    </div>
+  </form>
+</div>
+
+<div class="card p-4">
+  <div class="text-center mb-3">
+    <div class="fw-semibold">{{ site_settings.nama_perusahaan }}</div>
+    <h5 class="mb-1">Laba/Rugi {{ 'Multi Periode' if periode_list|length > 1 else '' }}</h5>
+    <p class="text-muted mb-0">
+      {% if periode_list|length > 1 %}
+      Dari Periode {{ bulan_nama_list[dari_bulan] }} {{ dari_tahun }} s/d {{ bulan_nama_list[sampai_bulan] }} {{ sampai_tahun }}
+      {% else %}
+      Periode {{ bulan_nama_list[sampai_bulan] }} {{ sampai_tahun }}
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Deskripsi</th>
+          {% for b, t in periode_list %}<th class="text-end">{{ bulan_nama_list[b] }} {{ t }}</th>{% endfor %}
+          {% if periode_list|length > 1 %}<th class="text-end">Total</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="{{ periode_list|length + (2 if periode_list|length > 1 else 1) }}" class="fw-bold pt-3">PENDAPATAN</td></tr>
+        {% for label in pendapatan_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">{{ label }}</td>
+          {% for d in data_per_periode %}
+          {% set v = nilai(d.pendapatan_items, label) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ periode_list|length + (2 if periode_list|length > 1 else 1) }}" class="text-muted ps-3">Belum ada data. <a href="{{ url_for('laba_rugi_input') }}">Input sekarang</a>.</td></tr>
+        {% endfor %}
+        <tr class="fw-bold border-top">
+          <td>Jumlah Pendapatan</td>
+          {% set ns2 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns2.total = ns2.total + d.total_pendapatan %}
+          <td class="text-end">{{ d.total_pendapatan | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns2.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr><td colspan="{{ periode_list|length + (2 if periode_list|length > 1 else 1) }}" class="fw-bold pt-3">BEBAN POKOK PENJUALAN</td></tr>
+        {% for label in hpp_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">{{ label }}</td>
+          {% for d in data_per_periode %}
+          {% set v = nilai(d.hpp_items, label) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ periode_list|length + (2 if periode_list|length > 1 else 1) }}" class="text-muted ps-3">Belum ada data. <a href="{{ url_for('laba_rugi_input') }}">Input sekarang</a>.</td></tr>
+        {% endfor %}
+        <tr class="fw-bold border-top">
+          <td>Jumlah Beban Pokok Penjualan</td>
+          {% set ns3 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns3.total = ns3.total + d.total_hpp %}
+          <td class="text-end">{{ d.total_hpp | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns3.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr class="fw-bold fs-6 border-top border-bottom">
+          <td class="pt-2 pb-2">LABA KOTOR</td>
+          {% set ns4 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns4.total = ns4.total + d.laba_kotor %}
+          <td class="text-end pt-2 pb-2">{{ d.laba_kotor | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end pt-2 pb-2">{{ ns4.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr><td colspan="{{ periode_list|length + (2 if periode_list|length > 1 else 1) }}" class="fw-bold pt-3">BEBAN OPERASIONAL</td></tr>
+        {% for mp in marketplace_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">Iklan {{ mp }}</td>
+          {% for d in data_per_periode %}
+          {% set v = d.iklan_by_mp.get(mp, 0) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        {% set nsg = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">Beban Gaji, Upah &amp; Honorer</td>
+          {% for d in data_per_periode %}
+          {% set nsg.total = nsg.total + d.gaji_total %}
+          <td class="text-end">{{ d.gaji_total | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ nsg.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% for kat in opex_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">Beban {{ kat }}</td>
+          {% for d in data_per_periode %}
+          {% set v = d.opex_by_kategori.get(kat, 0) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        <tr class="fw-bold border-top">
+          <td>Jumlah Beban Operasional</td>
+          {% set ns5 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns5.total = ns5.total + d.total_beban_operasional %}
+          <td class="text-end">{{ d.total_beban_operasional | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns5.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr class="fw-bold fs-6 border-top border-bottom">
+          <td class="pt-2 pb-2">PENDAPATAN OPERASIONAL</td>
+          {% set ns6 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns6.total = ns6.total + d.pendapatan_operasional %}
+          <td class="text-end pt-2 pb-2">{{ d.pendapatan_operasional | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end pt-2 pb-2">{{ ns6.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr><td colspan="{{ periode_list|length + (2 if periode_list|length > 1 else 1) }}" class="fw-bold pt-3">PENDAPATAN DAN BEBAN NON OPERASIONAL</td></tr>
+        <tr><td class="ps-3 fw-semibold">Pendapatan Non Operasional</td>{% for d in data_per_periode %}<td></td>{% endfor %}{% if periode_list|length > 1 %}<td></td>{% endif %}</tr>
+        {% for label in non_op_pendapatan_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-4">{{ label }}</td>
+          {% for d in data_per_periode %}
+          {% set v = nilai(d.pendapatan_non_op_items, label) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        <tr class="fw-semibold">
+          <td class="ps-3">Jumlah Pendapatan Non Operasional</td>
+          {% set ns7 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns7.total = ns7.total + d.total_pendapatan_non_op %}
+          <td class="text-end">{{ d.total_pendapatan_non_op | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns7.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr><td class="ps-3 fw-semibold">Beban Non Operasional</td>{% for d in data_per_periode %}<td></td>{% endfor %}{% if periode_list|length > 1 %}<td></td>{% endif %}</tr>
+        {% for label in non_op_beban_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-4">{{ label }}</td>
+          {% for d in data_per_periode %}
+          {% set v = nilai(d.beban_non_op_items, label) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        <tr class="fw-semibold">
+          <td class="ps-3">Jumlah Beban Non Operasional</td>
+          {% set ns8 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns8.total = ns8.total + d.total_beban_non_op %}
+          <td class="text-end">{{ d.total_beban_non_op | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns8.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr class="fw-bold fs-5 border-top border-bottom border-2">
+          <td class="pt-2 pb-2">LABA BERSIH</td>
+          {% set ns9 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns9.total = ns9.total + d.laba_bersih %}
+          <td class="text-end pt-2 pb-2">{{ d.laba_bersih | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end pt-2 pb-2">{{ ns9.total | rupiah }}</td>{% endif %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
