@@ -131,12 +131,13 @@ KOLOM_TARGET_PRODUK = [
 ]
 
 KOLOM_TARGET_PENJUALAN = [
-    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode"]),
-    ("total_penjualan", "Total Penjualan", True, ["total penjualan", "penjualan", "omzet", "sales", "gross sales", "nilai penjualan"]),
-    ("diskon_penjualan", "Diskon Penjualan", False, ["diskon penjualan", "diskon produk", "voucher", "discount"]),
-    ("diskon_tambahan_penjual", "Diskon Tambahan Penjual", False, ["diskon tambahan", "seller discount", "diskon toko", "diskon tambahan penjual"]),
-    ("beban_pokok_penjualan", "Beban Pokok Penjualan (HPP)", False, ["hpp", "beban pokok", "modal", "cost of goods", "cogs", "harga pokok"]),
-    ("biaya_layanan", "Biaya Layanan", False, ["biaya layanan", "service fee", "biaya admin", "komisi", "ongkir", "biaya jasa"]),
+    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode", "waktu pesanan selesai"]),
+    ("total_penjualan", "Total Penjualan", True, ["total penjualan", "penjualan", "omzet", "sales", "gross sales", "nilai penjualan", "total pembayaran", "harga asli produk"]),
+    ("jumlah_pesanan", "Jumlah Pesanan Selesai", False, ["jumlah pesanan", "jumlah order", "qty pesanan", "jml pesanan", "total pesanan", "no. pesanan"]),
+    ("potongan_admin", "Potongan Admin", False, ["potongan admin", "biaya administrasi", "admin fee", "biaya layanan admin", "biaya transaksi"]),
+    ("potongan_voucher", "Potongan Voucher", False, ["potongan voucher", "diskon voucher", "voucher", "discount voucher"]),
+    ("gratis_ongkir_xtra", "Gratis Ongkir Xtra", False, ["gratis ongkir xtra", "program gratis ongkir", "ongkir xtra", "free ongkir xtra"]),
+    ("biaya_layanan_lainnya", "Biaya Layanan Lainnya", False, ["biaya layanan", "service fee", "komisi", "biaya jasa", "biaya lainnya"]),
 ]
 
 
@@ -1616,25 +1617,25 @@ def create_app():
             PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
         ).all():
             agg = penjualan_by_mp.setdefault(r.marketplace, {
-                "total_penjualan": 0, "diskon_penjualan": 0, "diskon_tambahan_penjual": 0,
-                "beban_pokok_penjualan": 0, "biaya_layanan": 0,
+                "total_penjualan": 0, "potongan_admin": 0, "potongan_voucher": 0,
+                "gratis_ongkir_xtra": 0, "biaya_layanan_lainnya": 0,
             })
             agg["total_penjualan"] += r.total_penjualan or 0
-            agg["diskon_penjualan"] += r.diskon_penjualan or 0
-            agg["diskon_tambahan_penjual"] += r.diskon_tambahan_penjual or 0
-            agg["beban_pokok_penjualan"] += r.beban_pokok_penjualan or 0
-            agg["biaya_layanan"] += r.biaya_layanan or 0
+            agg["potongan_admin"] += r.potongan_admin or 0
+            agg["potongan_voucher"] += r.potongan_voucher or 0
+            agg["gratis_ongkir_xtra"] += r.gratis_ongkir_xtra or 0
+            agg["biaya_layanan_lainnya"] += r.biaya_layanan_lainnya or 0
         for mp, agg in penjualan_by_mp.items():
             if agg["total_penjualan"]:
                 pendapatan_items.append((f"Penjualan {mp}", agg["total_penjualan"]))
-            if agg["diskon_penjualan"]:
-                pendapatan_items.append((f"Diskon Penjualan {mp}", -agg["diskon_penjualan"]))
-            if agg["diskon_tambahan_penjual"]:
-                pendapatan_items.append((f"Diskon Tambahan Penjual {mp}", -agg["diskon_tambahan_penjual"]))
-            if agg["beban_pokok_penjualan"]:
-                hpp_items.append((f"Beban Pokok Penjualan {mp}", agg["beban_pokok_penjualan"]))
-            if agg["biaya_layanan"]:
-                hpp_items.append((f"Biaya Layanan {mp}", agg["biaya_layanan"]))
+            if agg["potongan_admin"]:
+                pendapatan_items.append((f"Potongan Admin {mp}", -agg["potongan_admin"]))
+            if agg["potongan_voucher"]:
+                pendapatan_items.append((f"Potongan Voucher {mp}", -agg["potongan_voucher"]))
+            if agg["gratis_ongkir_xtra"]:
+                pendapatan_items.append((f"Gratis Ongkir Xtra {mp}", -agg["gratis_ongkir_xtra"]))
+            if agg["biaya_layanan_lainnya"]:
+                pendapatan_items.append((f"Biaya Layanan Lainnya {mp}", -agg["biaya_layanan_lainnya"]))
 
         total_pendapatan = sum(v for _, v in pendapatan_items)
         total_hpp = sum(v for _, v in hpp_items)
@@ -1831,14 +1832,20 @@ def create_app():
 
             if tanggal not in agregat:
                 agregat[tanggal] = {
-                    "total_penjualan": 0, "diskon_penjualan": 0, "diskon_tambahan_penjual": 0,
-                    "beban_pokok_penjualan": 0, "biaya_layanan": 0,
+                    "jumlah_pesanan": 0, "total_penjualan": 0, "potongan_admin": 0,
+                    "potongan_voucher": 0, "gratis_ongkir_xtra": 0, "biaya_layanan_lainnya": 0,
                 }
-            for k in ("total_penjualan", "diskon_penjualan", "diskon_tambahan_penjual",
-                      "beban_pokok_penjualan", "biaya_layanan"):
+            for k in ("total_penjualan", "potongan_admin", "potongan_voucher",
+                      "gratis_ongkir_xtra", "biaya_layanan_lainnya"):
                 nilai_mentah = ambil(k)
                 if nilai_mentah is not None:
                     agregat[tanggal][k] += parse_angka_iklan(nilai_mentah)
+
+            nilai_pesanan = ambil("jumlah_pesanan")
+            if nilai_pesanan is not None:
+                agregat[tanggal]["jumlah_pesanan"] += parse_angka_iklan(nilai_pesanan)
+            else:
+                agregat[tanggal]["jumlah_pesanan"] += 1
 
         return agregat, dilewati, contoh_gagal_tanggal
 
@@ -1851,17 +1858,21 @@ def create_app():
 
         def totalkan(items):
             return {
+                "jumlah_pesanan": sum(d.jumlah_pesanan or 0 for d in items),
                 "total_penjualan": sum(d.total_penjualan or 0 for d in items),
-                "diskon_penjualan": sum(d.diskon_penjualan or 0 for d in items),
-                "diskon_tambahan_penjual": sum(d.diskon_tambahan_penjual or 0 for d in items),
-                "beban_pokok_penjualan": sum(d.beban_pokok_penjualan or 0 for d in items),
-                "biaya_layanan": sum(d.biaya_layanan or 0 for d in items),
+                "potongan_admin": sum(d.potongan_admin or 0 for d in items),
+                "potongan_voucher": sum(d.potongan_voucher or 0 for d in items),
+                "gratis_ongkir_xtra": sum(d.gratis_ongkir_xtra or 0 for d in items),
+                "biaya_layanan_lainnya": sum(d.biaya_layanan_lainnya or 0 for d in items),
             }
 
         def lengkapi(t):
-            pendapatan_bersih = t["total_penjualan"] - t["diskon_penjualan"] - t["diskon_tambahan_penjual"]
-            laba_kotor = pendapatan_bersih - t["beban_pokok_penjualan"] - t["biaya_layanan"]
-            return {**t, "pendapatan_bersih": pendapatan_bersih, "laba_kotor": laba_kotor}
+            total_potongan = (
+                t["potongan_admin"] + t["potongan_voucher"]
+                + t["gratis_ongkir_xtra"] + t["biaya_layanan_lainnya"]
+            )
+            pendapatan_bersih = t["total_penjualan"] - total_potongan
+            return {**t, "total_potongan": total_potongan, "pendapatan_bersih": pendapatan_bersih}
 
         total = lengkapi(totalkan(semua_data))
         breakdown = []
@@ -1882,7 +1893,7 @@ def create_app():
         total, breakdown, semua_data = hitung_ringkasan_penjualan(bulan, tahun)
         labarugi = hitung_labarugi_periode(bulan, tahun)
 
-        laba_bersih_operasional = total["laba_kotor"] - labarugi["total_beban_operasional"]
+        laba_bersih_operasional = total["pendapatan_bersih"] - labarugi["total_beban_operasional"]
 
         return render_template(
             "pendapatan/penjualan_dashboard.html",
@@ -1988,11 +1999,12 @@ def create_app():
             if not existing:
                 existing = PenjualanMarketplace(marketplace=marketplace, tanggal=tanggal)
                 db.session.add(existing)
+            existing.jumlah_pesanan = round(nilai["jumlah_pesanan"])
             existing.total_penjualan = round(nilai["total_penjualan"])
-            existing.diskon_penjualan = round(nilai["diskon_penjualan"])
-            existing.diskon_tambahan_penjual = round(nilai["diskon_tambahan_penjual"])
-            existing.beban_pokok_penjualan = round(nilai["beban_pokok_penjualan"])
-            existing.biaya_layanan = round(nilai["biaya_layanan"])
+            existing.potongan_admin = round(nilai["potongan_admin"])
+            existing.potongan_voucher = round(nilai["potongan_voucher"])
+            existing.gratis_ongkir_xtra = round(nilai["gratis_ongkir_xtra"])
+            existing.biaya_layanan_lainnya = round(nilai["biaya_layanan_lainnya"])
             existing.sumber_file = sumber_file
             existing.dibuat_pada = now_wib()
         db.session.commit()
@@ -2026,11 +2038,12 @@ def create_app():
         if not existing:
             existing = PenjualanMarketplace(marketplace=marketplace, tanggal=tanggal)
             db.session.add(existing)
+        existing.jumlah_pesanan = round(parse_angka_iklan(request.form.get("jumlah_pesanan", "0")))
         existing.total_penjualan = round(parse_angka_iklan(request.form.get("total_penjualan", "0")))
-        existing.diskon_penjualan = round(parse_angka_iklan(request.form.get("diskon_penjualan", "0")))
-        existing.diskon_tambahan_penjual = round(parse_angka_iklan(request.form.get("diskon_tambahan_penjual", "0")))
-        existing.beban_pokok_penjualan = round(parse_angka_iklan(request.form.get("beban_pokok_penjualan", "0")))
-        existing.biaya_layanan = round(parse_angka_iklan(request.form.get("biaya_layanan", "0")))
+        existing.potongan_admin = round(parse_angka_iklan(request.form.get("potongan_admin", "0")))
+        existing.potongan_voucher = round(parse_angka_iklan(request.form.get("potongan_voucher", "0")))
+        existing.gratis_ongkir_xtra = round(parse_angka_iklan(request.form.get("gratis_ongkir_xtra", "0")))
+        existing.biaya_layanan_lainnya = round(parse_angka_iklan(request.form.get("biaya_layanan_lainnya", "0")))
         existing.sumber_file = "Input manual"
         existing.dibuat_pada = now_wib()
         db.session.commit()
