@@ -244,10 +244,7 @@ class PenjualanMarketplace(db.Model):
     tanggal = db.Column(db.Date, nullable=False)
     jumlah_pesanan = db.Column(db.Integer, default=0)
     total_penjualan = db.Column(db.Integer, default=0)
-    potongan_admin = db.Column(db.Integer, default=0)
-    potongan_voucher = db.Column(db.Integer, default=0)
-    gratis_ongkir_xtra = db.Column(db.Integer, default=0)
-    biaya_layanan_lainnya = db.Column(db.Integer, default=0)
+    total_diskon = db.Column(db.Integer, default=0)
     sumber_file = db.Column(db.String(256))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 

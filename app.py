@@ -131,13 +131,10 @@ KOLOM_TARGET_PRODUK = [
 ]
 
 KOLOM_TARGET_PENJUALAN = [
-    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode", "waktu pesanan selesai"]),
-    ("total_penjualan", "Total Penjualan", True, ["total penjualan", "penjualan", "omzet", "sales", "gross sales", "nilai penjualan", "total pembayaran", "harga asli produk"]),
-    ("jumlah_pesanan", "Jumlah Pesanan Selesai", False, ["jumlah pesanan", "jumlah order", "qty pesanan", "jml pesanan", "total pesanan", "no. pesanan"]),
-    ("potongan_admin", "Potongan Admin", False, ["potongan admin", "biaya administrasi", "admin fee", "biaya layanan admin", "biaya transaksi"]),
-    ("potongan_voucher", "Potongan Voucher", False, ["potongan voucher", "diskon voucher", "voucher", "discount voucher"]),
-    ("gratis_ongkir_xtra", "Gratis Ongkir Xtra", False, ["gratis ongkir xtra", "program gratis ongkir", "ongkir xtra", "free ongkir xtra"]),
-    ("biaya_layanan_lainnya", "Biaya Layanan Lainnya", False, ["biaya layanan", "service fee", "komisi", "biaya jasa", "biaya lainnya"]),
+    ("tanggal", "Tanggal (Waktu Pesanan Selesai)", True, ["waktu pesanan selesai", "tanggal", "date", "tgl", "periode"]),
+    ("no_pesanan", "No. Pesanan", False, ["no. pesanan", "no pesanan", "nomor pesanan", "order id", "id pesanan"]),
+    ("total_penjualan", "Total Penjualan (Total Pembayaran)", True, ["total pembayaran", "total penjualan", "penjualan", "omzet", "sales"]),
+    ("total_diskon", "Total Diskon", False, ["total diskon"]),
 ]
 
 
@@ -1616,26 +1613,14 @@ def create_app():
         for r in PenjualanMarketplace.query.filter(
             PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
         ).all():
-            agg = penjualan_by_mp.setdefault(r.marketplace, {
-                "total_penjualan": 0, "potongan_admin": 0, "potongan_voucher": 0,
-                "gratis_ongkir_xtra": 0, "biaya_layanan_lainnya": 0,
-            })
+            agg = penjualan_by_mp.setdefault(r.marketplace, {"total_penjualan": 0, "total_diskon": 0})
             agg["total_penjualan"] += r.total_penjualan or 0
-            agg["potongan_admin"] += r.potongan_admin or 0
-            agg["potongan_voucher"] += r.potongan_voucher or 0
-            agg["gratis_ongkir_xtra"] += r.gratis_ongkir_xtra or 0
-            agg["biaya_layanan_lainnya"] += r.biaya_layanan_lainnya or 0
+            agg["total_diskon"] += r.total_diskon or 0
         for mp, agg in penjualan_by_mp.items():
             if agg["total_penjualan"]:
                 pendapatan_items.append((f"Penjualan {mp}", agg["total_penjualan"]))
-            if agg["potongan_admin"]:
-                pendapatan_items.append((f"Potongan Admin {mp}", -agg["potongan_admin"]))
-            if agg["potongan_voucher"]:
-                pendapatan_items.append((f"Potongan Voucher {mp}", -agg["potongan_voucher"]))
-            if agg["gratis_ongkir_xtra"]:
-                pendapatan_items.append((f"Gratis Ongkir Xtra {mp}", -agg["gratis_ongkir_xtra"]))
-            if agg["biaya_layanan_lainnya"]:
-                pendapatan_items.append((f"Biaya Layanan Lainnya {mp}", -agg["biaya_layanan_lainnya"]))
+            if agg["total_diskon"]:
+                pendapatan_items.append((f"Total Diskon {mp}", -agg["total_diskon"]))
 
         total_pendapatan = sum(v for _, v in pendapatan_items)
         total_hpp = sum(v for _, v in hpp_items)
@@ -1810,10 +1795,16 @@ def create_app():
 
     # ---------- PENDAPATAN: PENJUALAN PER MARKETPLACE ----------
     def proses_baris_penjualan(rows, mapping):
-        agregat = {}
+        # File laporan marketplace umumnya 1 baris = 1 SKU/produk, bukan 1 pesanan —
+        # order yang berisi beberapa produk akan muncul di beberapa baris dengan
+        # No. Pesanan yang sama dan Total Pembayaran/Total Diskon yang berulang.
+        # Maka nilai per-pesanan hanya diambil sekali (dedup) berdasarkan No. Pesanan
+        # supaya tidak terhitung dobel.
+        pakai_no_pesanan = mapping.get("no_pesanan") is not None
+        order_map = {}
         dilewati = 0
         contoh_gagal_tanggal = []
-        for row in rows:
+        for i, row in enumerate(rows):
             def ambil(key):
                 idx = mapping.get(key)
                 if idx is None or idx >= len(row):
@@ -1830,22 +1821,27 @@ def create_app():
                         contoh_gagal_tanggal.append(nilai_str)
                 continue
 
-            if tanggal not in agregat:
-                agregat[tanggal] = {
-                    "jumlah_pesanan": 0, "total_penjualan": 0, "potongan_admin": 0,
-                    "potongan_voucher": 0, "gratis_ongkir_xtra": 0, "biaya_layanan_lainnya": 0,
-                }
-            for k in ("total_penjualan", "potongan_admin", "potongan_voucher",
-                      "gratis_ongkir_xtra", "biaya_layanan_lainnya"):
-                nilai_mentah = ambil(k)
-                if nilai_mentah is not None:
-                    agregat[tanggal][k] += parse_angka_iklan(nilai_mentah)
+            total_penjualan_raw = ambil("total_penjualan")
+            total_diskon_raw = ambil("total_diskon")
+            entri = {
+                "tanggal": tanggal,
+                "total_penjualan": parse_angka_iklan(total_penjualan_raw) if total_penjualan_raw is not None else 0,
+                "total_diskon": parse_angka_iklan(total_diskon_raw) if total_diskon_raw is not None else 0,
+            }
 
-            nilai_pesanan = ambil("jumlah_pesanan")
-            if nilai_pesanan is not None:
-                agregat[tanggal]["jumlah_pesanan"] += parse_angka_iklan(nilai_pesanan)
-            else:
-                agregat[tanggal]["jumlah_pesanan"] += 1
+            no_pesanan = str(ambil("no_pesanan") or "").strip() if pakai_no_pesanan else ""
+            kunci = no_pesanan if no_pesanan else f"__baris_{i}"
+            if kunci not in order_map:
+                order_map[kunci] = entri
+
+        agregat = {}
+        for order in order_map.values():
+            t = order["tanggal"]
+            if t not in agregat:
+                agregat[t] = {"jumlah_pesanan": 0, "total_penjualan": 0, "total_diskon": 0}
+            agregat[t]["jumlah_pesanan"] += 1
+            agregat[t]["total_penjualan"] += order["total_penjualan"]
+            agregat[t]["total_diskon"] += order["total_diskon"]
 
         return agregat, dilewati, contoh_gagal_tanggal
 
@@ -1860,19 +1856,12 @@ def create_app():
             return {
                 "jumlah_pesanan": sum(d.jumlah_pesanan or 0 for d in items),
                 "total_penjualan": sum(d.total_penjualan or 0 for d in items),
-                "potongan_admin": sum(d.potongan_admin or 0 for d in items),
-                "potongan_voucher": sum(d.potongan_voucher or 0 for d in items),
-                "gratis_ongkir_xtra": sum(d.gratis_ongkir_xtra or 0 for d in items),
-                "biaya_layanan_lainnya": sum(d.biaya_layanan_lainnya or 0 for d in items),
+                "total_diskon": sum(d.total_diskon or 0 for d in items),
             }
 
         def lengkapi(t):
-            total_potongan = (
-                t["potongan_admin"] + t["potongan_voucher"]
-                + t["gratis_ongkir_xtra"] + t["biaya_layanan_lainnya"]
-            )
-            pendapatan_bersih = t["total_penjualan"] - total_potongan
-            return {**t, "total_potongan": total_potongan, "pendapatan_bersih": pendapatan_bersih}
+            pendapatan_bersih = t["total_penjualan"] - t["total_diskon"]
+            return {**t, "pendapatan_bersih": pendapatan_bersih}
 
         total = lengkapi(totalkan(semua_data))
         breakdown = []
@@ -2001,10 +1990,7 @@ def create_app():
                 db.session.add(existing)
             existing.jumlah_pesanan = round(nilai["jumlah_pesanan"])
             existing.total_penjualan = round(nilai["total_penjualan"])
-            existing.potongan_admin = round(nilai["potongan_admin"])
-            existing.potongan_voucher = round(nilai["potongan_voucher"])
-            existing.gratis_ongkir_xtra = round(nilai["gratis_ongkir_xtra"])
-            existing.biaya_layanan_lainnya = round(nilai["biaya_layanan_lainnya"])
+            existing.total_diskon = round(nilai["total_diskon"])
             existing.sumber_file = sumber_file
             existing.dibuat_pada = now_wib()
         db.session.commit()
@@ -2040,10 +2026,7 @@ def create_app():
             db.session.add(existing)
         existing.jumlah_pesanan = round(parse_angka_iklan(request.form.get("jumlah_pesanan", "0")))
         existing.total_penjualan = round(parse_angka_iklan(request.form.get("total_penjualan", "0")))
-        existing.potongan_admin = round(parse_angka_iklan(request.form.get("potongan_admin", "0")))
-        existing.potongan_voucher = round(parse_angka_iklan(request.form.get("potongan_voucher", "0")))
-        existing.gratis_ongkir_xtra = round(parse_angka_iklan(request.form.get("gratis_ongkir_xtra", "0")))
-        existing.biaya_layanan_lainnya = round(parse_angka_iklan(request.form.get("biaya_layanan_lainnya", "0")))
+        existing.total_diskon = round(parse_angka_iklan(request.form.get("total_diskon", "0")))
         existing.sumber_file = "Input manual"
         existing.dibuat_pada = now_wib()
         db.session.commit()

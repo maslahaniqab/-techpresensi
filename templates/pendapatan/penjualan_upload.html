@@ -8,11 +8,12 @@
 
 <div class="card p-4" style="max-width: 640px;">
   <p class="text-muted small">
-    Export laporan <strong>Pesanan Selesai</strong> (income report) dari dashboard marketplace masing-masing
-    dalam format <strong>CSV</strong> atau <strong>XLSX</strong>, lalu upload di sini. Sistem akan
-    menjumlahkan Total Penjualan dan potongan-potongan (Admin, Voucher, Gratis Ongkir Xtra, Layanan
-    Lainnya) per hari, lalu menghitung Pendapatan Bersih setelah semua potongan itu. Nama kolom di file
-    boleh berbeda-beda &mdash; Anda akan diminta mencocokkan kolom pada langkah berikutnya.
+    Export laporan <strong>Pesanan Selesai</strong> dari dashboard marketplace masing-masing dalam format
+    <strong>CSV</strong> atau <strong>XLSX</strong>, lalu upload di sini. Sistem akan menjumlahkan Total
+    Penjualan (Total Pembayaran) dan Total Diskon per hari &mdash; jika file memiliki kolom
+    <strong>No. Pesanan</strong>, baris dengan nomor pesanan yang sama (multi-produk dalam 1 pesanan) akan
+    otomatis digabung agar tidak terhitung dobel. Nama kolom di file boleh berbeda-beda &mdash; Anda akan
+    diminta mencocokkan kolom pada langkah berikutnya.
   </p>
   <form method="post" enctype="multipart/form-data">
     <div class="mb-3">

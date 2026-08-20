@@ -45,38 +45,14 @@
   </div>
   <div class="col-6 col-md-3">
     <div class="card p-3 h-100">
-      <div class="text-muted small">Total Potongan Marketplace</div>
-      <div class="fs-5 fw-bold text-danger">-{{ total.total_potongan | rupiah }}</div>
+      <div class="text-muted small">Total Diskon</div>
+      <div class="fs-5 fw-bold text-danger">-{{ total.total_diskon | rupiah }}</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <div class="card p-3 h-100">
       <div class="text-muted small">Pendapatan Bersih</div>
       <div class="fs-5 fw-bold text-primary">{{ total.pendapatan_bersih | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card p-3 h-100">
-      <div class="text-muted small">Potongan Admin</div>
-      <div class="fs-5 fw-bold text-danger">-{{ total.potongan_admin | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card p-3 h-100">
-      <div class="text-muted small">Potongan Voucher</div>
-      <div class="fs-5 fw-bold text-danger">-{{ total.potongan_voucher | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card p-3 h-100">
-      <div class="text-muted small">Gratis Ongkir Xtra</div>
-      <div class="fs-5 fw-bold text-danger">-{{ total.gratis_ongkir_xtra | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card p-3 h-100">
-      <div class="text-muted small">Biaya Layanan Lainnya</div>
-      <div class="fs-5 fw-bold text-danger">-{{ total.biaya_layanan_lainnya | rupiah }}</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
@@ -96,10 +72,7 @@
           <th>Marketplace</th>
           <th class="text-end">Jumlah Pesanan</th>
           <th class="text-end">Total Penjualan</th>
-          <th class="text-end">Potongan Admin</th>
-          <th class="text-end">Potongan Voucher</th>
-          <th class="text-end">Gratis Ongkir Xtra</th>
-          <th class="text-end">Layanan Lainnya</th>
+          <th class="text-end">Total Diskon</th>
           <th class="text-end">Pendapatan Bersih</th>
         </tr>
       </thead>
@@ -109,14 +82,11 @@
           <td>{{ b.marketplace }}</td>
           <td class="text-end">{{ b.jumlah_pesanan }}</td>
           <td class="text-end">{{ b.total_penjualan | rupiah }}</td>
-          <td class="text-end">-{{ b.potongan_admin | rupiah }}</td>
-          <td class="text-end">-{{ b.potongan_voucher | rupiah }}</td>
-          <td class="text-end">-{{ b.gratis_ongkir_xtra | rupiah }}</td>
-          <td class="text-end">-{{ b.biaya_layanan_lainnya | rupiah }}</td>
+          <td class="text-end">-{{ b.total_diskon | rupiah }}</td>
           <td class="text-end fw-bold">{{ b.pendapatan_bersih | rupiah }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-4">Belum ada data penjualan untuk periode ini.</td></tr>
+        <tr><td colspan="5" class="text-center text-muted py-4">Belum ada data penjualan untuk periode ini.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -160,7 +130,7 @@
   <h6 class="mb-3">Input Manual (per hari, per marketplace)</h6>
   <p class="text-muted small">Isi rekap total dari laporan pesanan selesai marketplace pada hari tersebut.</p>
   <form method="post" action="{{ url_for('pendapatan_penjualan_manual') }}" class="row g-2">
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label">Marketplace</label>
       <select name="marketplace" class="form-select" required>
         <option value="" disabled selected>Pilih...</option>
@@ -169,11 +139,11 @@
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-2">
+    <div class="col-md-3">
       <label class="form-label">Tanggal</label>
       <input type="date" name="tanggal" class="form-control" value="{{ tanggal_default }}" required>
     </div>
-    <div class="col-md-1">
+    <div class="col-md-2">
       <label class="form-label">Jumlah Pesanan</label>
       <input type="number" name="jumlah_pesanan" class="form-control" placeholder="0">
     </div>
@@ -182,23 +152,11 @@
       <input type="number" name="total_penjualan" class="form-control" placeholder="0">
     </div>
     <div class="col-md-2">
-      <label class="form-label">Potongan Admin</label>
-      <input type="number" name="potongan_admin" class="form-control" placeholder="0">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Potongan Voucher</label>
-      <input type="number" name="potongan_voucher" class="form-control" placeholder="0">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Gratis Ongkir Xtra</label>
-      <input type="number" name="gratis_ongkir_xtra" class="form-control" placeholder="0">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Biaya Layanan Lainnya</label>
-      <input type="number" name="biaya_layanan_lainnya" class="form-control" placeholder="0">
+      <label class="form-label">Total Diskon</label>
+      <input type="number" name="total_diskon" class="form-control" placeholder="0">
     </div>
     <div class="col-12">
-      <div class="form-text mb-2">Isi angka positif saja — semua potongan otomatis dihitung sebagai pengurang Total Penjualan.</div>
+      <div class="form-text mb-2">Isi angka positif saja — Total Diskon otomatis dihitung sebagai pengurang Total Penjualan.</div>
       <button type="submit" class="btn btn-primary">Simpan</button>
     </div>
   </form>
@@ -214,7 +172,7 @@
           <th>Marketplace</th>
           <th class="text-end">Pesanan</th>
           <th class="text-end">Total Penjualan</th>
-          <th class="text-end">Total Potongan</th>
+          <th class="text-end">Total Diskon</th>
           <th class="text-end">Pendapatan Bersih</th>
           <th>Sumber</th>
           <th class="text-end">Aksi</th>
@@ -222,14 +180,13 @@
       </thead>
       <tbody>
         {% for d in data_list %}
-        {% set total_potongan_baris = (d.potongan_admin or 0) + (d.potongan_voucher or 0) + (d.gratis_ongkir_xtra or 0) + (d.biaya_layanan_lainnya or 0) %}
         <tr>
           <td>{{ d.tanggal.strftime('%d-%m-%Y') }}</td>
           <td>{{ d.marketplace }}</td>
           <td class="text-end">{{ d.jumlah_pesanan }}</td>
           <td class="text-end">{{ d.total_penjualan | rupiah }}</td>
-          <td class="text-end">-{{ total_potongan_baris | rupiah }}</td>
-          <td class="text-end fw-bold">{{ ((d.total_penjualan or 0) - total_potongan_baris) | rupiah }}</td>
+          <td class="text-end">-{{ d.total_diskon | rupiah }}</td>
+          <td class="text-end fw-bold">{{ ((d.total_penjualan or 0) - (d.total_diskon or 0)) | rupiah }}</td>
           <td class="small text-muted">{{ d.sumber_file or '-' }}</td>
           <td class="text-end">
             <form method="post" action="{{ url_for('pendapatan_penjualan_hapus', pid=d.id) }}" class="d-inline"
