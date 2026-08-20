@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from urllib.parse import quote
 
 import openpyxl
+from dateutil import parser as date_parser
 
 WIB = ZoneInfo("Asia/Jakarta")
 
@@ -159,6 +160,9 @@ def parse_angka_iklan(value):
         return 0
 
 
+SINGKATAN_BULAN_KHUSUS = {8: "ags"}  # Agustus umum disingkat "Ags", bukan "Agu"
+
+
 def parse_tanggal_iklan(value):
     if value is None:
         return None
@@ -166,36 +170,50 @@ def parse_tanggal_iklan(value):
         return value.date()
     if isinstance(value, date):
         return value
-    s = str(value).strip()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # nilai tanggal Excel (serial number sejak 1899-12-30)
+        try:
+            return date(1899, 12, 30) + timedelta(days=int(value))
+        except (OverflowError, ValueError):
+            return None
+
+    s = str(value).strip().replace("\xa0", " ")
     if not s:
         return None
-    if "T" in s and len(s) >= 10:
+    if "T" in s and len(s) >= 10 and s[:4].isdigit():
         s = s.split("T")[0]
 
-    parts = s.split()
-    if len(parts) == 3:
+    parts_nama_bulan = s.replace("-", " ").replace(",", " ").split()
+    if len(parts_nama_bulan) == 3 and parts_nama_bulan[0].isdigit() and parts_nama_bulan[2].isdigit():
         try:
-            hari = int(parts[0])
-            tahun = int(parts[2])
-            bulan_txt = parts[1].strip(",").lower()
+            hari = int(parts_nama_bulan[0])
+            tahun = int(parts_nama_bulan[2])
+            if tahun < 100:
+                tahun += 2000
+            bulan_txt = parts_nama_bulan[1].strip(".").lower()
             for idx, nama in enumerate(BULAN_NAMA):
                 if idx == 0:
                     continue
-                if bulan_txt == nama.lower() or bulan_txt == nama.lower()[:3]:
+                singkatan = SINGKATAN_BULAN_KHUSUS.get(idx, nama.lower()[:3])
+                if bulan_txt in (nama.lower(), nama.lower()[:3], singkatan):
                     return date(tahun, idx, hari)
         except (ValueError, IndexError):
             pass
 
     formats = [
         "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
-        "%m/%d/%Y", "%Y/%m/%d",
+        "%m/%d/%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y.%m.%d",
     ]
     for fmt in formats:
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
             continue
-    return None
+
+    try:
+        return date_parser.parse(s, dayfirst=True, fuzzy=False).date()
+    except (ValueError, OverflowError, TypeError):
+        return None
 
 
 _SATUAN = [
@@ -1569,6 +1587,42 @@ def create_app():
             }, f)
         return token, headers, rows_bersih, None
 
+    def proses_baris_upload(rows, mapping, butuh_produk):
+        agregat = {}
+        dilewati = 0
+        contoh_gagal_tanggal = []
+        for row in rows:
+            def ambil(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(row):
+                    return None
+                return row[idx]
+
+            nama_produk = None
+            if butuh_produk:
+                raw_produk = ambil("nama_produk")
+                nama_produk = str(raw_produk).strip() if raw_produk is not None else ""
+
+            tanggal_raw = ambil("tanggal")
+            tanggal = parse_tanggal_iklan(tanggal_raw)
+            if not tanggal or (butuh_produk and not nama_produk):
+                dilewati += 1
+                if not tanggal and tanggal_raw not in (None, ""):
+                    nilai_str = str(tanggal_raw).strip()
+                    if nilai_str and nilai_str not in contoh_gagal_tanggal and len(contoh_gagal_tanggal) < 5:
+                        contoh_gagal_tanggal.append(nilai_str)
+                continue
+
+            kunci = (nama_produk, tanggal) if butuh_produk else tanggal
+            if kunci not in agregat:
+                agregat[kunci] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0}
+            for k in ("biaya", "impresi", "klik", "pesanan", "omzet"):
+                nilai_mentah = ambil(k)
+                if nilai_mentah is not None:
+                    agregat[kunci][k] += parse_angka_iklan(nilai_mentah)
+
+        return agregat, dilewati, contoh_gagal_tanggal
+
     @app.route("/marketing/iklan/upload", methods=["GET", "POST"])
     @marketing_required
     def marketing_iklan_upload():
@@ -1626,26 +1680,28 @@ def create_app():
                 os.remove(path_tmp)
                 return redirect(url_for("marketing_iklan_upload"))
 
-        agregat = {}
-        dilewati = 0
-        for row in data_tmp["rows"]:
-            def ambil(key):
-                idx = mapping.get(key)
-                if idx is None or idx >= len(row):
-                    return None
-                return row[idx]
+        agregat, dilewati, contoh_gagal = proses_baris_upload(data_tmp["rows"], mapping, butuh_produk=False)
 
-            tanggal = parse_tanggal_iklan(ambil("tanggal"))
-            if not tanggal:
-                dilewati += 1
-                continue
-
-            if tanggal not in agregat:
-                agregat[tanggal] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0}
-            for key in ("biaya", "impresi", "klik", "pesanan", "omzet"):
-                nilai_mentah = ambil(key)
-                if nilai_mentah is not None:
-                    agregat[tanggal][key] += parse_angka_iklan(nilai_mentah)
+        if not agregat:
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+            if contoh_gagal:
+                contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
+                pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+            flash(pesan, "danger")
+            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_IKLAN}
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace=data_tmp["marketplace"],
+                headers=data_tmp["headers"],
+                preview_rows=data_tmp["rows"][:8],
+                kolom_target=KOLOM_TARGET_IKLAN,
+                tebakan=tebakan_ulang,
+                jumlah_baris=len(data_tmp["rows"]),
+                judul="Cocokkan Kolom",
+                konfirmasi_url=url_for("marketing_iklan_konfirmasi"),
+                upload_url=url_for("marketing_iklan_upload"),
+            )
 
         marketplace = data_tmp["marketplace"]
         sumber_file = data_tmp.get("sumber_file", "")
@@ -1664,15 +1720,14 @@ def create_app():
         db.session.commit()
         os.remove(path_tmp)
 
-        if agregat:
-            tgl_min = min(agregat.keys())
-            tgl_max = max(agregat.keys())
-            pesan = f"Berhasil impor {len(agregat)} hari data iklan {marketplace} ({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')})."
-            if dilewati:
-                pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
-            flash(pesan, "success")
-        else:
-            flash("Tidak ada baris data yang berhasil diproses (format tanggal tidak dikenali).", "danger")
+        tgl_min = min(agregat.keys())
+        tgl_max = max(agregat.keys())
+        pesan = f"Berhasil impor {len(agregat)} hari data iklan {marketplace} ({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')})."
+        if dilewati:
+            pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
+            if contoh_gagal:
+                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+        flash(pesan, "success")
 
         return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
 
@@ -1774,29 +1829,28 @@ def create_app():
                 os.remove(path_tmp)
                 return redirect(url_for("marketing_produk_upload"))
 
-        agregat = {}
-        dilewati = 0
-        for row in data_tmp["rows"]:
-            def ambil(key):
-                idx = mapping.get(key)
-                if idx is None or idx >= len(row):
-                    return None
-                return row[idx]
+        agregat, dilewati, contoh_gagal = proses_baris_upload(data_tmp["rows"], mapping, butuh_produk=True)
 
-            nama_produk_raw = ambil("nama_produk")
-            nama_produk = str(nama_produk_raw).strip() if nama_produk_raw is not None else ""
-            tanggal = parse_tanggal_iklan(ambil("tanggal"))
-            if not nama_produk or not tanggal:
-                dilewati += 1
-                continue
-
-            kunci = (nama_produk, tanggal)
-            if kunci not in agregat:
-                agregat[kunci] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0}
-            for k in ("biaya", "impresi", "klik", "pesanan", "omzet"):
-                nilai_mentah = ambil(k)
-                if nilai_mentah is not None:
-                    agregat[kunci][k] += parse_angka_iklan(nilai_mentah)
+        if not agregat:
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Nama Produk' kosong, atau kolom 'Tanggal' yang dipilih bukan tanggal yang valid."
+            if contoh_gagal:
+                contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
+                pesan += f" Contoh nilai di kolom Tanggal: {contoh}. Coba pilih kolom yang lain di bawah."
+            flash(pesan, "danger")
+            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PRODUK}
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace=data_tmp["marketplace"],
+                headers=data_tmp["headers"],
+                preview_rows=data_tmp["rows"][:8],
+                kolom_target=KOLOM_TARGET_PRODUK,
+                tebakan=tebakan_ulang,
+                jumlah_baris=len(data_tmp["rows"]),
+                judul="Cocokkan Kolom — Laporan Per Produk",
+                konfirmasi_url=url_for("marketing_produk_konfirmasi"),
+                upload_url=url_for("marketing_produk_upload"),
+            )
 
         marketplace = data_tmp["marketplace"]
         sumber_file = data_tmp.get("sumber_file", "")
@@ -1817,14 +1871,13 @@ def create_app():
         db.session.commit()
         os.remove(path_tmp)
 
-        if agregat:
-            jumlah_produk = len(set(k[0] for k in agregat.keys()))
-            pesan = f"Berhasil impor {len(agregat)} baris data ({jumlah_produk} produk) untuk {marketplace}."
-            if dilewati:
-                pesan += f" {dilewati} baris dilewati karena nama produk/tanggal tidak terbaca."
-            flash(pesan, "success")
-        else:
-            flash("Tidak ada baris data yang berhasil diproses.", "danger")
+        jumlah_produk = len(set(k[0] for k in agregat.keys()))
+        pesan = f"Berhasil impor {len(agregat)} baris data ({jumlah_produk} produk) untuk {marketplace}."
+        if dilewati:
+            pesan += f" {dilewati} baris dilewati karena nama produk/tanggal tidak terbaca."
+            if contoh_gagal:
+                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+        flash(pesan, "success")
 
         return redirect(url_for("marketing_produk_dashboard", marketplace=marketplace))
 
