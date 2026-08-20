@@ -98,6 +98,48 @@ def tebak_kolom(headers, target_list=None):
     return tebakan
 
 
+_KATA_KUNCI_HEADER = set()
+for _key, _label, _wajib, _kk in KOLOM_TARGET_IKLAN + KOLOM_TARGET_PRODUK:
+    _KATA_KUNCI_HEADER.update(_kk)
+
+
+def _parse_csv_delimiter_terbaik(text):
+    """Coba beberapa delimiter umum, pakai yang menghasilkan baris paling lebar
+    (laporan marketplace kadang pakai ';' bukan ',', dan Sniffer gampang salah tebak
+    kalau baris-baris awal file cuma metadata satu kolom)."""
+    kandidat = []
+    for delim in (",", ";", "\t"):
+        try:
+            reader = csv.reader(io.StringIO(text), delimiter=delim)
+            baris = [row for row in reader if any(str(c).strip() for c in row)]
+        except csv.Error:
+            continue
+        lebar_maks = max((len(r) for r in baris), default=0)
+        kandidat.append((lebar_maks, baris))
+    if not kandidat:
+        return []
+    kandidat.sort(key=lambda x: x[0], reverse=True)
+    return kandidat[0][1]
+
+
+def _cari_baris_header(semua):
+    """Sebagian laporan marketplace (mis. Shopee) diawali beberapa baris metadata
+    (judul laporan, nama toko, periode, dll) sebelum baris header kolom sebenarnya.
+    Cari baris paling mirip header: kolom terisi terbanyak + paling banyak cocok
+    kata kunci nama kolom yang kita kenal."""
+    skor_terbaik, idx_terbaik = -1, 0
+    for idx, row in enumerate(semua[:50]):
+        sel = [str(c).strip() for c in row]
+        non_kosong = sum(1 for c in sel if c)
+        if non_kosong < 2:
+            continue
+        cocok = sum(1 for c in sel if any(kk in c.lower() for kk in _KATA_KUNCI_HEADER))
+        skor = non_kosong + cocok * 5
+        if skor > skor_terbaik:
+            skor_terbaik, idx_terbaik = skor, idx
+    return idx_terbaik
+
+
 def baca_file_iklan(file_storage):
     filename = file_storage.filename or ""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -105,32 +147,30 @@ def baca_file_iklan(file_storage):
 
     if ext == "csv":
         text = raw.decode("utf-8-sig", errors="ignore")
-        sample = text[:2048]
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
-        except csv.Error:
-            dialect = csv.excel
-        reader = csv.reader(io.StringIO(text), dialect)
-        semua = [row for row in reader if any(str(cell).strip() for cell in row)]
+        semua = _parse_csv_delimiter_terbaik(text)
     elif ext in ("xlsx", "xlsm"):
         try:
             wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
         except Exception:
-            return None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
+            return None, None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
         ws = wb.active
         semua = []
         for row in ws.iter_rows(values_only=True):
             if any(cell not in (None, "") for cell in row):
                 semua.append(["" if c is None else c for c in row])
     else:
-        return None, None, "Format file tidak didukung. Gunakan file CSV atau XLSX (export laporan iklan dari marketplace)."
+        return None, None, None, "Format file tidak didukung. Gunakan file CSV atau XLSX (export laporan iklan dari marketplace)."
 
     if len(semua) < 2:
-        return None, None, "File kosong atau tidak ada baris data."
+        return None, None, None, "File kosong atau tidak ada baris data."
 
-    headers = [str(h).strip() for h in semua[0]]
-    rows = semua[1:]
-    return headers, rows, None
+    idx_header = _cari_baris_header(semua)
+    if len(semua) - idx_header < 2:
+        return None, None, None, "Tidak ditemukan baris data setelah baris header di file ini."
+
+    headers = [str(h).strip() for h in semua[idx_header]]
+    rows = semua[idx_header + 1:]
+    return headers, rows, idx_header, None
 
 
 def parse_angka_iklan(value):
@@ -1638,9 +1678,9 @@ def create_app():
         )
 
     def simpan_tmp_upload(prefix, marketplace, file):
-        headers, rows, error = baca_file_iklan(file)
+        headers, rows, idx_header, error = baca_file_iklan(file)
         if error:
-            return None, None, None, error
+            return None, None, None, None, error
         rows_bersih = []
         for row in rows:
             row_lengkap = list(row) + [""] * (len(headers) - len(row))
@@ -1658,7 +1698,7 @@ def create_app():
                 "rows": rows_bersih,
                 "sumber_file": secure_filename(file.filename),
             }, f)
-        return token, headers, rows_bersih, None
+        return token, headers, rows_bersih, idx_header, None
 
     def proses_baris_upload(rows, mapping, butuh_produk):
         agregat = {}
@@ -1710,7 +1750,7 @@ def create_app():
                 flash("Pilih file laporan iklan (CSV/XLSX) terlebih dahulu.", "danger")
                 return redirect(url_for("marketing_iklan_upload"))
 
-            token, headers, rows_bersih, error = simpan_tmp_upload("iklan", marketplace, file)
+            token, headers, rows_bersih, idx_header, error = simpan_tmp_upload("iklan", marketplace, file)
             if error:
                 flash(error, "danger")
                 return redirect(url_for("marketing_iklan_upload"))
@@ -1725,6 +1765,7 @@ def create_app():
                 kolom_target=KOLOM_TARGET_IKLAN,
                 tebakan=tebakan,
                 jumlah_baris=len(rows_bersih),
+                baris_dilewati_awal=idx_header,
                 judul="Cocokkan Kolom",
                 konfirmasi_url=url_for("marketing_iklan_konfirmasi"),
                 upload_url=url_for("marketing_iklan_upload"),
@@ -1859,7 +1900,7 @@ def create_app():
                 flash("Pilih file laporan iklan per produk (CSV/XLSX) terlebih dahulu.", "danger")
                 return redirect(url_for("marketing_produk_upload"))
 
-            token, headers, rows_bersih, error = simpan_tmp_upload("produk", marketplace, file)
+            token, headers, rows_bersih, idx_header, error = simpan_tmp_upload("produk", marketplace, file)
             if error:
                 flash(error, "danger")
                 return redirect(url_for("marketing_produk_upload"))
@@ -1874,6 +1915,7 @@ def create_app():
                 kolom_target=KOLOM_TARGET_PRODUK,
                 tebakan=tebakan,
                 jumlah_baris=len(rows_bersih),
+                baris_dilewati_awal=idx_header,
                 judul="Cocokkan Kolom — Laporan Per Produk",
                 konfirmasi_url=url_for("marketing_produk_konfirmasi"),
                 upload_url=url_for("marketing_produk_upload"),

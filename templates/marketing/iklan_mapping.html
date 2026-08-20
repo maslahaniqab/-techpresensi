@@ -10,6 +10,13 @@
   Ditemukan {{ jumlah_baris }} baris data dengan {{ headers|length }} kolom. Sistem sudah menebak
   kecocokan kolom di bawah &mdash; periksa dan sesuaikan bila perlu, lalu klik Impor Data.
 </p>
+{% if baris_dilewati_awal %}
+<div class="alert alert-info py-2 small">
+  {{ baris_dilewati_awal }} baris di awal file (kemungkinan judul laporan/info toko) terdeteksi sebagai
+  metadata dan dilewati otomatis. Baris header kolom yang dipakai adalah baris ke-{{ baris_dilewati_awal + 1 }} di file asli.
+  Kalau kolom di bawah ini terlihat salah/kosong, coba periksa ulang isi file-nya.
+</div>
+{% endif %}
 
 <form method="post" action="{{ konfirmasi_url }}">
   <input type="hidden" name="token" value="{{ token }}">
