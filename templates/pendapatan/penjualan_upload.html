@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Upload Laporan Penjualan{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3 class="mb-0">Upload Laporan Penjualan</h3>
+  <a href="{{ url_for('pendapatan_penjualan_dashboard') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Dashboard</a>
+</div>
+
+<div class="card p-4" style="max-width: 640px;">
+  <p class="text-muted small">
+    Export laporan penjualan (Total Penjualan, Diskon, Beban Pokok Penjualan, Biaya Layanan, dst) dari
+    dashboard marketplace masing-masing dalam format <strong>CSV</strong> atau <strong>XLSX</strong>, lalu
+    upload di sini. Nama kolom di file boleh berbeda-beda &mdash; Anda akan diminta mencocokkan kolom pada
+    langkah berikutnya.
+  </p>
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">Marketplace</label>
+      <select name="marketplace" class="form-select" required>
+        <option value="" disabled selected>Pilih marketplace...</option>
+        {% for mp in marketplace_list %}
+        <option value="{{ mp }}">{{ mp }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">File Laporan (CSV/XLSX)</label>
+      <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xlsm" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Lanjut &rarr; Cocokkan Kolom</button>
+  </form>
+</div>
+{% endblock %}

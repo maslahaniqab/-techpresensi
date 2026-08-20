@@ -238,6 +238,23 @@ class PengeluaranOperasional(db.Model):
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
 
+class PenjualanMarketplace(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    marketplace = db.Column(db.String(32), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    total_penjualan = db.Column(db.Integer, default=0)
+    diskon_penjualan = db.Column(db.Integer, default=0)
+    diskon_tambahan_penjual = db.Column(db.Integer, default=0)
+    beban_pokok_penjualan = db.Column(db.Integer, default=0)
+    biaya_layanan = db.Column(db.Integer, default=0)
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    __table_args__ = (
+        db.UniqueConstraint("marketplace", "tanggal", name="uq_penjualan_marketplace_tanggal"),
+    )
+
+
 class PengajuanLembur(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)

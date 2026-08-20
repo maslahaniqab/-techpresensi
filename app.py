@@ -41,7 +41,7 @@ from xhtml2pdf import pisa
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
-    PengeluaranOperasional, ItemLabaRugi,
+    PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace,
 )
 
 BULAN_NAMA = [
@@ -128,6 +128,15 @@ KOLOM_TARGET_PRODUK = [
     ("klik", "Klik", False, ["klik", "click", "jumlah klik"]),
     ("pesanan", "Pesanan/Konversi", False, ["pesanan", "konversi", "conversion", "order", "dibeli", "produk terjual", "checkout", "terjual"]),
     ("omzet", "Omzet Penjualan", False, ["omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales"]),
+]
+
+KOLOM_TARGET_PENJUALAN = [
+    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode"]),
+    ("total_penjualan", "Total Penjualan", True, ["total penjualan", "penjualan", "omzet", "sales", "gross sales", "nilai penjualan"]),
+    ("diskon_penjualan", "Diskon Penjualan", False, ["diskon penjualan", "diskon produk", "voucher", "discount"]),
+    ("diskon_tambahan_penjual", "Diskon Tambahan Penjual", False, ["diskon tambahan", "seller discount", "diskon toko", "diskon tambahan penjual"]),
+    ("beban_pokok_penjualan", "Beban Pokok Penjualan (HPP)", False, ["hpp", "beban pokok", "modal", "cost of goods", "cogs", "harga pokok"]),
+    ("biaya_layanan", "Biaya Layanan", False, ["biaya layanan", "service fee", "biaya admin", "komisi", "ongkir", "biaya jasa"]),
 ]
 
 
@@ -1602,6 +1611,31 @@ def create_app():
             .order_by(ItemLabaRugi.id).all()
         ]
 
+        penjualan_by_mp = {}
+        for r in PenjualanMarketplace.query.filter(
+            PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
+        ).all():
+            agg = penjualan_by_mp.setdefault(r.marketplace, {
+                "total_penjualan": 0, "diskon_penjualan": 0, "diskon_tambahan_penjual": 0,
+                "beban_pokok_penjualan": 0, "biaya_layanan": 0,
+            })
+            agg["total_penjualan"] += r.total_penjualan or 0
+            agg["diskon_penjualan"] += r.diskon_penjualan or 0
+            agg["diskon_tambahan_penjual"] += r.diskon_tambahan_penjual or 0
+            agg["beban_pokok_penjualan"] += r.beban_pokok_penjualan or 0
+            agg["biaya_layanan"] += r.biaya_layanan or 0
+        for mp, agg in penjualan_by_mp.items():
+            if agg["total_penjualan"]:
+                pendapatan_items.append((f"Penjualan {mp}", agg["total_penjualan"]))
+            if agg["diskon_penjualan"]:
+                pendapatan_items.append((f"Diskon Penjualan {mp}", -agg["diskon_penjualan"]))
+            if agg["diskon_tambahan_penjual"]:
+                pendapatan_items.append((f"Diskon Tambahan Penjual {mp}", -agg["diskon_tambahan_penjual"]))
+            if agg["beban_pokok_penjualan"]:
+                hpp_items.append((f"Beban Pokok Penjualan {mp}", agg["beban_pokok_penjualan"]))
+            if agg["biaya_layanan"]:
+                hpp_items.append((f"Biaya Layanan {mp}", agg["biaya_layanan"]))
+
         total_pendapatan = sum(v for _, v in pendapatan_items)
         total_hpp = sum(v for _, v in hpp_items)
         laba_kotor = total_pendapatan - total_hpp
@@ -1772,6 +1806,249 @@ def create_app():
         db.session.commit()
         flash("Item dihapus.", "info")
         return redirect(url_for("laba_rugi_input", bulan=bulan, tahun=tahun))
+
+    # ---------- PENDAPATAN: PENJUALAN PER MARKETPLACE ----------
+    def proses_baris_penjualan(rows, mapping):
+        agregat = {}
+        dilewati = 0
+        contoh_gagal_tanggal = []
+        for row in rows:
+            def ambil(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(row):
+                    return None
+                return row[idx]
+
+            tanggal_raw = ambil("tanggal")
+            tanggal = parse_tanggal_iklan(tanggal_raw)
+            if not tanggal:
+                dilewati += 1
+                if tanggal_raw not in (None, ""):
+                    nilai_str = str(tanggal_raw).strip()
+                    if nilai_str and nilai_str not in contoh_gagal_tanggal and len(contoh_gagal_tanggal) < 5:
+                        contoh_gagal_tanggal.append(nilai_str)
+                continue
+
+            if tanggal not in agregat:
+                agregat[tanggal] = {
+                    "total_penjualan": 0, "diskon_penjualan": 0, "diskon_tambahan_penjual": 0,
+                    "beban_pokok_penjualan": 0, "biaya_layanan": 0,
+                }
+            for k in ("total_penjualan", "diskon_penjualan", "diskon_tambahan_penjual",
+                      "beban_pokok_penjualan", "biaya_layanan"):
+                nilai_mentah = ambil(k)
+                if nilai_mentah is not None:
+                    agregat[tanggal][k] += parse_angka_iklan(nilai_mentah)
+
+        return agregat, dilewati, contoh_gagal_tanggal
+
+    def hitung_ringkasan_penjualan(bulan, tahun):
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+        semua_data = PenjualanMarketplace.query.filter(
+            PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
+        ).order_by(PenjualanMarketplace.tanggal).all()
+
+        def totalkan(items):
+            return {
+                "total_penjualan": sum(d.total_penjualan or 0 for d in items),
+                "diskon_penjualan": sum(d.diskon_penjualan or 0 for d in items),
+                "diskon_tambahan_penjual": sum(d.diskon_tambahan_penjual or 0 for d in items),
+                "beban_pokok_penjualan": sum(d.beban_pokok_penjualan or 0 for d in items),
+                "biaya_layanan": sum(d.biaya_layanan or 0 for d in items),
+            }
+
+        def lengkapi(t):
+            pendapatan_bersih = t["total_penjualan"] - t["diskon_penjualan"] - t["diskon_tambahan_penjual"]
+            laba_kotor = pendapatan_bersih - t["beban_pokok_penjualan"] - t["biaya_layanan"]
+            return {**t, "pendapatan_bersih": pendapatan_bersih, "laba_kotor": laba_kotor}
+
+        total = lengkapi(totalkan(semua_data))
+        breakdown = []
+        for mp in MARKETPLACE_LIST:
+            item_mp = [d for d in semua_data if d.marketplace == mp]
+            if not item_mp:
+                continue
+            breakdown.append({"marketplace": mp, **lengkapi(totalkan(item_mp))})
+
+        return total, breakdown, semua_data
+
+    @app.route("/pendapatan/penjualan")
+    @admin_required
+    def pendapatan_penjualan_dashboard():
+        bulan = int(request.args.get("bulan", today_wib().month))
+        tahun = int(request.args.get("tahun", today_wib().year))
+
+        total, breakdown, semua_data = hitung_ringkasan_penjualan(bulan, tahun)
+        labarugi = hitung_labarugi_periode(bulan, tahun)
+
+        laba_bersih_operasional = total["laba_kotor"] - labarugi["total_beban_operasional"]
+
+        return render_template(
+            "pendapatan/penjualan_dashboard.html",
+            marketplace_list=MARKETPLACE_LIST,
+            bulan=bulan,
+            tahun=tahun,
+            total=total,
+            breakdown=breakdown,
+            data_list=list(reversed(semua_data)),
+            iklan_by_mp=labarugi["iklan_by_mp"],
+            gaji_total=labarugi["gaji_total"],
+            opex_by_kategori=labarugi["opex_by_kategori"],
+            total_beban_operasional=labarugi["total_beban_operasional"],
+            laba_bersih_operasional=laba_bersih_operasional,
+            tanggal_default=today_wib().isoformat(),
+        )
+
+    @app.route("/pendapatan/penjualan/upload", methods=["GET", "POST"])
+    @admin_required
+    def pendapatan_penjualan_upload():
+        bersihkan_tmp_iklan_lama()
+        if request.method == "POST":
+            marketplace = request.form.get("marketplace", "")
+            file = request.files.get("file")
+            if marketplace not in MARKETPLACE_LIST:
+                flash("Pilih marketplace terlebih dahulu.", "danger")
+                return redirect(url_for("pendapatan_penjualan_upload"))
+            if not file or not file.filename:
+                flash("Pilih file laporan penjualan (CSV/XLSX) terlebih dahulu.", "danger")
+                return redirect(url_for("pendapatan_penjualan_upload"))
+
+            token, headers, rows_bersih, idx_header, error = simpan_tmp_upload("penjualan", marketplace, file)
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("pendapatan_penjualan_upload"))
+
+            tebakan = tebak_kolom(headers, KOLOM_TARGET_PENJUALAN)
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace=marketplace,
+                headers=headers,
+                preview_rows=rows_bersih[:8],
+                kolom_target=KOLOM_TARGET_PENJUALAN,
+                tebakan=tebakan,
+                jumlah_baris=len(rows_bersih),
+                baris_dilewati_awal=idx_header,
+                judul="Cocokkan Kolom — Laporan Penjualan",
+                konfirmasi_url=url_for("pendapatan_penjualan_konfirmasi"),
+                upload_url=url_for("pendapatan_penjualan_upload"),
+            )
+
+        return render_template("pendapatan/penjualan_upload.html", marketplace_list=MARKETPLACE_LIST)
+
+    @app.route("/pendapatan/penjualan/konfirmasi", methods=["POST"])
+    @admin_required
+    def pendapatan_penjualan_konfirmasi():
+        token = request.form.get("token", "")
+        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"penjualan_{token}.json")
+        if not os.path.isfile(path_tmp):
+            flash("Sesi upload sudah kedaluwarsa, silakan upload ulang file.", "danger")
+            return redirect(url_for("pendapatan_penjualan_upload"))
+
+        with open(path_tmp, "r", encoding="utf-8") as f:
+            data_tmp = json.load(f)
+
+        mapping = {}
+        for key, label, wajib, _kk in KOLOM_TARGET_PENJUALAN:
+            nilai = request.form.get(f"map_{key}", "")
+            mapping[key] = int(nilai) if nilai != "" else None
+            if wajib and mapping[key] is None:
+                flash(f"Kolom '{label}' wajib dipilih.", "danger")
+                os.remove(path_tmp)
+                return redirect(url_for("pendapatan_penjualan_upload"))
+
+        agregat, dilewati, contoh_gagal = proses_baris_penjualan(data_tmp["rows"], mapping)
+
+        if not agregat:
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+            if contoh_gagal:
+                contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
+                pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+            flash(pesan, "danger")
+            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PENJUALAN}
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace=data_tmp["marketplace"],
+                headers=data_tmp["headers"],
+                preview_rows=data_tmp["rows"][:8],
+                kolom_target=KOLOM_TARGET_PENJUALAN,
+                tebakan=tebakan_ulang,
+                jumlah_baris=len(data_tmp["rows"]),
+                judul="Cocokkan Kolom — Laporan Penjualan",
+                konfirmasi_url=url_for("pendapatan_penjualan_konfirmasi"),
+                upload_url=url_for("pendapatan_penjualan_upload"),
+            )
+
+        marketplace = data_tmp["marketplace"]
+        sumber_file = data_tmp.get("sumber_file", "")
+        for tanggal, nilai in agregat.items():
+            existing = PenjualanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal).first()
+            if not existing:
+                existing = PenjualanMarketplace(marketplace=marketplace, tanggal=tanggal)
+                db.session.add(existing)
+            existing.total_penjualan = round(nilai["total_penjualan"])
+            existing.diskon_penjualan = round(nilai["diskon_penjualan"])
+            existing.diskon_tambahan_penjual = round(nilai["diskon_tambahan_penjual"])
+            existing.beban_pokok_penjualan = round(nilai["beban_pokok_penjualan"])
+            existing.biaya_layanan = round(nilai["biaya_layanan"])
+            existing.sumber_file = sumber_file
+            existing.dibuat_pada = now_wib()
+        db.session.commit()
+        os.remove(path_tmp)
+
+        tgl_min = min(agregat.keys())
+        tgl_max = max(agregat.keys())
+        pesan = f"Berhasil impor {len(agregat)} hari data penjualan {marketplace} ({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')})."
+        if dilewati:
+            pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
+            if contoh_gagal:
+                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+        flash(pesan, "success")
+
+        return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
+
+    @app.route("/pendapatan/penjualan/manual", methods=["POST"])
+    @admin_required
+    def pendapatan_penjualan_manual():
+        marketplace = request.form.get("marketplace", "")
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = None
+
+        if marketplace not in MARKETPLACE_LIST or not tanggal:
+            flash("Marketplace dan tanggal wajib diisi dengan benar.", "danger")
+            return redirect(url_for("pendapatan_penjualan_dashboard"))
+
+        existing = PenjualanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal).first()
+        if not existing:
+            existing = PenjualanMarketplace(marketplace=marketplace, tanggal=tanggal)
+            db.session.add(existing)
+        existing.total_penjualan = round(parse_angka_iklan(request.form.get("total_penjualan", "0")))
+        existing.diskon_penjualan = round(parse_angka_iklan(request.form.get("diskon_penjualan", "0")))
+        existing.diskon_tambahan_penjual = round(parse_angka_iklan(request.form.get("diskon_tambahan_penjual", "0")))
+        existing.beban_pokok_penjualan = round(parse_angka_iklan(request.form.get("beban_pokok_penjualan", "0")))
+        existing.biaya_layanan = round(parse_angka_iklan(request.form.get("biaya_layanan", "0")))
+        existing.sumber_file = "Input manual"
+        existing.dibuat_pada = now_wib()
+        db.session.commit()
+        flash(f"Data penjualan {marketplace} tanggal {tanggal.strftime('%d/%m/%Y')} berhasil disimpan.", "success")
+        return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tanggal.month, tahun=tanggal.year))
+
+    @app.route("/pendapatan/penjualan/hapus/<int:pid>", methods=["POST"])
+    @admin_required
+    def pendapatan_penjualan_hapus(pid):
+        data = db.session.get(PenjualanMarketplace, pid)
+        if data:
+            bulan, tahun = data.tanggal.month, data.tanggal.year
+            db.session.delete(data)
+            db.session.commit()
+            flash("Data penjualan berhasil dihapus.", "success")
+            return redirect(url_for("pendapatan_penjualan_dashboard", bulan=bulan, tahun=tahun))
+        flash("Data tidak ditemukan.", "danger")
+        return redirect(url_for("pendapatan_penjualan_dashboard"))
 
     # ---------- PENGATURAN ----------
     @app.route("/pengaturan", methods=["GET", "POST"])
