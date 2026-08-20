@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Analisa Iklan per Marketplace{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h3 class="mb-0">Analisa Iklan per Marketplace</h3>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalManual">+ Input Manual</button>
+    <a href="{{ url_for('marketing_iklan_upload') }}" class="btn btn-primary">+ Upload Laporan Iklan</a>
+  </div>
+</div>
+
+<form method="get" class="card p-3 mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small">Marketplace</label>
+      <select name="marketplace" class="form-select">
+        <option value="Semua" {% if marketplace_filter == 'Semua' %}selected{% endif %}>Semua Marketplace</option>
+        {% for mp in marketplace_list %}
+        <option value="{{ mp }}" {% if marketplace_filter == mp %}selected{% endif %}>{{ mp }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small">Dari Tanggal</label>
+      <input type="date" name="dari" class="form-control" value="{{ dari.isoformat() }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small">Sampai Tanggal</label>
+      <input type="date" name="sampai" class="form-control" value="{{ sampai.isoformat() }}">
+    </div>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-primary w-100">Terapkan Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-2 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Biaya</div>
+      <div class="fs-6 fw-bold text-danger">{{ ringkasan.biaya | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-2 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Omzet</div>
+      <div class="fs-6 fw-bold text-success">{{ ringkasan.omzet | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-2 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">ROAS</div>
+      <div class="fs-6 fw-bold">{{ "%.2f"|format(ringkasan.roas) }}x</div>
+    </div>
+  </div>
+  <div class="col-md-2 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Klik</div>
+      <div class="fs-6 fw-bold">{{ "{:,}".format(ringkasan.klik).replace(",", ".") }}</div>
+    </div>
+  </div>
+  <div class="col-md-2 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Pesanan</div>
+      <div class="fs-6 fw-bold">{{ "{:,}".format(ringkasan.pesanan).replace(",", ".") }}</div>
+    </div>
+  </div>
+  <div class="col-md-2 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">CPA (Biaya/Pesanan)</div>
+      <div class="fs-6 fw-bold">{{ ringkasan.cpa | rupiah }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="text-muted small mb-2">Tren Biaya vs Omzet</div>
+  {% if tren_tanggal %}
+  <canvas id="chartTren" height="90"></canvas>
+  {% else %}
+  <div class="text-muted small py-4 text-center">Belum ada data pada rentang tanggal ini.</div>
+  {% endif %}
+</div>
+
+<div class="card p-3 mb-4" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">Perbandingan Antar Marketplace (sesuai rentang tanggal terpilih)</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Marketplace</th>
+        <th class="text-end">Biaya</th>
+        <th class="text-end">Omzet</th>
+        <th class="text-end">ROAS</th>
+        <th class="text-end">Klik</th>
+        <th class="text-end">Pesanan</th>
+        <th class="text-end">CPA</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in breakdown %}
+      <tr>
+        <td class="fw-semibold">{{ b.marketplace }}</td>
+        <td class="text-end">{{ b.biaya | rupiah }}</td>
+        <td class="text-end">{{ b.omzet | rupiah }}</td>
+        <td class="text-end">{{ "%.2f"|format(b.roas) }}x</td>
+        <td class="text-end">{{ b.klik }}</td>
+        <td class="text-end">{{ b.pesanan }}</td>
+        <td class="text-end">{{ b.cpa | rupiah }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-muted py-3">Belum ada data iklan pada rentang tanggal ini.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">Data Harian {% if marketplace_filter != 'Semua' %}&mdash; {{ marketplace_filter }}{% endif %}</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Tanggal</th>
+        <th>Marketplace</th>
+        <th class="text-end">Biaya</th>
+        <th class="text-end">Impresi</th>
+        <th class="text-end">Klik</th>
+        <th class="text-end">Pesanan</th>
+        <th class="text-end">Omzet</th>
+        <th>Sumber</th>
+        <th class="no-print"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in data_list %}
+      <tr>
+        <td>{{ d.tanggal.strftime("%d/%m/%Y") }}</td>
+        <td>{{ d.marketplace }}</td>
+        <td class="text-end">{{ d.biaya | rupiah }}</td>
+        <td class="text-end">{{ d.impresi }}</td>
+        <td class="text-end">{{ d.klik }}</td>
+        <td class="text-end">{{ d.pesanan }}</td>
+        <td class="text-end">{{ d.omzet | rupiah }}</td>
+        <td class="small text-muted">{{ d.sumber_file or "-" }}</td>
+        <td class="no-print">
+          <form method="post" action="{{ url_for('marketing_iklan_hapus', iklan_id=d.id) }}" onsubmit="return confirm('Hapus data ini?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center text-muted py-3">Belum ada data.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal fade" id="modalManual" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('marketing_iklan_manual') }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Input Data Iklan Manual</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Marketplace</label>
+            <select name="marketplace" class="form-select" required>
+              <option value="" disabled selected>Pilih marketplace...</option>
+              {% for mp in marketplace_list %}
+              <option value="{{ mp }}">{{ mp }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Tanggal</label>
+            <input type="date" name="tanggal" class="form-control" required>
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label small">Biaya (Rp)</label>
+              <input type="number" name="biaya" class="form-control" min="0" value="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Impresi</label>
+              <input type="number" name="impresi" class="form-control" min="0" value="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Klik</label>
+              <input type="number" name="klik" class="form-control" min="0" value="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Pesanan</label>
+              <input type="number" name="pesanan" class="form-control" min="0" value="0">
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Omzet Penjualan (Rp)</label>
+              <input type="number" name="omzet" class="form-control" min="0" value="0">
+            </div>
+          </div>
+          <div class="form-text mt-2">Jika data untuk marketplace &amp; tanggal ini sudah ada, data lama akan ditimpa.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if tren_tanggal %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('chartTren'), {
+  type: 'line',
+  data: {
+    labels: {{ tren_tanggal | tojson }},
+    datasets: [
+      {
+        label: 'Biaya',
+        data: {{ tren_biaya | tojson }},
+        borderColor: '#dc3545',
+        backgroundColor: 'rgba(220,53,69,.1)',
+        tension: .3,
+      },
+      {
+        label: 'Omzet',
+        data: {{ tren_omzet | tojson }},
+        borderColor: '#198754',
+        backgroundColor: 'rgba(25,135,84,.1)',
+        tension: .3,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { beginAtZero: true } },
+  },
+});
+</script>
+{% endif %}
+{% endblock %}

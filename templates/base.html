@@ -46,6 +46,14 @@
         </li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('laporan_pekerjaan_list') }}">Laporan Pekerjaan</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('penggajian_list') }}">Penggajian</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Marketing</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('marketing_iklan_dashboard') }}">Analisa Iklan per Marketplace</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('marketing_produk_dashboard') }}">Performa Produk</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('marketing_proyeksi') }}">Proyeksi Budget Iklan</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('pengaturan') }}">Pengaturan</a></li>
       </ul>
       <ul class="navbar-nav">

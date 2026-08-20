@@ -182,6 +182,41 @@ class LaporanPekerjaan(db.Model):
     employee = db.relationship("Employee", backref="laporan_pekerjaan")
 
 
+class IklanMarketplace(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    marketplace = db.Column(db.String(32), nullable=False)  # Shopee/Tokopedia/TikTok Shop/Lazada/Blibli
+    tanggal = db.Column(db.Date, nullable=False)
+    biaya = db.Column(db.Integer, default=0)
+    impresi = db.Column(db.Integer, default=0)
+    klik = db.Column(db.Integer, default=0)
+    pesanan = db.Column(db.Integer, default=0)
+    omzet = db.Column(db.Integer, default=0)
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    __table_args__ = (
+        db.UniqueConstraint("marketplace", "tanggal", name="uq_marketplace_tanggal"),
+    )
+
+
+class ProdukIklan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    marketplace = db.Column(db.String(32), nullable=False)
+    nama_produk = db.Column(db.String(256), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    biaya = db.Column(db.Integer, default=0)
+    impresi = db.Column(db.Integer, default=0)
+    klik = db.Column(db.Integer, default=0)
+    pesanan = db.Column(db.Integer, default=0)
+    omzet = db.Column(db.Integer, default=0)
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    __table_args__ = (
+        db.UniqueConstraint("marketplace", "nama_produk", "tanggal", name="uq_marketplace_produk_tanggal"),
+    )
+
+
 class PengajuanLembur(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)

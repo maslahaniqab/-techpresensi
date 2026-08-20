@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Performa Produk{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h3 class="mb-0">Performa Iklan Per Produk</h3>
+  <a href="{{ url_for('marketing_produk_upload') }}" class="btn btn-primary">+ Upload Laporan Per Produk</a>
+</div>
+
+<form method="get" class="card p-3 mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label small">Marketplace</label>
+      <select name="marketplace" class="form-select">
+        <option value="Semua" {% if marketplace_filter == 'Semua' %}selected{% endif %}>Semua</option>
+        {% for mp in marketplace_list %}
+        <option value="{{ mp }}" {% if marketplace_filter == mp %}selected{% endif %}>{{ mp }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small">Periode Analisa (hari)</label>
+      <input type="number" name="periode" class="form-control" min="1" value="{{ periode_hari }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small">Min. CTR (%)</label>
+      <input type="number" step="0.1" name="ctr_min" class="form-control" value="{{ threshold_ctr }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small">Min. ROAS (x)</label>
+      <input type="number" step="0.1" name="roas_min" class="form-control" value="{{ threshold_roas }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small">Min. Pesanan 14 Hari</label>
+      <input type="number" name="pesanan14_min" class="form-control" value="{{ threshold_pesanan14 }}">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary w-100">Terapkan</button>
+    </div>
+  </div>
+  <div class="form-text mt-2">
+    Produk ditandai <strong>Tidak Perform</strong> jika salah satu terpenuhi: CTR di bawah minimum, ROAS di bawah minimum,
+    atau jumlah pesanan dalam 14 hari terakhir di bawah minimum. Hanya produk dengan biaya iklan &gt; 0 pada periode ini yang dianalisa.
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="text-muted small">Total Produk Dipantau</div>
+      <div class="fs-3 fw-bold">{{ total_produk }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="text-muted small">Tidak Perform</div>
+      <div class="fs-3 fw-bold text-danger">{{ tidak_perform|length }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="text-muted small">Perform</div>
+      <div class="fs-3 fw-bold text-success">{{ perform|length }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4" style="overflow-x:auto;">
+  <div class="fw-semibold mb-2 text-danger">⚠ Produk Tidak Perform &mdash; Perlu Ditindaklanjuti</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Produk</th>
+        <th>Marketplace</th>
+        <th class="text-end">Biaya</th>
+        <th class="text-end">CTR</th>
+        <th class="text-end">ROAS</th>
+        <th class="text-end">Pesanan 14 Hari</th>
+        <th>Alasan</th>
+        <th>Rekomendasi Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in tidak_perform %}
+      <tr>
+        <td class="fw-semibold">{{ p.nama_produk }}</td>
+        <td>{{ p.marketplace }}</td>
+        <td class="text-end">{{ p.biaya | rupiah }}</td>
+        <td class="text-end">{{ "%.2f"|format(p.ctr) }}%</td>
+        <td class="text-end">{{ "%.2f"|format(p.roas) }}x</td>
+        <td class="text-end">{{ p.pesanan14 }}</td>
+        <td class="small">
+          <ul class="mb-0 ps-3">
+            {% for a in p.alasan %}<li>{{ a }}</li>{% endfor %}
+          </ul>
+        </td>
+        <td class="small">
+          <ul class="mb-0 ps-3">
+            {% for r in p.rekomendasi %}<li>{{ r }}</li>{% endfor %}
+          </ul>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-center text-muted py-3">Tidak ada produk yang tidak perform pada periode &amp; kriteria ini.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <div class="fw-semibold mb-2 text-success">✓ Produk Perform</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Produk</th>
+        <th>Marketplace</th>
+        <th class="text-end">Biaya</th>
+        <th class="text-end">CTR</th>
+        <th class="text-end">ROAS</th>
+        <th class="text-end">Pesanan 14 Hari</th>
+        <th>Catatan</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in perform %}
+      <tr>
+        <td class="fw-semibold">{{ p.nama_produk }}</td>
+        <td>{{ p.marketplace }}</td>
+        <td class="text-end">{{ p.biaya | rupiah }}</td>
+        <td class="text-end">{{ "%.2f"|format(p.ctr) }}%</td>
+        <td class="text-end">{{ "%.2f"|format(p.roas) }}x</td>
+        <td class="text-end">{{ p.pesanan14 }}</td>
+        <td class="small text-muted">{{ p.rekomendasi[0] }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-muted py-3">Belum ada data produk perform pada periode ini.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

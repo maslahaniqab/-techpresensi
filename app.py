@@ -1,12 +1,19 @@
 import os
+import io
+import csv
 import math
 import calendar
 import smtplib
+import time
+import uuid
+import json
 from email.message import EmailMessage
 from functools import wraps
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
+
+import openpyxl
 
 WIB = ZoneInfo("Asia/Jakarta")
 
@@ -32,7 +39,7 @@ from xhtml2pdf import pisa
 
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
-    LaporanPekerjaan, PengajuanLembur,
+    LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
 )
 
 BULAN_NAMA = [
@@ -52,6 +59,144 @@ JABATAN_LIST = [
     "Human Resource",
     "Supervisor",
 ]
+
+MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
+
+KOLOM_TARGET_IKLAN = [
+    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode"]),
+    ("biaya", "Biaya Iklan", True, ["biaya", "cost", "spend", "pengeluaran", "biaya iklan"]),
+    ("impresi", "Impresi/Dilihat", False, ["impresi", "impression", "dilihat", "views", "tayangan", "reach"]),
+    ("klik", "Klik", False, ["klik", "click", "jumlah klik"]),
+    ("pesanan", "Pesanan/Konversi", False, ["pesanan", "konversi", "conversion", "order", "dibeli", "produk terjual", "checkout", "terjual"]),
+    ("omzet", "Omzet Penjualan", False, ["omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales"]),
+]
+
+
+KOLOM_TARGET_PRODUK = [
+    ("nama_produk", "Nama Produk", True, ["nama produk", "produk", "product", "nama barang", "item name", "item"]),
+    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode"]),
+    ("biaya", "Biaya Iklan", True, ["biaya", "cost", "spend", "pengeluaran", "biaya iklan"]),
+    ("impresi", "Impresi/Dilihat", False, ["impresi", "impression", "dilihat", "views", "tayangan", "reach"]),
+    ("klik", "Klik", False, ["klik", "click", "jumlah klik"]),
+    ("pesanan", "Pesanan/Konversi", False, ["pesanan", "konversi", "conversion", "order", "dibeli", "produk terjual", "checkout", "terjual"]),
+    ("omzet", "Omzet Penjualan", False, ["omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales"]),
+]
+
+
+def tebak_kolom(headers, target_list=None):
+    target_list = target_list or KOLOM_TARGET_IKLAN
+    tebakan = {}
+    headers_lower = [str(h).strip().lower() for h in headers]
+    for key, _label, _wajib, kata_kunci in target_list:
+        pilihan = ""
+        for idx, h in enumerate(headers_lower):
+            if any(kk in h for kk in kata_kunci):
+                pilihan = str(idx)
+                break
+        tebakan[key] = pilihan
+    return tebakan
+
+
+def baca_file_iklan(file_storage):
+    filename = file_storage.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    raw = file_storage.read()
+
+    if ext == "csv":
+        text = raw.decode("utf-8-sig", errors="ignore")
+        sample = text[:2048]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+        except csv.Error:
+            dialect = csv.excel
+        reader = csv.reader(io.StringIO(text), dialect)
+        semua = [row for row in reader if any(str(cell).strip() for cell in row)]
+    elif ext in ("xlsx", "xlsm"):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+        except Exception:
+            return None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
+        ws = wb.active
+        semua = []
+        for row in ws.iter_rows(values_only=True):
+            if any(cell not in (None, "") for cell in row):
+                semua.append(["" if c is None else c for c in row])
+    else:
+        return None, None, "Format file tidak didukung. Gunakan file CSV atau XLSX (export laporan iklan dari marketplace)."
+
+    if len(semua) < 2:
+        return None, None, "File kosong atau tidak ada baris data."
+
+    headers = [str(h).strip() for h in semua[0]]
+    rows = semua[1:]
+    return headers, rows, None
+
+
+def parse_angka_iklan(value):
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return value
+    s = str(value).strip()
+    if not s:
+        return 0
+    s = s.replace("Rp", "").replace("rp", "").replace("%", "").strip()
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s and "." not in s:
+        kanan = s.split(",")[-1]
+        s = s.replace(",", ".") if len(kanan) <= 2 else s.replace(",", "")
+    elif s.count(".") > 1:
+        s = s.replace(".", "")
+    elif "." in s:
+        kepala, ekor = s.split(".")
+        if len(ekor) == 3 and len(kepala) <= 3:
+            s = s.replace(".", "")
+    cleaned = "".join(ch for ch in s if ch.isdigit() or ch in "-.")
+    try:
+        return float(cleaned) if cleaned not in ("", "-", ".") else 0
+    except ValueError:
+        return 0
+
+
+def parse_tanggal_iklan(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    s = str(value).strip()
+    if not s:
+        return None
+    if "T" in s and len(s) >= 10:
+        s = s.split("T")[0]
+
+    parts = s.split()
+    if len(parts) == 3:
+        try:
+            hari = int(parts[0])
+            tahun = int(parts[2])
+            bulan_txt = parts[1].strip(",").lower()
+            for idx, nama in enumerate(BULAN_NAMA):
+                if idx == 0:
+                    continue
+                if bulan_txt == nama.lower() or bulan_txt == nama.lower()[:3]:
+                    return date(tahun, idx, hari)
+        except (ValueError, IndexError):
+            pass
+
+    formats = [
+        "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
+        "%m/%d/%Y", "%Y/%m/%d",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
 
 _SATUAN = [
     "", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan",
@@ -116,6 +261,10 @@ def create_app():
     app.config["IZIN_UPLOAD_FOLDER"] = izin_upload_folder
 
     EKSTENSI_DOKUMEN_IZIN = {"pdf", "doc", "docx", "jpg", "jpeg", "png"}
+
+    tmp_iklan_folder = os.path.join(app.instance_path, "tmp_iklan")
+    os.makedirs(tmp_iklan_folder, exist_ok=True)
+    app.config["TMP_IKLAN_FOLDER"] = tmp_iklan_folder
 
     db.init_app(app)
 
@@ -1279,6 +1428,555 @@ def create_app():
             flash("Pengaturan berhasil disimpan.", "success")
             return redirect(url_for("pengaturan"))
         return render_template("settings.html", settings=settings)
+
+    # ---------- MARKETING: ANALISA IKLAN PER MARKETPLACE ----------
+    def bersihkan_tmp_iklan_lama():
+        batas = time.time() - 24 * 3600
+        try:
+            for nama in os.listdir(app.config["TMP_IKLAN_FOLDER"]):
+                path_file = os.path.join(app.config["TMP_IKLAN_FOLDER"], nama)
+                if os.path.isfile(path_file) and os.path.getmtime(path_file) < batas:
+                    os.remove(path_file)
+        except OSError:
+            pass
+
+    @app.route("/marketing/iklan")
+    @admin_required
+    def marketing_iklan_dashboard():
+        marketplace_filter = request.args.get("marketplace", "Semua")
+        hari_ini = today_wib()
+        default_dari = hari_ini.replace(day=1)
+        try:
+            dari = datetime.strptime(request.args.get("dari", ""), "%Y-%m-%d").date()
+        except ValueError:
+            dari = default_dari
+        try:
+            sampai = datetime.strptime(request.args.get("sampai", ""), "%Y-%m-%d").date()
+        except ValueError:
+            sampai = hari_ini
+
+        query = IklanMarketplace.query.filter(
+            IklanMarketplace.tanggal >= dari, IklanMarketplace.tanggal <= sampai
+        )
+        semua_data = query.order_by(IklanMarketplace.tanggal).all()
+
+        if marketplace_filter != "Semua":
+            data_terfilter = [d for d in semua_data if d.marketplace == marketplace_filter]
+        else:
+            data_terfilter = semua_data
+
+        def totalkan(items):
+            return {
+                "biaya": sum(d.biaya or 0 for d in items),
+                "impresi": sum(d.impresi or 0 for d in items),
+                "klik": sum(d.klik or 0 for d in items),
+                "pesanan": sum(d.pesanan or 0 for d in items),
+                "omzet": sum(d.omzet or 0 for d in items),
+            }
+
+        total = totalkan(data_terfilter)
+        ringkasan = {
+            **total,
+            "roas": (total["omzet"] / total["biaya"]) if total["biaya"] else 0,
+            "ctr": (total["klik"] / total["impresi"] * 100) if total["impresi"] else 0,
+            "cpc": (total["biaya"] / total["klik"]) if total["klik"] else 0,
+            "cpa": (total["biaya"] / total["pesanan"]) if total["pesanan"] else 0,
+            "konversi_rate": (total["pesanan"] / total["klik"] * 100) if total["klik"] else 0,
+        }
+
+        breakdown = []
+        for mp in MARKETPLACE_LIST:
+            item_mp = [d for d in semua_data if d.marketplace == mp]
+            if not item_mp:
+                continue
+            t = totalkan(item_mp)
+            breakdown.append({
+                "marketplace": mp,
+                **t,
+                "roas": (t["omzet"] / t["biaya"]) if t["biaya"] else 0,
+                "cpa": (t["biaya"] / t["pesanan"]) if t["pesanan"] else 0,
+            })
+
+        tren_map = {}
+        for d in data_terfilter:
+            key = d.tanggal.isoformat()
+            if key not in tren_map:
+                tren_map[key] = {"biaya": 0, "omzet": 0, "klik": 0}
+            tren_map[key]["biaya"] += d.biaya or 0
+            tren_map[key]["omzet"] += d.omzet or 0
+            tren_map[key]["klik"] += d.klik or 0
+        tren_tanggal = sorted(tren_map.keys())
+        tren_biaya = [tren_map[k]["biaya"] for k in tren_tanggal]
+        tren_omzet = [tren_map[k]["omzet"] for k in tren_tanggal]
+
+        return render_template(
+            "marketing/iklan_dashboard.html",
+            marketplace_list=MARKETPLACE_LIST,
+            marketplace_filter=marketplace_filter,
+            dari=dari,
+            sampai=sampai,
+            ringkasan=ringkasan,
+            breakdown=breakdown,
+            data_list=list(reversed(data_terfilter)),
+            tren_tanggal=tren_tanggal,
+            tren_biaya=tren_biaya,
+            tren_omzet=tren_omzet,
+        )
+
+    def simpan_tmp_upload(prefix, marketplace, file):
+        headers, rows, error = baca_file_iklan(file)
+        if error:
+            return None, None, None, error
+        rows_bersih = []
+        for row in rows:
+            row_lengkap = list(row) + [""] * (len(headers) - len(row))
+            row_serial = [
+                c.isoformat() if isinstance(c, (datetime, date)) else c
+                for c in row_lengkap[: len(headers)]
+            ]
+            rows_bersih.append(row_serial)
+        token = uuid.uuid4().hex
+        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"{prefix}_{token}.json")
+        with open(path_tmp, "w", encoding="utf-8") as f:
+            json.dump({
+                "marketplace": marketplace,
+                "headers": headers,
+                "rows": rows_bersih,
+                "sumber_file": secure_filename(file.filename),
+            }, f)
+        return token, headers, rows_bersih, None
+
+    @app.route("/marketing/iklan/upload", methods=["GET", "POST"])
+    @admin_required
+    def marketing_iklan_upload():
+        bersihkan_tmp_iklan_lama()
+        if request.method == "POST":
+            marketplace = request.form.get("marketplace", "")
+            file = request.files.get("file")
+            if marketplace not in MARKETPLACE_LIST:
+                flash("Pilih marketplace terlebih dahulu.", "danger")
+                return redirect(url_for("marketing_iklan_upload"))
+            if not file or not file.filename:
+                flash("Pilih file laporan iklan (CSV/XLSX) terlebih dahulu.", "danger")
+                return redirect(url_for("marketing_iklan_upload"))
+
+            token, headers, rows_bersih, error = simpan_tmp_upload("iklan", marketplace, file)
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("marketing_iklan_upload"))
+
+            tebakan = tebak_kolom(headers, KOLOM_TARGET_IKLAN)
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace=marketplace,
+                headers=headers,
+                preview_rows=rows_bersih[:8],
+                kolom_target=KOLOM_TARGET_IKLAN,
+                tebakan=tebakan,
+                jumlah_baris=len(rows_bersih),
+                judul="Cocokkan Kolom",
+                konfirmasi_url=url_for("marketing_iklan_konfirmasi"),
+                upload_url=url_for("marketing_iklan_upload"),
+            )
+
+        return render_template("marketing/iklan_upload.html", marketplace_list=MARKETPLACE_LIST)
+
+    @app.route("/marketing/iklan/konfirmasi", methods=["POST"])
+    @admin_required
+    def marketing_iklan_konfirmasi():
+        token = request.form.get("token", "")
+        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"iklan_{token}.json")
+        if not os.path.isfile(path_tmp):
+            flash("Sesi upload sudah kedaluwarsa, silakan upload ulang file.", "danger")
+            return redirect(url_for("marketing_iklan_upload"))
+
+        with open(path_tmp, "r", encoding="utf-8") as f:
+            data_tmp = json.load(f)
+
+        mapping = {}
+        for key, label, wajib, _kk in KOLOM_TARGET_IKLAN:
+            nilai = request.form.get(f"map_{key}", "")
+            mapping[key] = int(nilai) if nilai != "" else None
+            if wajib and mapping[key] is None:
+                flash(f"Kolom '{label}' wajib dipilih.", "danger")
+                os.remove(path_tmp)
+                return redirect(url_for("marketing_iklan_upload"))
+
+        agregat = {}
+        dilewati = 0
+        for row in data_tmp["rows"]:
+            def ambil(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(row):
+                    return None
+                return row[idx]
+
+            tanggal = parse_tanggal_iklan(ambil("tanggal"))
+            if not tanggal:
+                dilewati += 1
+                continue
+
+            if tanggal not in agregat:
+                agregat[tanggal] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0}
+            for key in ("biaya", "impresi", "klik", "pesanan", "omzet"):
+                nilai_mentah = ambil(key)
+                if nilai_mentah is not None:
+                    agregat[tanggal][key] += parse_angka_iklan(nilai_mentah)
+
+        marketplace = data_tmp["marketplace"]
+        sumber_file = data_tmp.get("sumber_file", "")
+        for tanggal, nilai in agregat.items():
+            existing = IklanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal).first()
+            if not existing:
+                existing = IklanMarketplace(marketplace=marketplace, tanggal=tanggal)
+                db.session.add(existing)
+            existing.biaya = round(nilai["biaya"])
+            existing.impresi = round(nilai["impresi"])
+            existing.klik = round(nilai["klik"])
+            existing.pesanan = round(nilai["pesanan"])
+            existing.omzet = round(nilai["omzet"])
+            existing.sumber_file = sumber_file
+            existing.dibuat_pada = now_wib()
+        db.session.commit()
+        os.remove(path_tmp)
+
+        if agregat:
+            tgl_min = min(agregat.keys())
+            tgl_max = max(agregat.keys())
+            pesan = f"Berhasil impor {len(agregat)} hari data iklan {marketplace} ({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')})."
+            if dilewati:
+                pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
+            flash(pesan, "success")
+        else:
+            flash("Tidak ada baris data yang berhasil diproses (format tanggal tidak dikenali).", "danger")
+
+        return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
+
+    @app.route("/marketing/iklan/manual", methods=["POST"])
+    @admin_required
+    def marketing_iklan_manual():
+        marketplace = request.form.get("marketplace", "")
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = None
+
+        if marketplace not in MARKETPLACE_LIST or not tanggal:
+            flash("Marketplace dan tanggal wajib diisi dengan benar.", "danger")
+            return redirect(url_for("marketing_iklan_dashboard"))
+
+        existing = IklanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal).first()
+        if not existing:
+            existing = IklanMarketplace(marketplace=marketplace, tanggal=tanggal)
+            db.session.add(existing)
+        existing.biaya = round(parse_angka_iklan(request.form.get("biaya", "0")))
+        existing.impresi = round(parse_angka_iklan(request.form.get("impresi", "0")))
+        existing.klik = round(parse_angka_iklan(request.form.get("klik", "0")))
+        existing.pesanan = round(parse_angka_iklan(request.form.get("pesanan", "0")))
+        existing.omzet = round(parse_angka_iklan(request.form.get("omzet", "0")))
+        existing.sumber_file = "Input manual"
+        existing.dibuat_pada = now_wib()
+        db.session.commit()
+        flash(f"Data iklan {marketplace} tanggal {tanggal.strftime('%d/%m/%Y')} berhasil disimpan.", "success")
+        return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
+
+    @app.route("/marketing/iklan/hapus/<int:iklan_id>", methods=["POST"])
+    @admin_required
+    def marketing_iklan_hapus(iklan_id):
+        data = db.session.get(IklanMarketplace, iklan_id)
+        if data:
+            marketplace = data.marketplace
+            db.session.delete(data)
+            db.session.commit()
+            flash("Data iklan berhasil dihapus.", "success")
+            return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
+        flash("Data tidak ditemukan.", "danger")
+        return redirect(url_for("marketing_iklan_dashboard"))
+
+    @app.route("/marketing/produk/upload", methods=["GET", "POST"])
+    @admin_required
+    def marketing_produk_upload():
+        bersihkan_tmp_iklan_lama()
+        if request.method == "POST":
+            marketplace = request.form.get("marketplace", "")
+            file = request.files.get("file")
+            if marketplace not in MARKETPLACE_LIST:
+                flash("Pilih marketplace terlebih dahulu.", "danger")
+                return redirect(url_for("marketing_produk_upload"))
+            if not file or not file.filename:
+                flash("Pilih file laporan iklan per produk (CSV/XLSX) terlebih dahulu.", "danger")
+                return redirect(url_for("marketing_produk_upload"))
+
+            token, headers, rows_bersih, error = simpan_tmp_upload("produk", marketplace, file)
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("marketing_produk_upload"))
+
+            tebakan = tebak_kolom(headers, KOLOM_TARGET_PRODUK)
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace=marketplace,
+                headers=headers,
+                preview_rows=rows_bersih[:8],
+                kolom_target=KOLOM_TARGET_PRODUK,
+                tebakan=tebakan,
+                jumlah_baris=len(rows_bersih),
+                judul="Cocokkan Kolom — Laporan Per Produk",
+                konfirmasi_url=url_for("marketing_produk_konfirmasi"),
+                upload_url=url_for("marketing_produk_upload"),
+            )
+
+        return render_template("marketing/produk_upload.html", marketplace_list=MARKETPLACE_LIST)
+
+    @app.route("/marketing/produk/konfirmasi", methods=["POST"])
+    @admin_required
+    def marketing_produk_konfirmasi():
+        token = request.form.get("token", "")
+        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produk_{token}.json")
+        if not os.path.isfile(path_tmp):
+            flash("Sesi upload sudah kedaluwarsa, silakan upload ulang file.", "danger")
+            return redirect(url_for("marketing_produk_upload"))
+
+        with open(path_tmp, "r", encoding="utf-8") as f:
+            data_tmp = json.load(f)
+
+        mapping = {}
+        for key, label, wajib, _kk in KOLOM_TARGET_PRODUK:
+            nilai = request.form.get(f"map_{key}", "")
+            mapping[key] = int(nilai) if nilai != "" else None
+            if wajib and mapping[key] is None:
+                flash(f"Kolom '{label}' wajib dipilih.", "danger")
+                os.remove(path_tmp)
+                return redirect(url_for("marketing_produk_upload"))
+
+        agregat = {}
+        dilewati = 0
+        for row in data_tmp["rows"]:
+            def ambil(key):
+                idx = mapping.get(key)
+                if idx is None or idx >= len(row):
+                    return None
+                return row[idx]
+
+            nama_produk_raw = ambil("nama_produk")
+            nama_produk = str(nama_produk_raw).strip() if nama_produk_raw is not None else ""
+            tanggal = parse_tanggal_iklan(ambil("tanggal"))
+            if not nama_produk or not tanggal:
+                dilewati += 1
+                continue
+
+            kunci = (nama_produk, tanggal)
+            if kunci not in agregat:
+                agregat[kunci] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0}
+            for k in ("biaya", "impresi", "klik", "pesanan", "omzet"):
+                nilai_mentah = ambil(k)
+                if nilai_mentah is not None:
+                    agregat[kunci][k] += parse_angka_iklan(nilai_mentah)
+
+        marketplace = data_tmp["marketplace"]
+        sumber_file = data_tmp.get("sumber_file", "")
+        for (nama_produk, tanggal), nilai in agregat.items():
+            existing = ProdukIklan.query.filter_by(
+                marketplace=marketplace, nama_produk=nama_produk, tanggal=tanggal
+            ).first()
+            if not existing:
+                existing = ProdukIklan(marketplace=marketplace, nama_produk=nama_produk, tanggal=tanggal)
+                db.session.add(existing)
+            existing.biaya = round(nilai["biaya"])
+            existing.impresi = round(nilai["impresi"])
+            existing.klik = round(nilai["klik"])
+            existing.pesanan = round(nilai["pesanan"])
+            existing.omzet = round(nilai["omzet"])
+            existing.sumber_file = sumber_file
+            existing.dibuat_pada = now_wib()
+        db.session.commit()
+        os.remove(path_tmp)
+
+        if agregat:
+            jumlah_produk = len(set(k[0] for k in agregat.keys()))
+            pesan = f"Berhasil impor {len(agregat)} baris data ({jumlah_produk} produk) untuk {marketplace}."
+            if dilewati:
+                pesan += f" {dilewati} baris dilewati karena nama produk/tanggal tidak terbaca."
+            flash(pesan, "success")
+        else:
+            flash("Tidak ada baris data yang berhasil diproses.", "danger")
+
+        return redirect(url_for("marketing_produk_dashboard", marketplace=marketplace))
+
+    @app.route("/marketing/produk")
+    @admin_required
+    def marketing_produk_dashboard():
+        hari_ini = today_wib()
+        marketplace_filter = request.args.get("marketplace", "Semua")
+        try:
+            periode_hari = max(int(request.args.get("periode", 30)), 1)
+        except ValueError:
+            periode_hari = 30
+        try:
+            threshold_ctr = float(request.args.get("ctr_min", 1))
+        except ValueError:
+            threshold_ctr = 1.0
+        try:
+            threshold_roas = float(request.args.get("roas_min", 3))
+        except ValueError:
+            threshold_roas = 3.0
+        try:
+            threshold_pesanan14 = int(request.args.get("pesanan14_min", 3))
+        except ValueError:
+            threshold_pesanan14 = 3
+
+        dari_periode = hari_ini - timedelta(days=periode_hari - 1)
+        dari_14 = hari_ini - timedelta(days=13)
+
+        query_periode = ProdukIklan.query.filter(
+            ProdukIklan.tanggal >= dari_periode, ProdukIklan.tanggal <= hari_ini
+        )
+        query_14 = ProdukIklan.query.filter(
+            ProdukIklan.tanggal >= dari_14, ProdukIklan.tanggal <= hari_ini
+        )
+        if marketplace_filter != "Semua":
+            query_periode = query_periode.filter(ProdukIklan.marketplace == marketplace_filter)
+            query_14 = query_14.filter(ProdukIklan.marketplace == marketplace_filter)
+
+        pesanan14_map = {}
+        for d in query_14.all():
+            kunci = (d.marketplace, d.nama_produk)
+            pesanan14_map[kunci] = pesanan14_map.get(kunci, 0) + (d.pesanan or 0)
+
+        produk_map = {}
+        for d in query_periode.all():
+            kunci = (d.marketplace, d.nama_produk)
+            if kunci not in produk_map:
+                produk_map[kunci] = {
+                    "marketplace": d.marketplace, "nama_produk": d.nama_produk,
+                    "biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0,
+                }
+            produk_map[kunci]["biaya"] += d.biaya or 0
+            produk_map[kunci]["impresi"] += d.impresi or 0
+            produk_map[kunci]["klik"] += d.klik or 0
+            produk_map[kunci]["pesanan"] += d.pesanan or 0
+            produk_map[kunci]["omzet"] += d.omzet or 0
+
+        tidak_perform = []
+        perform = []
+        for kunci, p in produk_map.items():
+            if p["biaya"] <= 0:
+                continue
+            ctr = (p["klik"] / p["impresi"] * 100) if p["impresi"] else 0
+            roas = (p["omzet"] / p["biaya"]) if p["biaya"] else 0
+            pesanan14 = pesanan14_map.get(kunci, 0)
+
+            alasan = []
+            rekomendasi = []
+            if p["impresi"] > 0 and ctr < threshold_ctr:
+                alasan.append(f"CTR rendah ({ctr:.2f}% < {threshold_ctr:.2f}%)")
+                rekomendasi.append("Ganti foto utama & judul produk, uji materi iklan baru agar lebih menarik diklik.")
+            if roas < threshold_roas:
+                alasan.append(f"ROAS rendah ({roas:.2f}x < {threshold_roas:.2f}x)")
+                rekomendasi.append("Klik sudah ada tapi konversi kurang — cek harga, deskripsi, ulasan & foto produk, atau turunkan bid iklan.")
+            if pesanan14 < threshold_pesanan14:
+                alasan.append(f"Penjualan 14 hari terakhir rendah ({pesanan14} < {threshold_pesanan14})")
+                rekomendasi.append("Penjualan masih minim — naikkan budget bertahap sambil dipantau, atau alihkan budget bila 1-2 minggu tidak membaik.")
+
+            item = {**p, "ctr": ctr, "roas": roas, "pesanan14": pesanan14, "alasan": alasan, "rekomendasi": rekomendasi}
+            if alasan:
+                tidak_perform.append(item)
+            else:
+                if roas >= threshold_roas * 1.5:
+                    item["rekomendasi"] = ["Performa baik, pertimbangkan naikkan budget iklan bertahap (+20-30%) untuk maksimalkan momentum penjualan."]
+                else:
+                    item["rekomendasi"] = ["Performa sudah sesuai target, pertahankan strategi saat ini."]
+                perform.append(item)
+
+        tidak_perform.sort(key=lambda x: x["roas"])
+        perform.sort(key=lambda x: -x["roas"])
+
+        return render_template(
+            "marketing/produk_dashboard.html",
+            marketplace_list=MARKETPLACE_LIST,
+            marketplace_filter=marketplace_filter,
+            periode_hari=periode_hari,
+            threshold_ctr=threshold_ctr,
+            threshold_roas=threshold_roas,
+            threshold_pesanan14=threshold_pesanan14,
+            tidak_perform=tidak_perform,
+            perform=perform,
+            total_produk=len(tidak_perform) + len(perform),
+        )
+
+    @app.route("/marketing/proyeksi")
+    @admin_required
+    def marketing_proyeksi():
+        hari_ini = today_wib()
+        periode_hari = 30
+        dari = hari_ini - timedelta(days=periode_hari - 1)
+        data = IklanMarketplace.query.filter(
+            IklanMarketplace.tanggal >= dari, IklanMarketplace.tanggal <= hari_ini
+        ).all()
+
+        bulan_depan = hari_ini.month + 1
+        tahun_depan = hari_ini.year
+        if bulan_depan > 12:
+            bulan_depan = 1
+            tahun_depan += 1
+        jumlah_hari_bulan_depan = calendar.monthrange(tahun_depan, bulan_depan)[1]
+
+        proyeksi = []
+        for mp in MARKETPLACE_LIST:
+            item = [d for d in data if d.marketplace == mp]
+            if not item:
+                continue
+            jumlah_hari_data = len(set(d.tanggal for d in item))
+            total_biaya = sum(d.biaya or 0 for d in item)
+            total_omzet = sum(d.omzet or 0 for d in item)
+            avg_biaya_harian = (total_biaya / jumlah_hari_data) if jumlah_hari_data else 0
+            roas_historis = (total_omzet / total_biaya) if total_biaya else 0
+            proyeksi_budget = avg_biaya_harian * jumlah_hari_bulan_depan
+            proyeksi.append({
+                "marketplace": mp,
+                "avg_biaya_harian": avg_biaya_harian,
+                "roas_historis": roas_historis,
+                "proyeksi_budget": proyeksi_budget,
+                "proyeksi_omzet": proyeksi_budget * roas_historis,
+            })
+
+        target_marketplace = request.args.get("target_marketplace", "")
+        try:
+            target_omzet = float(request.args.get("target_omzet", "") or 0)
+        except ValueError:
+            target_omzet = 0
+
+        hasil_target = None
+        if target_marketplace and target_omzet > 0:
+            if target_marketplace == "Semua":
+                item = data
+            else:
+                item = [d for d in data if d.marketplace == target_marketplace]
+            total_biaya_t = sum(d.biaya or 0 for d in item)
+            total_omzet_t = sum(d.omzet or 0 for d in item)
+            roas_pakai = (total_omzet_t / total_biaya_t) if total_biaya_t else 0
+            if roas_pakai > 0:
+                hasil_target = {
+                    "marketplace": target_marketplace,
+                    "target_omzet": target_omzet,
+                    "roas_pakai": roas_pakai,
+                    "budget_dibutuhkan": target_omzet / roas_pakai,
+                }
+            else:
+                hasil_target = {"marketplace": target_marketplace, "error": True}
+
+        return render_template(
+            "marketing/proyeksi.html",
+            marketplace_list=MARKETPLACE_LIST,
+            proyeksi=proyeksi,
+            periode_hari=periode_hari,
+            bulan_depan_label=f"{BULAN_NAMA[bulan_depan]} {tahun_depan}",
+            target_marketplace=target_marketplace,
+            target_omzet=target_omzet,
+            hasil_target=hasil_target,
+        )
 
     @app.route("/akun", methods=["GET", "POST"])
     @admin_required

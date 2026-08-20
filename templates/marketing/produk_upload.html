@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Upload Laporan Iklan Per Produk{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3 class="mb-0">Upload Laporan Iklan Per Produk</h3>
+  <a href="{{ url_for('marketing_produk_dashboard') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Performa Produk</a>
+</div>
+
+<div class="card p-4" style="max-width: 640px;">
+  <p class="text-muted small">
+    Export laporan iklan level <strong>per produk</strong> (bukan total toko) dari dashboard iklan marketplace,
+    biasanya bernama "Laporan per Produk" atau "Product Performance". File harus punya kolom nama produk,
+    tanggal, biaya, dan idealnya klik/impresi/pesanan/omzet. Format CSV atau XLSX.
+  </p>
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">Marketplace</label>
+      <select name="marketplace" class="form-select" required>
+        <option value="" disabled selected>Pilih marketplace...</option>
+        {% for mp in marketplace_list %}
+        <option value="{{ mp }}">{{ mp }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">File Laporan (CSV/XLSX)</label>
+      <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xlsm" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Lanjut &rarr; Cocokkan Kolom</button>
+  </form>
+</div>
+{% endblock %}

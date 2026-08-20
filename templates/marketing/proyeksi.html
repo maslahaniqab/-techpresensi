@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Proyeksi Budget Iklan{% endblock %}
+{% block content %}
+<h3 class="mb-4">Proyeksi Budget Iklan</h3>
+
+<div class="card p-3 mb-4" style="overflow-x:auto;">
+  <div class="fw-semibold mb-1">Proyeksi Berdasarkan Tren {{ periode_hari }} Hari Terakhir</div>
+  <div class="text-muted small mb-3">Estimasi budget &amp; omzet untuk <strong>{{ bulan_depan_label }}</strong>, dihitung dari rata-rata biaya harian dan ROAS historis tiap marketplace. Asumsi: tren &amp; efektivitas iklan relatif sama dengan periode berjalan.</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Marketplace</th>
+        <th class="text-end">Rata-rata Biaya Harian</th>
+        <th class="text-end">ROAS Historis</th>
+        <th class="text-end">Proyeksi Budget {{ bulan_depan_label }}</th>
+        <th class="text-end">Proyeksi Omzet {{ bulan_depan_label }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in proyeksi %}
+      <tr>
+        <td class="fw-semibold">{{ p.marketplace }}</td>
+        <td class="text-end">{{ p.avg_biaya_harian | rupiah }}</td>
+        <td class="text-end">{{ "%.2f"|format(p.roas_historis) }}x</td>
+        <td class="text-end fw-semibold">{{ p.proyeksi_budget | rupiah }}</td>
+        <td class="text-end text-success">{{ p.proyeksi_omzet | rupiah }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center text-muted py-3">Belum ada data iklan {{ periode_hari }} hari terakhir untuk membuat proyeksi. Upload laporan iklan dulu di menu Analisa Iklan per Marketplace.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-4" style="max-width: 640px;">
+  <div class="fw-semibold mb-1">Kalkulator Budget untuk Target Omzet</div>
+  <div class="text-muted small mb-3">Masukkan target omzet penjualan dari iklan, sistem akan hitung perkiraan budget yang dibutuhkan berdasarkan ROAS historis marketplace terkait.</div>
+  <form method="get" class="row g-3 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label small">Marketplace</label>
+      <select name="target_marketplace" class="form-select">
+        <option value="" disabled {% if not target_marketplace %}selected{% endif %}>Pilih marketplace...</option>
+        <option value="Semua" {% if target_marketplace == 'Semua' %}selected{% endif %}>Semua Marketplace (gabungan)</option>
+        {% for mp in marketplace_list %}
+        <option value="{{ mp }}" {% if target_marketplace == mp %}selected{% endif %}>{{ mp }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label small">Target Omzet (Rp)</label>
+      <input type="number" name="target_omzet" class="form-control" min="0" value="{{ target_omzet|int if target_omzet else '' }}">
+    </div>
+    <div class="col-12">
+      <button type="submit" class="btn btn-primary">Hitung Budget</button>
+    </div>
+  </form>
+
+  {% if hasil_target %}
+  <hr>
+  {% if hasil_target.error %}
+  <div class="alert alert-warning mb-0">
+    Belum ada cukup data historis (biaya &amp; omzet) untuk {{ hasil_target.marketplace }} dalam {{ periode_hari }} hari terakhir,
+    sehingga budget belum bisa diproyeksikan. Upload laporan iklan marketplace ini terlebih dahulu.
+  </div>
+  {% else %}
+  <div class="small text-muted mb-1">Berdasarkan ROAS historis {{ hasil_target.marketplace }}: <strong>{{ "%.2f"|format(hasil_target.roas_pakai) }}x</strong></div>
+  <div class="fs-5">Budget iklan yang disarankan: <strong class="text-primary">{{ hasil_target.budget_dibutuhkan | rupiah }}</strong></div>
+  <div class="small text-muted">untuk mencapai target omzet {{ hasil_target.target_omzet | rupiah }}</div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
