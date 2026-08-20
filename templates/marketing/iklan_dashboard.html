@@ -28,11 +28,52 @@
       <label class="form-label small">Sampai Tanggal</label>
       <input type="date" name="sampai" class="form-control" value="{{ sampai.isoformat() }}">
     </div>
-    <div class="col-md-3">
-      <button type="submit" class="btn btn-primary w-100">Terapkan Filter</button>
+    <div class="col-md-2">
+      <label class="form-label small">Target ROAS Min.</label>
+      <input type="number" step="0.1" name="roas_min" class="form-control" value="{{ threshold_roas }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small">Target CTR Min. (%)</label>
+      <input type="number" step="0.1" name="ctr_min" class="form-control" value="{{ threshold_ctr }}">
+    </div>
+    <div class="col-md-12">
+      <button type="submit" class="btn btn-primary">Terapkan Filter</button>
     </div>
   </div>
 </form>
+
+<div class="card p-3 mb-4">
+  <div class="fw-semibold mb-3">📊 Insight &amp; Rekomendasi Keputusan</div>
+  <div class="row g-3">
+    {% for b in breakdown %}
+    {% if b.verdict %}
+    <div class="col-md-6 col-lg-4">
+      <div class="border rounded p-3 h-100 border-{{ b.badge }}">
+        <div class="d-flex justify-content-between align-items-start mb-1">
+          <span class="fw-semibold">{{ b.marketplace }}</span>
+          <span class="badge bg-{{ b.badge }}">{{ b.verdict }}</span>
+        </div>
+        <div class="small text-muted mb-2">
+          ROAS {{ "%.2f"|format(b.roas) }}x &middot; CTR {{ "%.2f"|format(b.ctr) }}%
+          {% if b.tren_arah and b.tren_arah not in ('naik', 'turun', 'stabil') %}&middot; {{ b.tren_arah }}
+          {% elif b.tren_arah == 'naik' %}&middot; Tren 📈 Naik
+          {% elif b.tren_arah == 'turun' %}&middot; Tren 📉 Turun
+          {% elif b.tren_arah == 'stabil' %}&middot; Tren ➡️ Stabil
+          {% endif %}
+        </div>
+        <div class="small">{{ b.rekomendasi }}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% if not breakdown %}
+    <div class="col-12 text-center text-muted py-3">Belum ada data iklan untuk dianalisa pada rentang tanggal ini.</div>
+    {% endif %}
+  </div>
+  <div class="form-text mt-3 mb-0">
+    Keputusan dihitung dari ROAS &amp; CTR dibanding target di atas, plus perbandingan performa paruh awal vs paruh akhir periode terpilih untuk melihat arah tren.
+  </div>
+</div>
 
 <div class="row g-3 mb-4">
   <div class="col-md-2 col-6">
@@ -94,6 +135,7 @@
         <th class="text-end">Klik</th>
         <th class="text-end">Pesanan</th>
         <th class="text-end">CPA</th>
+        <th>Status</th>
       </tr>
     </thead>
     <tbody>
@@ -106,9 +148,10 @@
         <td class="text-end">{{ b.klik }}</td>
         <td class="text-end">{{ b.pesanan }}</td>
         <td class="text-end">{{ b.cpa | rupiah }}</td>
+        <td>{% if b.verdict %}<span class="badge bg-{{ b.badge }}">{{ b.verdict }}</span>{% else %}-{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="text-center text-muted py-3">Belum ada data iklan pada rentang tanggal ini.</td></tr>
+      <tr><td colspan="8" class="text-center text-muted py-3">Belum ada data iklan pada rentang tanggal ini.</td></tr>
       {% endfor %}
     </tbody>
   </table>

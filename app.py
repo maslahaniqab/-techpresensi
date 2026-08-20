@@ -1495,6 +1495,14 @@ def create_app():
             sampai = datetime.strptime(request.args.get("sampai", ""), "%Y-%m-%d").date()
         except ValueError:
             sampai = hari_ini
+        try:
+            threshold_roas = float(request.args.get("roas_min", 3))
+        except ValueError:
+            threshold_roas = 3.0
+        try:
+            threshold_ctr = float(request.args.get("ctr_min", 1))
+        except ValueError:
+            threshold_ctr = 1.0
 
         query = IklanMarketplace.query.filter(
             IklanMarketplace.tanggal >= dari, IklanMarketplace.tanggal <= sampai
@@ -1525,18 +1533,81 @@ def create_app():
             "konversi_rate": (total["pesanan"] / total["klik"] * 100) if total["klik"] else 0,
         }
 
+        def hitung_tren_arah(item_mp):
+            tanggal_unik = sorted(set(d.tanggal for d in item_mp))
+            if len(tanggal_unik) < 4:
+                return "Data belum cukup"
+            tengah = len(tanggal_unik) // 2
+            tanggal_awal = set(tanggal_unik[:tengah])
+            tanggal_akhir = set(tanggal_unik[tengah:])
+            t_awal = totalkan([d for d in item_mp if d.tanggal in tanggal_awal])
+            t_akhir = totalkan([d for d in item_mp if d.tanggal in tanggal_akhir])
+            if not t_awal["biaya"] or not t_akhir["biaya"]:
+                return "Data belum cukup"
+            roas_awal = t_awal["omzet"] / t_awal["biaya"]
+            roas_akhir = t_akhir["omzet"] / t_akhir["biaya"]
+            if roas_akhir >= roas_awal * 1.15:
+                return "naik"
+            if roas_akhir <= roas_awal * 0.85:
+                return "turun"
+            return "stabil"
+
+        def buat_insight(t, ctr, tren_arah):
+            roas = (t["omzet"] / t["biaya"]) if t["biaya"] else 0
+            if roas < threshold_roas * 0.5:
+                verdict, badge = "Sangat Kurang Efektif", "danger"
+                rekomendasi = (
+                    f"ROAS {roas:.2f}x jauh di bawah target {threshold_roas:.1f}x — iklan cenderung merugi. "
+                    "Pertimbangkan hentikan sementara atau turunkan drastis budgetnya, lalu evaluasi ulang "
+                    "produk, harga, atau target audiens sebelum lanjut beriklan."
+                )
+            elif roas < threshold_roas:
+                verdict, badge = "Kurang Efektif", "warning"
+                rekomendasi = (
+                    f"ROAS {roas:.2f}x masih di bawah target {threshold_roas:.1f}x. Perbaiki dulu materi iklan "
+                    "atau targeting sebelum menambah budget — jangan naikkan budget selama ROAS belum sesuai target."
+                )
+            elif tren_arah == "turun":
+                verdict, badge = "Waspada — Tren Menurun", "warning"
+                rekomendasi = (
+                    f"ROAS {roas:.2f}x masih di atas target, tapi cenderung menurun dibanding paruh awal periode ini. "
+                    "Pantau ketat dan tunda penambahan budget sampai tren membaik lagi."
+                )
+            else:
+                verdict, badge = "Bagus", "success"
+                tren_txt = " dan tren membaik" if tren_arah == "naik" else ""
+                rekomendasi = (
+                    f"ROAS {roas:.2f}x sudah di atas target {threshold_roas:.1f}x{tren_txt}. Pertimbangkan naikkan "
+                    "budget bertahap (+20-30%) untuk memaksimalkan momentum penjualan."
+                )
+            if ctr and ctr < threshold_ctr:
+                rekomendasi += (
+                    f" Catatan tambahan: CTR {ctr:.2f}% tergolong rendah (di bawah {threshold_ctr:.1f}%), "
+                    "materi iklan mungkin kurang menarik untuk diklik."
+                )
+            return verdict, badge, rekomendasi
+
         breakdown = []
         for mp in MARKETPLACE_LIST:
             item_mp = [d for d in semua_data if d.marketplace == mp]
             if not item_mp:
                 continue
             t = totalkan(item_mp)
-            breakdown.append({
+            ctr = (t["klik"] / t["impresi"] * 100) if t["impresi"] else 0
+            entri = {
                 "marketplace": mp,
                 **t,
                 "roas": (t["omzet"] / t["biaya"]) if t["biaya"] else 0,
+                "ctr": ctr,
                 "cpa": (t["biaya"] / t["pesanan"]) if t["pesanan"] else 0,
-            })
+            }
+            if t["biaya"] > 0:
+                tren_arah = hitung_tren_arah(item_mp)
+                verdict, badge, rekomendasi = buat_insight(t, ctr, tren_arah)
+                entri.update(tren_arah=tren_arah, verdict=verdict, badge=badge, rekomendasi=rekomendasi)
+            else:
+                entri.update(tren_arah=None, verdict=None, badge=None, rekomendasi=None)
+            breakdown.append(entri)
 
         tren_map = {}
         for d in data_terfilter:
@@ -1556,6 +1627,8 @@ def create_app():
             marketplace_filter=marketplace_filter,
             dari=dari,
             sampai=sampai,
+            threshold_roas=threshold_roas,
+            threshold_ctr=threshold_ctr,
             ringkasan=ringkasan,
             breakdown=breakdown,
             data_list=list(reversed(data_terfilter)),
