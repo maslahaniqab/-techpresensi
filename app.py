@@ -41,6 +41,7 @@ from xhtml2pdf import pisa
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
+    PengeluaranOperasional,
 )
 
 BULAN_NAMA = [
@@ -59,6 +60,13 @@ JABATAN_LIST = [
     "Manager",
     "Human Resource",
     "Supervisor",
+]
+
+KATEGORI_PENGELUARAN_RUTIN = [
+    "Internet Indihome",
+    "Internet Biznet",
+    "Listrik",
+    "Air",
 ]
 
 MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
@@ -1463,6 +1471,71 @@ def create_app():
                 "warning",
             )
         return redirect(url_for("penggajian_list", bulan=payroll.bulan, tahun=payroll.tahun))
+
+    # ---------- KEUANGAN: LAPORAN PENGELUARAN ----------
+    @app.route("/keuangan/pengeluaran", methods=["GET", "POST"])
+    @admin_required
+    def pengeluaran_list():
+        if request.method == "POST":
+            try:
+                tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal = None
+
+            kategori = request.form.get("kategori", "").strip()
+            if kategori == "__lainnya__":
+                kategori = request.form.get("kategori_manual", "").strip()
+
+            keterangan = request.form.get("keterangan", "").strip()
+            try:
+                jumlah = int(request.form.get("jumlah") or 0)
+            except ValueError:
+                jumlah = 0
+
+            if not tanggal or not kategori or jumlah <= 0:
+                flash("Lengkapi tanggal, kategori, dan jumlah (harus lebih dari 0).", "danger")
+                redirect_bulan, redirect_tahun = today_wib().month, today_wib().year
+            else:
+                db.session.add(
+                    PengeluaranOperasional(
+                        tanggal=tanggal, kategori=kategori, keterangan=keterangan, jumlah=jumlah
+                    )
+                )
+                db.session.commit()
+                flash("Pengeluaran berhasil dicatat.", "success")
+                redirect_bulan, redirect_tahun = tanggal.month, tanggal.year
+            return redirect(url_for("pengeluaran_list", bulan=redirect_bulan, tahun=redirect_tahun))
+
+        bulan = int(request.args.get("bulan", today_wib().month))
+        tahun = int(request.args.get("tahun", today_wib().year))
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+        pengeluaran = (
+            PengeluaranOperasional.query
+            .filter(PengeluaranOperasional.tanggal >= awal, PengeluaranOperasional.tanggal <= akhir)
+            .order_by(PengeluaranOperasional.tanggal.desc())
+            .all()
+        )
+        total = sum(p.jumlah for p in pengeluaran)
+        return render_template(
+            "pengeluaran_list.html",
+            pengeluaran=pengeluaran,
+            bulan=bulan,
+            tahun=tahun,
+            total=total,
+            kategori_rutin=KATEGORI_PENGELUARAN_RUTIN,
+            tanggal_default=today_wib().isoformat(),
+        )
+
+    @app.route("/keuangan/pengeluaran/<int:pid>/hapus", methods=["POST"])
+    @admin_required
+    def pengeluaran_hapus(pid):
+        p = db.session.get(PengeluaranOperasional, pid) or abort_404()
+        bulan, tahun = p.tanggal.month, p.tanggal.year
+        db.session.delete(p)
+        db.session.commit()
+        flash("Pengeluaran dihapus.", "info")
+        return redirect(url_for("pengeluaran_list", bulan=bulan, tahun=tahun))
 
     # ---------- PENGATURAN ----------
     @app.route("/pengaturan", methods=["GET", "POST"])

@@ -218,6 +218,15 @@ class ProdukIklan(db.Model):
     )
 
 
+class PengeluaranOperasional(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tanggal = db.Column(db.Date, nullable=False)
+    kategori = db.Column(db.String(64), nullable=False)
+    keterangan = db.Column(db.String(256))
+    jumlah = db.Column(db.Integer, nullable=False, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class PengajuanLembur(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)

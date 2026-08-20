@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Laporan Pengeluaran{% endblock %}
+{% block content %}
+<h3 class="mb-3">Laporan Pengeluaran Operasional</h3>
+
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label">Bulan</label>
+      <select name="bulan" class="form-select">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}" {{ 'selected' if i == bulan else '' }}>{{ bulan_nama_list[i] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label">Tahun</label>
+      <input type="number" name="tahun" class="form-control" value="{{ tahun }}" style="width: 110px;">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-outline-primary">Tampilkan</button>
+    </div>
+  </form>
+</div>
+
+<div class="card p-4 mb-3">
+  <h6 class="mb-3">Catat Pengeluaran</h6>
+  <form method="post" class="row g-2">
+    <div class="col-md-3">
+      <label class="form-label">Tanggal</label>
+      <input type="date" name="tanggal" class="form-control" value="{{ tanggal_default }}" required>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Kategori</label>
+      <select name="kategori" id="kategori" class="form-select" required>
+        {% for k in kategori_rutin %}
+        <option value="{{ k }}">{{ k }}</option>
+        {% endfor %}
+        <option value="__lainnya__">Lainnya (isi manual)</option>
+      </select>
+    </div>
+    <div class="col-md-3" id="kolomKategoriManual" style="display:none;">
+      <label class="form-label">Nama Beban Operasional</label>
+      <input type="text" name="kategori_manual" id="kategori_manual" class="form-control" placeholder="Contoh: Sewa Gudang">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Jumlah (Rp)</label>
+      <input type="number" name="jumlah" class="form-control" min="1" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Keterangan (opsional)</label>
+      <input type="text" name="keterangan" class="form-control" placeholder="Catatan tambahan">
+    </div>
+    <div class="col-12">
+      <button type="submit" class="btn btn-primary">Simpan Pengeluaran</button>
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th>Kategori</th>
+          <th>Keterangan</th>
+          <th class="text-end">Jumlah</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pengeluaran %}
+        <tr>
+          <td>{{ p.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ p.kategori }}</td>
+          <td>{{ p.keterangan or '-' }}</td>
+          <td class="text-end">{{ p.jumlah | rupiah }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('pengeluaran_hapus', pid=p.id) }}" class="d-inline"
+                  onsubmit="return confirm('Hapus catatan pengeluaran ini?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">Belum ada pengeluaran untuk periode ini.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if pengeluaran %}
+      <tfoot>
+        <tr class="fw-bold">
+          <td colspan="3" class="text-end">Total</td>
+          <td class="text-end">{{ total | rupiah }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleKategoriManual() {
+  const isLainnya = document.getElementById('kategori').value === '__lainnya__';
+  const kolom = document.getElementById('kolomKategoriManual');
+  const input = document.getElementById('kategori_manual');
+  kolom.style.display = isLainnya ? '' : 'none';
+  input.required = isLainnya;
+}
+document.getElementById('kategori').addEventListener('change', toggleKategoriManual);
+toggleKategoriManual();
+</script>
+{% endblock %}
