@@ -153,7 +153,7 @@ def tebak_kolom(headers, target_list=None):
 
 
 _KATA_KUNCI_HEADER = set()
-for _key, _label, _wajib, _kk in KOLOM_TARGET_IKLAN + KOLOM_TARGET_PRODUK:
+for _key, _label, _wajib, _kk in KOLOM_TARGET_IKLAN + KOLOM_TARGET_PRODUK + KOLOM_TARGET_PENJUALAN:
     _KATA_KUNCI_HEADER.update(_kk)
 
 
@@ -1883,6 +1883,8 @@ def create_app():
         return redirect(url_for("laba_rugi_input", bulan=bulan, tahun=tahun))
 
     # ---------- PENDAPATAN: PENJUALAN PER MARKETPLACE ----------
+    BATAS_ANGKA_WAJAR_PENJUALAN = 1_000_000_000_000  # Rp 1 triliun per baris -- di atas ini hampir pasti salah kolom (mis. ID pesanan ikut terbaca sebagai angka)
+
     def proses_baris_penjualan(rows, mapping):
         # File laporan marketplace umumnya 1 baris = 1 SKU/produk, bukan 1 pesanan —
         # order yang berisi beberapa produk akan muncul di beberapa baris dengan
@@ -1893,6 +1895,8 @@ def create_app():
         order_map = {}
         dilewati = 0
         contoh_gagal_tanggal = []
+        dilewati_angka_tidak_wajar = 0
+        contoh_angka_tidak_wajar = []
         for i, row in enumerate(rows):
             def ambil(key):
                 idx = mapping.get(key)
@@ -1912,10 +1916,19 @@ def create_app():
 
             total_penjualan_raw = ambil("total_penjualan")
             total_diskon_raw = ambil("total_diskon")
+            total_penjualan_val = parse_angka_iklan(total_penjualan_raw) if total_penjualan_raw is not None else 0
+            total_diskon_val = parse_angka_iklan(total_diskon_raw) if total_diskon_raw is not None else 0
+
+            if abs(total_penjualan_val) > BATAS_ANGKA_WAJAR_PENJUALAN or abs(total_diskon_val) > BATAS_ANGKA_WAJAR_PENJUALAN:
+                dilewati_angka_tidak_wajar += 1
+                if len(contoh_angka_tidak_wajar) < 3:
+                    contoh_angka_tidak_wajar.append(str(total_penjualan_raw if abs(total_penjualan_val) > BATAS_ANGKA_WAJAR_PENJUALAN else total_diskon_raw))
+                continue
+
             entri = {
                 "tanggal": tanggal,
-                "total_penjualan": parse_angka_iklan(total_penjualan_raw) if total_penjualan_raw is not None else 0,
-                "total_diskon": parse_angka_iklan(total_diskon_raw) if total_diskon_raw is not None else 0,
+                "total_penjualan": total_penjualan_val,
+                "total_diskon": total_diskon_val,
             }
 
             no_pesanan = str(ambil("no_pesanan") or "").strip() if pakai_no_pesanan else ""
@@ -1932,7 +1945,7 @@ def create_app():
             agregat[t]["total_penjualan"] += order["total_penjualan"]
             agregat[t]["total_diskon"] += order["total_diskon"]
 
-        return agregat, dilewati, contoh_gagal_tanggal
+        return agregat, dilewati, contoh_gagal_tanggal, dilewati_angka_tidak_wajar, contoh_angka_tidak_wajar
 
     def hitung_ringkasan_penjualan(bulan, tahun):
         awal = date(tahun, bulan, 1)
@@ -2047,13 +2060,22 @@ def create_app():
                 os.remove(path_tmp)
                 return redirect(url_for("pendapatan_penjualan_upload"))
 
-        agregat, dilewati, contoh_gagal = proses_baris_penjualan(data_tmp["rows"], mapping)
+        agregat, dilewati, contoh_gagal, dilewati_tidak_wajar, contoh_tidak_wajar = proses_baris_penjualan(data_tmp["rows"], mapping)
 
         if not agregat:
-            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
-            if contoh_gagal:
-                contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
-                pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+            if dilewati_tidak_wajar and not dilewati:
+                pesan = (
+                    "Tidak ada baris data yang berhasil diproses — nilai di kolom 'Total Penjualan'/'Total Diskon' "
+                    "yang dipilih tidak wajar (kemungkinan salah pilih kolom, misalnya ikut memilih kolom nomor "
+                    "pesanan/ID)."
+                )
+                if contoh_tidak_wajar:
+                    pesan += " Contoh nilai yang terbaca: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
+            else:
+                pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+                if contoh_gagal:
+                    contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
+                    pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
             flash(pesan, "danger")
             tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PENJUALAN}
             return render_template(
@@ -2082,7 +2104,16 @@ def create_app():
             existing.total_diskon = round(nilai["total_diskon"])
             existing.sumber_file = sumber_file
             existing.dibuat_pada = now_wib()
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            flash(
+                "Gagal menyimpan — ada angka yang tidak wajar di data. Kemungkinan kolom yang dipilih salah "
+                "(mis. ikut memilih kolom nomor pesanan/ID sebagai Total Penjualan). Coba cocokkan kolom lagi.",
+                "danger",
+            )
+            return redirect(url_for("pendapatan_penjualan_upload"))
         os.remove(path_tmp)
 
         tgl_min = min(agregat.keys())
@@ -2092,6 +2123,10 @@ def create_app():
             pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
             if contoh_gagal:
                 pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+        if dilewati_tidak_wajar:
+            pesan += f" {dilewati_tidak_wajar} baris dilewati karena angkanya tidak wajar (kemungkinan salah kolom)."
+            if contoh_tidak_wajar:
+                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
         flash(pesan, "success")
 
         return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
