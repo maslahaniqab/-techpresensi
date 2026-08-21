@@ -15,10 +15,12 @@
     {% if settings.logo_filename %}
     <img src="{{ url_for('static', filename='uploads/' + settings.logo_filename) }}" alt="Logo" style="max-height:80px; max-width:180px;" class="mb-2">
     {% endif %}
-    {% if settings.alamat_perusahaan or settings.kontak_perusahaan or settings.instagram_perusahaan %}
+    {% if settings.alamat_perusahaan or settings.no_hp_perusahaan or settings.email_perusahaan or settings.instagram_perusahaan %}
     <div class="fw-semibold">{{ settings.nama_perusahaan }}</div>
     <div class="small text-muted">
-      {{ settings.alamat_perusahaan }}{% if settings.kontak_perusahaan %} {{ settings.kontak_perusahaan }}{% endif %}
+      {{ settings.alamat_perusahaan }}
+      {%- if settings.no_hp_perusahaan %} {{ settings.no_hp_perusahaan }}{% endif -%}
+      {%- if settings.email_perusahaan %} {{ settings.email_perusahaan }}{% endif %}
       {% if settings.instagram_perusahaan %}<br>IG: {{ settings.instagram_perusahaan }}{% endif %}
     </div>
     <hr>

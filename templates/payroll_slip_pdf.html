@@ -26,10 +26,12 @@
 <body>
   <div class="center">
     {% if logo_path %}<img src="{{ logo_path }}" width="70" height="70" style="width:70px; height:70px;"><br>{% endif %}
-    {% if settings.alamat_perusahaan or settings.kontak_perusahaan or settings.instagram_perusahaan %}
+    {% if settings.alamat_perusahaan or settings.no_hp_perusahaan or settings.email_perusahaan or settings.instagram_perusahaan %}
     <b>{{ settings.nama_perusahaan }}</b><br>
     <span class="muted">
-      {{ settings.alamat_perusahaan }}{% if settings.kontak_perusahaan %} {{ settings.kontak_perusahaan }}{% endif %}
+      {{ settings.alamat_perusahaan }}
+      {%- if settings.no_hp_perusahaan %} {{ settings.no_hp_perusahaan }}{% endif -%}
+      {%- if settings.email_perusahaan %} {{ settings.email_perusahaan }}{% endif %}
       {% if settings.instagram_perusahaan %}<br>IG: {{ settings.instagram_perusahaan }}{% endif %}
     </span>
     <hr>

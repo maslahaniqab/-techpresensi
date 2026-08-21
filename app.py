@@ -1519,9 +1519,9 @@ def create_app():
             return False, "Pengiriman email belum dikonfigurasi di server (SMTP_EMAIL/SMTP_APP_PASSWORD)."
 
         penerima = {smtp_email.strip().lower(): smtp_email, "maslahaniqab@gmail.com": "maslahaniqab@gmail.com"}
-        kontak = (settings.kontak_perusahaan or "").strip()
-        if "@" in kontak:
-            penerima[kontak.lower()] = kontak
+        email_manager = (settings.email_perusahaan or "").strip()
+        if email_manager:
+            penerima[email_manager.lower()] = email_manager
         daftar_penerima = list(penerima.values())
 
         karyawan = pengajuan.employee
@@ -1549,10 +1549,7 @@ def create_app():
             return False, str(e)
 
     def buat_wa_link_notifikasi_izin(pengajuan, settings):
-        kontak = (settings.kontak_perusahaan or "").strip()
-        if not kontak or "@" in kontak:
-            return None
-        nomor = normalisasi_no_hp_wa(kontak)
+        nomor = normalisasi_no_hp_wa(settings.no_hp_perusahaan)
         if not nomor:
             return None
         pesan = (
@@ -2159,7 +2156,8 @@ def create_app():
             settings.tarif_co_host = int(request.form.get("tarif_co_host") or 0)
             settings.bonus_target_tercapai = int(request.form.get("bonus_target_tercapai") or 0)
             settings.alamat_perusahaan = request.form.get("alamat_perusahaan", "").strip()
-            settings.kontak_perusahaan = request.form.get("kontak_perusahaan", "").strip()
+            settings.no_hp_perusahaan = request.form.get("no_hp_perusahaan", "").strip()
+            settings.email_perusahaan = request.form.get("email_perusahaan", "").strip()
             settings.instagram_perusahaan = request.form.get("instagram_perusahaan", "").strip()
             settings.kota_perusahaan = request.form.get("kota_perusahaan", "").strip()
 

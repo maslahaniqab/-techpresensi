@@ -29,11 +29,17 @@
       </div>
     </div>
     <div class="row">
-      <div class="col-md-6 mb-3">
-        <label class="form-label">Kontak (No. HP/Email)</label>
-        <input type="text" name="kontak_perusahaan" class="form-control" value="{{ settings.kontak_perusahaan }}">
+      <div class="col-md-4 mb-3">
+        <label class="form-label">No. HP Perusahaan</label>
+        <input type="text" name="no_hp_perusahaan" class="form-control" value="{{ settings.no_hp_perusahaan }}" placeholder="08xxxxxxxxxx">
+        <div class="form-text">Dipakai untuk tombol Notifikasi WA.</div>
       </div>
-      <div class="col-md-6 mb-3">
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Email Perusahaan</label>
+        <input type="email" name="email_perusahaan" class="form-control" value="{{ settings.email_perusahaan }}" placeholder="nama@email.com">
+        <div class="form-text">Dipakai untuk notifikasi email.</div>
+      </div>
+      <div class="col-md-4 mb-3">
         <label class="form-label">Instagram</label>
         <input type="text" name="instagram_perusahaan" class="form-control" value="{{ settings.instagram_perusahaan }}">
       </div>

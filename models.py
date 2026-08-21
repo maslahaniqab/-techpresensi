@@ -48,6 +48,8 @@ class Settings(db.Model):
     nama_perusahaan = db.Column(db.String(128), default="Perusahaan Saya")
     alamat_perusahaan = db.Column(db.String(256), default="")
     kontak_perusahaan = db.Column(db.String(64), default="")
+    no_hp_perusahaan = db.Column(db.String(32), default="")
+    email_perusahaan = db.Column(db.String(128), default="")
     instagram_perusahaan = db.Column(db.String(64), default="")
     kota_perusahaan = db.Column(db.String(64), default="Bandung")
     logo_filename = db.Column(db.String(128), default="")
