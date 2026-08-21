@@ -137,6 +137,55 @@ KOLOM_TARGET_PENJUALAN = [
     ("total_diskon", "Total Diskon", False, ["total diskon"]),
 ]
 
+# Header persis yang sudah pernah dikonfirmasi cocok untuk laporan Pesanan Selesai dari
+# marketplace tertentu -- kalau SEMUA kolom wajib pada salah satu profil ini ketemu persis
+# di file yang diupload, langkah "Cocokkan Kolom" manual dilewati dan file langsung diproses.
+PROFIL_HEADER_PENJUALAN = [
+    {
+        "nama": "Shopee (header Bahasa Indonesia)",
+        "kolom": {
+            "tanggal": "Waktu Pesanan Selesai",
+            "no_pesanan": "No. Pesanan",
+            "total_penjualan": "Total Pembayaran",
+            "total_diskon": "Total Diskon",
+        },
+    },
+    {
+        "nama": "Format deskriptif Bahasa Inggris (mis. TikTok Shop/Tokopedia)",
+        "kolom": {
+            "tanggal": "Order paid time.",
+            "no_pesanan": "Platform unique order ID.",
+            "total_penjualan": "Order total amount paid by the buyer.",
+            "total_diskon": None,
+        },
+    },
+]
+
+
+def cocokkan_profil_header_penjualan(headers):
+    """Cari profil header yang cocok persis dengan file yang diupload. Mengembalikan
+    (nama_profil, mapping) jika semua kolom WAJIB pada satu profil ditemukan persis
+    di headers, atau (None, None) jika tidak ada yang cocok sepenuhnya."""
+    headers_lower = {}
+    for i, h in enumerate(headers):
+        kunci = str(h).strip().lower()
+        if kunci not in headers_lower:
+            headers_lower[kunci] = i
+
+    for profil in PROFIL_HEADER_PENJUALAN:
+        mapping = {}
+        lengkap = True
+        for key, _label, wajib, _kk in KOLOM_TARGET_PENJUALAN:
+            nama_kolom = profil["kolom"].get(key)
+            idx = headers_lower.get(nama_kolom.strip().lower()) if nama_kolom else None
+            mapping[key] = idx
+            if wajib and idx is None:
+                lengkap = False
+                break
+        if lengkap:
+            return profil["nama"], mapping
+    return None, None
+
 
 def tebak_kolom(headers, target_list=None):
     target_list = target_list or KOLOM_TARGET_IKLAN
@@ -2002,6 +2051,98 @@ def create_app():
             tanggal_default=today_wib().isoformat(),
         )
 
+    def _render_ulang_mapping_penjualan(token, data_tmp, mapping=None, baris_dilewati_awal=None):
+        tebakan = (
+            {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PENJUALAN}
+            if mapping is not None
+            else tebak_kolom(data_tmp["headers"], KOLOM_TARGET_PENJUALAN)
+        )
+        return render_template(
+            "marketing/iklan_mapping.html",
+            token=token,
+            marketplace=data_tmp["marketplace"],
+            headers=data_tmp["headers"],
+            preview_rows=data_tmp["rows"][:8],
+            kolom_target=KOLOM_TARGET_PENJUALAN,
+            tebakan=tebakan,
+            jumlah_baris=len(data_tmp["rows"]),
+            baris_dilewati_awal=baris_dilewati_awal,
+            judul="Cocokkan Kolom — Laporan Penjualan",
+            konfirmasi_url=url_for("pendapatan_penjualan_konfirmasi"),
+            upload_url=url_for("pendapatan_penjualan_upload"),
+        )
+
+    def _finalisasi_import_penjualan(data_tmp, mapping):
+        """Proses+simpan data penjualan. Mengembalikan (berhasil, pesan)."""
+        jumlah_baris_asli = len(data_tmp["rows"])
+        agregat, dilewati, contoh_gagal, dilewati_tidak_wajar, contoh_tidak_wajar = proses_baris_penjualan(
+            data_tmp["rows"], mapping
+        )
+
+        if not agregat:
+            if dilewati_tidak_wajar and not dilewati:
+                pesan = (
+                    "Tidak ada baris data yang berhasil diproses — nilai di kolom 'Total Penjualan'/'Total Diskon' "
+                    "yang dipilih tidak wajar (kemungkinan salah pilih kolom, misalnya ikut memilih kolom nomor "
+                    "pesanan/ID)."
+                )
+                if contoh_tidak_wajar:
+                    pesan += " Contoh nilai yang terbaca: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
+            else:
+                pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+                if contoh_gagal:
+                    contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
+                    pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+            return False, pesan
+
+        marketplace = data_tmp["marketplace"]
+        sumber_file = data_tmp.get("sumber_file", "")
+        jumlah_pesanan_unik = sum(v["jumlah_pesanan"] for v in agregat.values())
+        for tanggal, nilai in agregat.items():
+            existing = PenjualanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal).first()
+            if not existing:
+                existing = PenjualanMarketplace(marketplace=marketplace, tanggal=tanggal)
+                db.session.add(existing)
+            existing.jumlah_pesanan = round(nilai["jumlah_pesanan"])
+            existing.total_penjualan = round(nilai["total_penjualan"])
+            existing.total_diskon = round(nilai["total_diskon"])
+            existing.sumber_file = sumber_file
+            existing.dibuat_pada = now_wib()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            return False, (
+                "Gagal menyimpan — ada angka yang tidak wajar di data. Kemungkinan kolom yang dipilih salah "
+                "(mis. ikut memilih kolom nomor pesanan/ID sebagai Total Penjualan). Coba cocokkan kolom lagi."
+            )
+
+        tgl_min = min(agregat.keys())
+        tgl_max = max(agregat.keys())
+        total_dilewati = dilewati + dilewati_tidak_wajar
+        if total_dilewati == 0:
+            pesan = (
+                f"Berhasil impor semua {jumlah_baris_asli} baris dari file — seluruhnya berhasil diproses, "
+                f"tidak ada yang terlewat. Tersimpan {jumlah_pesanan_unik} pesanan unik pada {len(agregat)} hari "
+                f"({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')}) untuk {marketplace}."
+            )
+        else:
+            pesan = (
+                f"Impor selesai: {jumlah_baris_asli} baris dibaca dari file, {jumlah_pesanan_unik} pesanan unik "
+                f"berhasil disimpan pada {len(agregat)} hari ({tgl_min.strftime('%d/%m/%Y')} - "
+                f"{tgl_max.strftime('%d/%m/%Y')}) untuk {marketplace}."
+            )
+            if dilewati:
+                pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
+                if contoh_gagal:
+                    pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+            if dilewati_tidak_wajar:
+                pesan += f" {dilewati_tidak_wajar} baris dilewati karena angkanya tidak wajar (kemungkinan salah kolom)."
+                if contoh_tidak_wajar:
+                    pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
+
+        return True, (pesan, tgl_min)
+
     @app.route("/pendapatan/penjualan/upload", methods=["GET", "POST"])
     @admin_required
     def pendapatan_penjualan_upload():
@@ -2021,21 +2162,27 @@ def create_app():
                 flash(error, "danger")
                 return redirect(url_for("pendapatan_penjualan_upload"))
 
-            tebakan = tebak_kolom(headers, KOLOM_TARGET_PENJUALAN)
-            return render_template(
-                "marketing/iklan_mapping.html",
-                token=token,
-                marketplace=marketplace,
-                headers=headers,
-                preview_rows=rows_bersih[:8],
-                kolom_target=KOLOM_TARGET_PENJUALAN,
-                tebakan=tebakan,
-                jumlah_baris=len(rows_bersih),
-                baris_dilewati_awal=idx_header,
-                judul="Cocokkan Kolom — Laporan Penjualan",
-                konfirmasi_url=url_for("pendapatan_penjualan_konfirmasi"),
-                upload_url=url_for("pendapatan_penjualan_upload"),
-            )
+            path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"penjualan_{token}.json")
+            data_tmp = {
+                "marketplace": marketplace,
+                "headers": headers,
+                "rows": rows_bersih,
+                "sumber_file": secure_filename(file.filename),
+            }
+
+            nama_profil, mapping_otomatis = cocokkan_profil_header_penjualan(headers)
+            if nama_profil:
+                berhasil, hasil = _finalisasi_import_penjualan(data_tmp, mapping_otomatis)
+                if berhasil:
+                    os.remove(path_tmp)
+                    pesan, tgl_min = hasil
+                    flash(f"Format kolom dikenali otomatis ({nama_profil}). {pesan}", "success")
+                    return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
+                # Profil cocok tapi tetap gagal (mis. angka tidak wajar) -- jatuhkan ke pencocokan manual.
+                flash(hasil, "danger")
+                return _render_ulang_mapping_penjualan(token, data_tmp, mapping_otomatis, baris_dilewati_awal=idx_header)
+
+            return _render_ulang_mapping_penjualan(token, data_tmp, baris_dilewati_awal=idx_header)
 
         return render_template("pendapatan/penjualan_upload.html", marketplace_list=MARKETPLACE_LIST)
 
@@ -2060,75 +2207,14 @@ def create_app():
                 os.remove(path_tmp)
                 return redirect(url_for("pendapatan_penjualan_upload"))
 
-        agregat, dilewati, contoh_gagal, dilewati_tidak_wajar, contoh_tidak_wajar = proses_baris_penjualan(data_tmp["rows"], mapping)
+        berhasil, hasil = _finalisasi_import_penjualan(data_tmp, mapping)
+        if not berhasil:
+            flash(hasil, "danger")
+            return _render_ulang_mapping_penjualan(token, data_tmp, mapping)
 
-        if not agregat:
-            if dilewati_tidak_wajar and not dilewati:
-                pesan = (
-                    "Tidak ada baris data yang berhasil diproses — nilai di kolom 'Total Penjualan'/'Total Diskon' "
-                    "yang dipilih tidak wajar (kemungkinan salah pilih kolom, misalnya ikut memilih kolom nomor "
-                    "pesanan/ID)."
-                )
-                if contoh_tidak_wajar:
-                    pesan += " Contoh nilai yang terbaca: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
-            else:
-                pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
-                if contoh_gagal:
-                    contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
-                    pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
-            flash(pesan, "danger")
-            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PENJUALAN}
-            return render_template(
-                "marketing/iklan_mapping.html",
-                token=token,
-                marketplace=data_tmp["marketplace"],
-                headers=data_tmp["headers"],
-                preview_rows=data_tmp["rows"][:8],
-                kolom_target=KOLOM_TARGET_PENJUALAN,
-                tebakan=tebakan_ulang,
-                jumlah_baris=len(data_tmp["rows"]),
-                judul="Cocokkan Kolom — Laporan Penjualan",
-                konfirmasi_url=url_for("pendapatan_penjualan_konfirmasi"),
-                upload_url=url_for("pendapatan_penjualan_upload"),
-            )
-
-        marketplace = data_tmp["marketplace"]
-        sumber_file = data_tmp.get("sumber_file", "")
-        for tanggal, nilai in agregat.items():
-            existing = PenjualanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal).first()
-            if not existing:
-                existing = PenjualanMarketplace(marketplace=marketplace, tanggal=tanggal)
-                db.session.add(existing)
-            existing.jumlah_pesanan = round(nilai["jumlah_pesanan"])
-            existing.total_penjualan = round(nilai["total_penjualan"])
-            existing.total_diskon = round(nilai["total_diskon"])
-            existing.sumber_file = sumber_file
-            existing.dibuat_pada = now_wib()
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            flash(
-                "Gagal menyimpan — ada angka yang tidak wajar di data. Kemungkinan kolom yang dipilih salah "
-                "(mis. ikut memilih kolom nomor pesanan/ID sebagai Total Penjualan). Coba cocokkan kolom lagi.",
-                "danger",
-            )
-            return redirect(url_for("pendapatan_penjualan_upload"))
         os.remove(path_tmp)
-
-        tgl_min = min(agregat.keys())
-        tgl_max = max(agregat.keys())
-        pesan = f"Berhasil impor {len(agregat)} hari data penjualan {marketplace} ({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')})."
-        if dilewati:
-            pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
-            if contoh_gagal:
-                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
-        if dilewati_tidak_wajar:
-            pesan += f" {dilewati_tidak_wajar} baris dilewati karena angkanya tidak wajar (kemungkinan salah kolom)."
-            if contoh_tidak_wajar:
-                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
+        pesan, tgl_min = hasil
         flash(pesan, "success")
-
         return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
 
     @app.route("/pendapatan/penjualan/manual", methods=["POST"])
