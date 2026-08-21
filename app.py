@@ -159,6 +159,15 @@ PROFIL_HEADER_PENJUALAN = [
             "total_diskon": None,
         },
     },
+    {
+        "nama": "Lazada (nama kolom API)",
+        "kolom": {
+            "tanggal": "deliveredDate",
+            "no_pesanan": "orderNumber",
+            "total_penjualan": "paidPrice",
+            "total_diskon": None,  # paidPrice sudah bersih setelah diskon, jangan dipotong lagi
+        },
+    },
 ]
 
 
@@ -185,6 +194,89 @@ def cocokkan_profil_header_penjualan(headers):
         if lengkap:
             return profil["nama"], mapping
     return None, None
+
+
+BATAS_ANGKA_WAJAR_PENJUALAN = 1_000_000_000_000  # Rp 1 triliun per baris -- di atas ini hampir pasti salah kolom (mis. ID pesanan ikut terbaca sebagai angka)
+
+_KATA_TANGGAL_PRIORITAS = ["selesai", "complete", "completed", "deliver", "paid", "payment", "finish"]
+_KATA_TOTAL_PRIORITAS = ["paid", "payment", "amount", "pembayaran", "penjualan", "price", "total"]
+_KATA_TOTAL_HINDARI = ["id", "code", "number", "sku", "qty", "quantity", "weight", "berat", "phone", "postcode", "zip"]
+
+
+def deteksi_otomatis_kolom_penjualan(headers, rows):
+    """Deteksi kolom Tanggal/No. Pesanan/Total Penjualan/Total Diskon dari ISI datanya
+    (bukan cuma nama header), dipakai saat file tidak cocok dengan profil header manapun
+    yang sudah dikenal (mis. marketplace/format baru). Mengembalikan dict mapping
+    (index kolom atau None kalau tidak ketemu)."""
+    sampel = rows[:15]
+    headers_lower = [str(h).strip().lower() for h in headers]
+    n = len(headers)
+
+    def tingkat_valid_tanggal(idx):
+        ok = sum(1 for r in sampel if idx < len(r) and parse_tanggal_iklan(r[idx]))
+        return ok / max(1, len(sampel))
+
+    def nilai_numerik(idx):
+        hasil = []
+        for r in sampel:
+            if idx < len(r) and r[idx] not in (None, ""):
+                v = parse_angka_iklan(r[idx])
+                if v:
+                    hasil.append(v)
+        return hasil
+
+    idx_tanggal = None
+    skor_tanggal_terbaik = 0
+    for i in range(n):
+        rate = tingkat_valid_tanggal(i)
+        if rate < 0.7:
+            continue
+        bonus = 1 if any(k in headers_lower[i] for k in _KATA_TANGGAL_PRIORITAS) else 0
+        skor = rate + bonus
+        if skor > skor_tanggal_terbaik:
+            skor_tanggal_terbaik, idx_tanggal = skor, i
+
+    idx_total = None
+    skor_total_terbaik = -1
+    for i in range(n):
+        if i == idx_tanggal:
+            continue
+        h = headers_lower[i]
+        if any(k in h for k in _KATA_TOTAL_HINDARI):
+            continue
+        nilai = nilai_numerik(i)
+        if len(nilai) < len(sampel) * 0.5:
+            continue
+        median = sorted(abs(v) for v in nilai)[len(nilai) // 2]
+        if median >= BATAS_ANGKA_WAJAR_PENJUALAN or median < 500:
+            continue
+        skor = 2 if any(k in h for k in _KATA_TOTAL_PRIORITAS) else 1
+        if skor > skor_total_terbaik:
+            skor_total_terbaik, idx_total = skor, i
+
+    idx_no_pesanan = None
+    for i, h in enumerate(headers_lower):
+        if "order" in h and ("number" in h or "id" in h):
+            idx_no_pesanan = i
+            break
+        if "no. pesanan" in h or "no pesanan" in h or "nomor pesanan" in h:
+            idx_no_pesanan = i
+            break
+
+    idx_diskon = None
+    for i, h in enumerate(headers_lower):
+        if i in (idx_tanggal, idx_total):
+            continue
+        if "discount" in h or "diskon" in h:
+            idx_diskon = i
+            break
+
+    return {
+        "tanggal": idx_tanggal,
+        "no_pesanan": idx_no_pesanan,
+        "total_penjualan": idx_total,
+        "total_diskon": idx_diskon,
+    }
 
 
 def tebak_kolom(headers, target_list=None):
@@ -1932,8 +2024,6 @@ def create_app():
         return redirect(url_for("laba_rugi_input", bulan=bulan, tahun=tahun))
 
     # ---------- PENDAPATAN: PENJUALAN PER MARKETPLACE ----------
-    BATAS_ANGKA_WAJAR_PENJUALAN = 1_000_000_000_000  # Rp 1 triliun per baris -- di atas ini hampir pasti salah kolom (mis. ID pesanan ikut terbaca sebagai angka)
-
     def proses_baris_penjualan(rows, mapping):
         # File laporan marketplace umumnya 1 baris = 1 SKU/produk, bukan 1 pesanan —
         # order yang berisi beberapa produk akan muncul di beberapa baris dengan
@@ -2051,27 +2141,6 @@ def create_app():
             tanggal_default=today_wib().isoformat(),
         )
 
-    def _render_ulang_mapping_penjualan(token, data_tmp, mapping=None, baris_dilewati_awal=None):
-        tebakan = (
-            {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PENJUALAN}
-            if mapping is not None
-            else tebak_kolom(data_tmp["headers"], KOLOM_TARGET_PENJUALAN)
-        )
-        return render_template(
-            "marketing/iklan_mapping.html",
-            token=token,
-            marketplace=data_tmp["marketplace"],
-            headers=data_tmp["headers"],
-            preview_rows=data_tmp["rows"][:8],
-            kolom_target=KOLOM_TARGET_PENJUALAN,
-            tebakan=tebakan,
-            jumlah_baris=len(data_tmp["rows"]),
-            baris_dilewati_awal=baris_dilewati_awal,
-            judul="Cocokkan Kolom — Laporan Penjualan",
-            konfirmasi_url=url_for("pendapatan_penjualan_konfirmasi"),
-            upload_url=url_for("pendapatan_penjualan_upload"),
-        )
-
     def _finalisasi_import_penjualan(data_tmp, mapping):
         """Proses+simpan data penjualan. Mengembalikan (berhasil, pesan)."""
         jumlah_baris_asli = len(data_tmp["rows"])
@@ -2082,17 +2151,18 @@ def create_app():
         if not agregat:
             if dilewati_tidak_wajar and not dilewati:
                 pesan = (
-                    "Tidak ada baris data yang berhasil diproses — nilai di kolom 'Total Penjualan'/'Total Diskon' "
-                    "yang dipilih tidak wajar (kemungkinan salah pilih kolom, misalnya ikut memilih kolom nomor "
-                    "pesanan/ID)."
+                    "Tidak ada baris data yang berhasil diproses — nilai di kolom Total Penjualan/Total Diskon yang "
+                    "terdeteksi tidak wajar (kemungkinan salah kenali kolom, misalnya ikut mengenali kolom nomor "
+                    "pesanan/ID sebagai jumlah uang)."
                 )
                 if contoh_tidak_wajar:
                     pesan += " Contoh nilai yang terbaca: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
             else:
-                pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+                pesan = "Tidak ada baris data yang berhasil diproses — kolom Tanggal yang terdeteksi sepertinya bukan tanggal yang valid."
                 if contoh_gagal:
                     contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
-                    pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+                    pesan += f" Contoh nilai di kolom itu: {contoh}."
+            pesan += " Kirimkan daftar nama kolom di file ini ke admin supaya format file ini bisa didukung."
             return False, pesan
 
         marketplace = data_tmp["marketplace"]
@@ -2113,12 +2183,26 @@ def create_app():
         except Exception:
             db.session.rollback()
             return False, (
-                "Gagal menyimpan — ada angka yang tidak wajar di data. Kemungkinan kolom yang dipilih salah "
-                "(mis. ikut memilih kolom nomor pesanan/ID sebagai Total Penjualan). Coba cocokkan kolom lagi."
+                "Gagal menyimpan — ada angka yang tidak wajar di data. Kemungkinan sistem salah mengenali kolom "
+                "(mis. kolom nomor pesanan/ID terbaca sebagai Total Penjualan). Kirimkan daftar nama kolom di file "
+                "ini ke admin supaya format file ini bisa didukung."
             )
 
         tgl_min = min(agregat.keys())
         tgl_max = max(agregat.keys())
+
+        def nama_kolom(key):
+            idx = mapping.get(key)
+            if idx is None or idx >= len(data_tmp["headers"]):
+                return None
+            return str(data_tmp["headers"][idx]).strip()
+
+        keterangan_kolom = ", ".join(
+            f"{label}='{nama_kolom(key)}'"
+            for key, label, _wajib, _kk in KOLOM_TARGET_PENJUALAN
+            if nama_kolom(key)
+        )
+
         total_dilewati = dilewati + dilewati_tidak_wajar
         if total_dilewati == 0:
             pesan = (
@@ -2140,6 +2224,8 @@ def create_app():
                 pesan += f" {dilewati_tidak_wajar} baris dilewati karena angkanya tidak wajar (kemungkinan salah kolom)."
                 if contoh_tidak_wajar:
                     pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_tidak_wajar) + "."
+        if keterangan_kolom:
+            pesan += f" Kolom yang dipakai: {keterangan_kolom}."
 
         return True, (pesan, tgl_min)
 
@@ -2170,52 +2256,33 @@ def create_app():
                 "sumber_file": secure_filename(file.filename),
             }
 
-            nama_profil, mapping_otomatis = cocokkan_profil_header_penjualan(headers)
-            if nama_profil:
-                berhasil, hasil = _finalisasi_import_penjualan(data_tmp, mapping_otomatis)
-                if berhasil:
-                    os.remove(path_tmp)
-                    pesan, tgl_min = hasil
-                    flash(f"Format kolom dikenali otomatis ({nama_profil}). {pesan}", "success")
-                    return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
-                # Profil cocok tapi tetap gagal (mis. angka tidak wajar) -- jatuhkan ke pencocokan manual.
-                flash(hasil, "danger")
-                return _render_ulang_mapping_penjualan(token, data_tmp, mapping_otomatis, baris_dilewati_awal=idx_header)
+            nama_profil, mapping = cocokkan_profil_header_penjualan(headers)
+            if not nama_profil:
+                mapping = deteksi_otomatis_kolom_penjualan(headers, rows_bersih)
+                if mapping.get("tanggal") is not None and mapping.get("total_penjualan") is not None:
+                    nama_profil = "deteksi otomatis dari isi data"
 
-            return _render_ulang_mapping_penjualan(token, data_tmp, baris_dilewati_awal=idx_header)
-
-        return render_template("pendapatan/penjualan_upload.html", marketplace_list=MARKETPLACE_LIST)
-
-    @app.route("/pendapatan/penjualan/konfirmasi", methods=["POST"])
-    @admin_required
-    def pendapatan_penjualan_konfirmasi():
-        token = request.form.get("token", "")
-        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"penjualan_{token}.json")
-        if not os.path.isfile(path_tmp):
-            flash("Sesi upload sudah kedaluwarsa, silakan upload ulang file.", "danger")
-            return redirect(url_for("pendapatan_penjualan_upload"))
-
-        with open(path_tmp, "r", encoding="utf-8") as f:
-            data_tmp = json.load(f)
-
-        mapping = {}
-        for key, label, wajib, _kk in KOLOM_TARGET_PENJUALAN:
-            nilai = request.form.get(f"map_{key}", "")
-            mapping[key] = int(nilai) if nilai != "" else None
-            if wajib and mapping[key] is None:
-                flash(f"Kolom '{label}' wajib dipilih.", "danger")
+            if not nama_profil:
                 os.remove(path_tmp)
+                flash(
+                    "Sistem tidak berhasil mengenali kolom Tanggal dan Total Penjualan secara otomatis dari file "
+                    f"ini. Header yang terbaca: {', '.join(str(h) for h in headers)}. Kirimkan daftar kolom ini ke "
+                    "admin supaya format file ini bisa didukung.",
+                    "danger",
+                )
                 return redirect(url_for("pendapatan_penjualan_upload"))
 
-        berhasil, hasil = _finalisasi_import_penjualan(data_tmp, mapping)
-        if not berhasil:
-            flash(hasil, "danger")
-            return _render_ulang_mapping_penjualan(token, data_tmp, mapping)
+            berhasil, hasil = _finalisasi_import_penjualan(data_tmp, mapping)
+            os.remove(path_tmp)
+            if berhasil:
+                pesan, tgl_min = hasil
+                flash(f"Format kolom dikenali otomatis ({nama_profil}). {pesan}", "success")
+                return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
 
-        os.remove(path_tmp)
-        pesan, tgl_min = hasil
-        flash(pesan, "success")
-        return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tgl_min.month, tahun=tgl_min.year))
+            flash(hasil, "danger")
+            return redirect(url_for("pendapatan_penjualan_upload"))
+
+        return render_template("pendapatan/penjualan_upload.html", marketplace_list=MARKETPLACE_LIST)
 
     @app.route("/pendapatan/penjualan/manual", methods=["POST"])
     @admin_required

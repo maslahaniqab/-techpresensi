@@ -9,11 +9,11 @@
 <div class="card p-4" style="max-width: 640px;">
   <p class="text-muted small">
     Export laporan <strong>Pesanan Selesai</strong> dari dashboard marketplace masing-masing dalam format
-    <strong>CSV</strong> atau <strong>XLSX</strong>, lalu upload di sini. Sistem akan menjumlahkan Total
-    Penjualan (Total Pembayaran) dan Total Diskon per hari &mdash; jika file memiliki kolom
-    <strong>No. Pesanan</strong>, baris dengan nomor pesanan yang sama (multi-produk dalam 1 pesanan) akan
-    otomatis digabung agar tidak terhitung dobel. Nama kolom di file boleh berbeda-beda &mdash; Anda akan
-    diminta mencocokkan kolom pada langkah berikutnya.
+    <strong>CSV</strong> atau <strong>XLSX</strong>, lalu upload di sini. Sistem otomatis mengenali kolom
+    Tanggal, Total Penjualan, dan Total Diskon dari isi file &mdash; tidak perlu mencocokkan kolom manual.
+    Baris dengan nomor pesanan yang sama (multi-produk dalam 1 pesanan) otomatis digabung agar tidak
+    terhitung dobel. Setelah selesai, akan muncul ringkasan berapa baris berhasil diimpor dan kolom apa
+    saja yang dipakai, supaya bisa langsung dicek kesesuaiannya.
   </p>
   <form method="post" enctype="multipart/form-data">
     <div class="mb-3">
@@ -29,7 +29,7 @@
       <label class="form-label">File Laporan (CSV/XLSX)</label>
       <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xlsm" required>
     </div>
-    <button type="submit" class="btn btn-primary">Lanjut &rarr; Cocokkan Kolom</button>
+    <button type="submit" class="btn btn-primary">Upload &amp; Impor Otomatis</button>
   </form>
 </div>
 {% endblock %}
