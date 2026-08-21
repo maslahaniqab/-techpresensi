@@ -59,6 +59,9 @@
               <button type="submit" class="btn btn-sm btn-success">Setujui</button>
             </form>
             <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#tolak{{ p.id }}">Tolak</button>
+            {% if wa_links.get(p.id) %}
+            <a href="{{ wa_links.get(p.id) }}" target="_blank" class="btn btn-sm btn-outline-success">Notifikasi WA</a>
+            {% endif %}
             <div class="collapse mt-2" id="tolak{{ p.id }}">
               <form method="post" action="{{ url_for('pengajuan_izin_tolak', pid=p.id) }}" class="d-flex gap-2">
                 <input type="text" name="catatan_admin" class="form-control form-control-sm" placeholder="Alasan penolakan (opsional)">

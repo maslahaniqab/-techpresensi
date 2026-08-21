@@ -4,7 +4,7 @@
 <h3 class="mb-3">Laporan Pekerjaan</h3>
 
 <div class="card p-4 mb-3" style="max-width: 560px;">
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <div class="mb-3">
       <label class="form-label">Tanggal</label>
       <input type="date" name="tanggal" class="form-control" value="{{ tanggal_default }}" required>
@@ -12,6 +12,11 @@
     <div class="mb-3">
       <label class="form-label">Isi Laporan</label>
       <textarea name="isi_laporan" class="form-control" rows="5" placeholder="Ceritakan pekerjaan yang sudah Anda kerjakan hari ini" required></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Lampiran (opsional)</label>
+      <input type="file" name="lampiran" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.csv,.txt,.zip">
+      <div class="form-text">Boleh dokumen, foto, atau file pendukung lain. Maks 10MB per file.</div>
     </div>
     <button type="submit" class="btn btn-primary">Kirim Laporan</button>
   </form>
@@ -25,6 +30,7 @@
         <tr>
           <th style="width:130px;">Tanggal</th>
           <th>Isi Laporan</th>
+          <th>Lampiran</th>
         </tr>
       </thead>
       <tbody>
@@ -32,9 +38,16 @@
         <tr>
           <td>{{ l.tanggal.strftime('%d-%m-%Y') }}</td>
           <td style="white-space: pre-wrap;">{{ l.isi_laporan }}</td>
+          <td>
+            {% if l.lampiran_filename %}
+            <a href="{{ url_for('static', filename='uploads/laporan/' + l.lampiran_filename) }}" target="_blank">{{ l.lampiran_nama_asli or 'Lihat' }}</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="2" class="text-center text-muted py-4">Belum ada laporan.</td></tr>
+        <tr><td colspan="3" class="text-center text-muted py-4">Belum ada laporan.</td></tr>
         {% endfor %}
       </tbody>
     </table>

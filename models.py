@@ -178,6 +178,8 @@ class LaporanPekerjaan(db.Model):
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
     tanggal = db.Column(db.Date, nullable=False)
     isi_laporan = db.Column(db.Text, nullable=False)
+    lampiran_filename = db.Column(db.String(256))
+    lampiran_nama_asli = db.Column(db.String(256))
     tanggal_dibuat = db.Column(db.DateTime, default=now_wib)
 
     employee = db.relationship("Employee", backref="laporan_pekerjaan")

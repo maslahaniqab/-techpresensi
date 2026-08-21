@@ -372,7 +372,20 @@ def create_app():
     os.makedirs(izin_upload_folder, exist_ok=True)
     app.config["IZIN_UPLOAD_FOLDER"] = izin_upload_folder
 
+    laporan_upload_folder = os.path.join(upload_folder, "laporan")
+    os.makedirs(laporan_upload_folder, exist_ok=True)
+    app.config["LAPORAN_UPLOAD_FOLDER"] = laporan_upload_folder
+
+    # Batas ukuran file upload di seluruh aplikasi, supaya server tidak kehabisan
+    # memori/disk (paket hosting free tier) gara-gara file besar -- ini yang bikin
+    # aplikasi lemot kalau tidak dibatasi.
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
+
     EKSTENSI_DOKUMEN_IZIN = {"pdf", "doc", "docx", "jpg", "jpeg", "png"}
+    EKSTENSI_LAMPIRAN_LAPORAN = {
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+        "jpg", "jpeg", "png", "csv", "txt", "zip",
+    }
 
     tmp_iklan_folder = os.path.join(app.instance_path, "tmp_iklan")
     os.makedirs(tmp_iklan_folder, exist_ok=True)
@@ -817,11 +830,14 @@ def create_app():
             q = q.filter(PengajuanIzin.status == status_filter)
         pengajuan = q.order_by(PengajuanIzin.tanggal_diajukan.desc()).all()
         jumlah_menunggu = PengajuanIzin.query.filter_by(status="Menunggu").count()
+        settings = get_settings()
+        wa_links = {p.id: buat_wa_link_notifikasi_izin(p, settings) for p in pengajuan}
         return render_template(
             "pengajuan_izin_list.html",
             pengajuan=pengajuan,
             status_filter=status_filter,
             jumlah_menunggu=jumlah_menunggu,
+            wa_links=wa_links,
         )
 
     @app.route("/pengajuan-izin/<int:pid>/setujui", methods=["POST"])
@@ -970,17 +986,20 @@ def create_app():
                         )
                         dokumen_file.save(os.path.join(app.config["IZIN_UPLOAD_FOLDER"], dokumen_filename))
 
-                    db.session.add(
-                        PengajuanIzin(
-                            employee_id=current_user.id,
-                            tanggal=tanggal,
-                            jenis=jenis,
-                            alasan=request.form.get("alasan", "").strip(),
-                            dokumen_filename=dokumen_filename,
-                        )
+                    pengajuan_baru = PengajuanIzin(
+                        employee_id=current_user.id,
+                        tanggal=tanggal,
+                        jenis=jenis,
+                        alasan=request.form.get("alasan", "").strip(),
+                        dokumen_filename=dokumen_filename,
                     )
+                    db.session.add(pengajuan_baru)
                     db.session.commit()
                     flash("Pengajuan berhasil dikirim, menunggu persetujuan admin.", "success")
+                    try:
+                        kirim_notifikasi_pengajuan_izin(pengajuan_baru, get_settings())
+                    except Exception:
+                        pass
             return redirect(url_for("pegawai_izin"))
 
         riwayat = (
@@ -1017,12 +1036,35 @@ def create_app():
             except ValueError:
                 tanggal = None
             isi_laporan = request.form.get("isi_laporan", "").strip()
+            lampiran_file = request.files.get("lampiran")
+            lampiran_ada = bool(lampiran_file and lampiran_file.filename)
 
             if not tanggal or not isi_laporan:
                 flash("Lengkapi tanggal dan isi laporan.", "danger")
+            elif lampiran_ada and lampiran_file.filename.rsplit(".", 1)[-1].lower() not in EKSTENSI_LAMPIRAN_LAPORAN:
+                flash(
+                    "Format lampiran tidak didukung. Gunakan PDF, Word, Excel, PowerPoint, gambar, CSV, TXT, atau ZIP.",
+                    "danger",
+                )
             else:
+                lampiran_filename = None
+                lampiran_nama_asli = None
+                if lampiran_ada:
+                    ext = lampiran_file.filename.rsplit(".", 1)[-1].lower()
+                    lampiran_filename = secure_filename(
+                        f"laporan_{current_user.id}_{tanggal.isoformat()}_{now_wib().strftime('%H%M%S')}.{ext}"
+                    )
+                    lampiran_file.save(os.path.join(app.config["LAPORAN_UPLOAD_FOLDER"], lampiran_filename))
+                    lampiran_nama_asli = secure_filename(lampiran_file.filename)[:256]
+
                 db.session.add(
-                    LaporanPekerjaan(employee_id=current_user.id, tanggal=tanggal, isi_laporan=isi_laporan)
+                    LaporanPekerjaan(
+                        employee_id=current_user.id,
+                        tanggal=tanggal,
+                        isi_laporan=isi_laporan,
+                        lampiran_filename=lampiran_filename,
+                        lampiran_nama_asli=lampiran_nama_asli,
+                    )
                 )
                 db.session.commit()
                 flash("Laporan pekerjaan berhasil dikirim.", "success")
@@ -1469,6 +1511,56 @@ def create_app():
             return True, None
         except Exception as e:
             return False, str(e)
+
+    def kirim_notifikasi_pengajuan_izin(pengajuan, settings):
+        smtp_email = os.environ.get("SMTP_EMAIL")
+        smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+        if not smtp_email or not smtp_password:
+            return False, "Pengiriman email belum dikonfigurasi di server (SMTP_EMAIL/SMTP_APP_PASSWORD)."
+
+        penerima = {smtp_email.strip().lower(): smtp_email, "maslahaniqab@gmail.com": "maslahaniqab@gmail.com"}
+        kontak = (settings.kontak_perusahaan or "").strip()
+        if "@" in kontak:
+            penerima[kontak.lower()] = kontak
+        daftar_penerima = list(penerima.values())
+
+        karyawan = pengajuan.employee
+        msg = EmailMessage()
+        msg["Subject"] = f"Pengajuan {pengajuan.jenis} - {karyawan.nama}"
+        msg["From"] = smtp_email
+        msg["To"] = ", ".join(daftar_penerima)
+        msg.set_content(
+            f"Ada pengajuan {pengajuan.jenis} baru yang perlu ditinjau.\n\n"
+            f"Nama: {karyawan.nama}\n"
+            f"Jabatan: {karyawan.jabatan or '-'}\n"
+            f"Untuk tanggal: {pengajuan.tanggal.strftime('%d-%m-%Y')}\n"
+            f"Alasan: {pengajuan.alasan or '-'}\n"
+            f"Dokumen pendukung: {'Ada, cek di portal' if pengajuan.dokumen_filename else 'Tidak ada'}\n\n"
+            "Silakan login ke MN Portal (menu Karyawan > Pengajuan Izin) untuk menyetujui atau menolak."
+        )
+
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.send_message(msg)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def buat_wa_link_notifikasi_izin(pengajuan, settings):
+        kontak = (settings.kontak_perusahaan or "").strip()
+        if not kontak or "@" in kontak:
+            return None
+        nomor = normalisasi_no_hp_wa(kontak)
+        if not nomor:
+            return None
+        pesan = (
+            f"Info: Ada pengajuan {pengajuan.jenis} baru dari {pengajuan.employee.nama} "
+            f"untuk tanggal {pengajuan.tanggal.strftime('%d-%m-%Y')}. "
+            f"Alasan: {pengajuan.alasan or '-'}. Mohon dicek & disetujui di MN Portal ya."
+        )
+        return f"https://wa.me/{nomor}?text={quote(pesan)}"
 
     @app.route("/penggajian/<int:payroll_id>/pdf")
     @admin_required
@@ -2771,6 +2863,11 @@ def create_app():
     def abort_404():
         from flask import abort
         abort(404)
+
+    @app.errorhandler(413)
+    def file_terlalu_besar(e):
+        flash("File yang diupload terlalu besar (maksimal 10MB). Silakan kompres/perkecil filenya lalu coba lagi.", "danger")
+        return redirect(request.referrer or url_for("login"))
 
     @app.context_processor
     def inject_globals():
