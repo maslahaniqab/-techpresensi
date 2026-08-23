@@ -41,7 +41,7 @@ from xhtml2pdf import pisa
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
-    PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace,
+    PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
 )
 
 BULAN_NAMA = [
@@ -871,6 +871,84 @@ def create_app():
         db.session.commit()
         flash(f"Karyawan {nama} beserta riwayatnya dihapus.", "info")
         return redirect(url_for("karyawan_list"))
+
+    # ---------- DATA PRODUK & HARGA JUAL ----------
+    def _hitung_margin_produk(p):
+        def margin(harga):
+            if not harga:
+                return 0, 0
+            nilai = harga - p.hpp
+            persen = (nilai / harga * 100) if harga else 0
+            return nilai, persen
+
+        margin_hn, persen_hn = margin(p.harga_normal)
+        margin_hfs, persen_hfs = margin(p.harga_flash_sale)
+        margin_hc, persen_hc = margin(p.harga_big_campaign)
+        return {
+            "produk": p,
+            "margin_hn": margin_hn, "persen_hn": persen_hn,
+            "margin_hfs": margin_hfs, "persen_hfs": persen_hfs,
+            "margin_hc": margin_hc, "persen_hc": persen_hc,
+        }
+
+    @app.route("/produk")
+    @admin_required
+    def produk_list():
+        daftar = Produk.query.order_by(Produk.nama_produk).all()
+        data = [_hitung_margin_produk(p) for p in daftar]
+        return render_template("produk_list.html", data=data)
+
+    @app.route("/produk/tambah", methods=["GET", "POST"])
+    @admin_required
+    def produk_tambah():
+        if request.method == "POST":
+            produk = Produk(
+                nama_produk=request.form.get("nama_produk", "").strip(),
+                modal=int(request.form.get("modal") or 0),
+                hpp=int(request.form.get("hpp") or 0),
+                harga_dasar=int(request.form.get("harga_dasar") or 0),
+                harga_normal=int(request.form.get("harga_normal") or 0),
+                harga_flash_sale=int(request.form.get("harga_flash_sale") or 0),
+                harga_big_campaign=int(request.form.get("harga_big_campaign") or 0),
+            )
+            if not produk.nama_produk:
+                flash("Nama produk wajib diisi.", "danger")
+                return render_template("produk_form.html", produk=None)
+            db.session.add(produk)
+            db.session.commit()
+            flash(f"Produk {produk.nama_produk} berhasil ditambahkan.", "success")
+            return redirect(url_for("produk_list"))
+        return render_template("produk_form.html", produk=None)
+
+    @app.route("/produk/<int:produk_id>/edit", methods=["GET", "POST"])
+    @admin_required
+    def produk_edit(produk_id):
+        produk = db.session.get(Produk, produk_id) or abort_404()
+        if request.method == "POST":
+            produk.nama_produk = request.form.get("nama_produk", "").strip()
+            produk.modal = int(request.form.get("modal") or 0)
+            produk.hpp = int(request.form.get("hpp") or 0)
+            produk.harga_dasar = int(request.form.get("harga_dasar") or 0)
+            produk.harga_normal = int(request.form.get("harga_normal") or 0)
+            produk.harga_flash_sale = int(request.form.get("harga_flash_sale") or 0)
+            produk.harga_big_campaign = int(request.form.get("harga_big_campaign") or 0)
+            if not produk.nama_produk:
+                flash("Nama produk wajib diisi.", "danger")
+                return render_template("produk_form.html", produk=produk)
+            db.session.commit()
+            flash(f"Produk {produk.nama_produk} berhasil diperbarui.", "success")
+            return redirect(url_for("produk_list"))
+        return render_template("produk_form.html", produk=produk)
+
+    @app.route("/produk/<int:produk_id>/hapus", methods=["POST"])
+    @admin_required
+    def produk_hapus(produk_id):
+        produk = db.session.get(Produk, produk_id) or abort_404()
+        nama = produk.nama_produk
+        db.session.delete(produk)
+        db.session.commit()
+        flash(f"Produk {nama} dihapus.", "info")
+        return redirect(url_for("produk_list"))
 
     # ---------- ABSENSI ----------
     @app.route("/absensi")

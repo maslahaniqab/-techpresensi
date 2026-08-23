@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Produk' if produk else 'Tambah Produk' }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>{{ 'Edit Produk' if produk else 'Tambah Produk' }}</h3>
+  <a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali</a>
+</div>
+
+<div class="card p-4" style="max-width: 640px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Nama Produk</label>
+      <input type="text" name="nama_produk" class="form-control" value="{{ produk.nama_produk if produk else '' }}" required>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Modal (Rp)</label>
+        <input type="number" name="modal" class="form-control" value="{{ produk.modal if produk else 0 }}">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">HPP (Rp)</label>
+        <input type="number" name="hpp" class="form-control" value="{{ produk.hpp if produk else 0 }}">
+        <div class="form-text">Harga Pokok Penjualan (modal + biaya tambahan lain).</div>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Harga Dasar / Coret (Rp)</label>
+      <input type="number" name="harga_dasar" class="form-control" value="{{ produk.harga_dasar if produk else 0 }}">
+    </div>
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Harga Normal (Rp)</label>
+        <input type="number" name="harga_normal" class="form-control" value="{{ produk.harga_normal if produk else 0 }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Harga Flash Sale (Rp)</label>
+        <input type="number" name="harga_flash_sale" class="form-control" value="{{ produk.harga_flash_sale if produk else 0 }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Harga BIG Campaign (Rp)</label>
+        <input type="number" name="harga_big_campaign" class="form-control" value="{{ produk.harga_big_campaign if produk else 0 }}">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Simpan</button>
+  </form>
+</div>
+{% endblock %}

@@ -187,6 +187,19 @@ class LaporanPekerjaan(db.Model):
     employee = db.relationship("Employee", backref="laporan_pekerjaan")
 
 
+class Produk(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nama_produk = db.Column(db.String(128), nullable=False)
+    modal = db.Column(db.Integer, nullable=False, default=0)
+    hpp = db.Column(db.Integer, nullable=False, default=0)
+    harga_dasar = db.Column(db.Integer, default=0)
+    harga_normal = db.Column(db.Integer, default=0)
+    harga_flash_sale = db.Column(db.Integer, default=0)
+    harga_big_campaign = db.Column(db.Integer, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+    diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
+
+
 class IklanMarketplace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     marketplace = db.Column(db.String(32), nullable=False)  # Shopee/Tokopedia/TikTok Shop/Lazada/Blibli
