@@ -44,70 +44,97 @@
 </div>
 
 <div class="card p-3">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
-        <tr>
-          <th>Nama</th>
-          <th>Tipe</th>
-          <th>Hadir</th>
-          <th>Alpha</th>
-          <th>Telat (mnt)</th>
-          <th>Lembur (mnt)</th>
-          <th>Bonus Target</th>
-          <th>Gaji Bersih</th>
-          <th>Status</th>
-          <th class="text-end">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in payrolls %}
-        <tr>
-          <td>{{ p.employee.nama }}</td>
-          <td>
-            {% if p.tipe_pegawai == 'Freelance' %}
-              <span class="badge bg-info text-dark">Freelance</span>
-            {% elif p.tipe_pegawai == 'Probation' %}
-              <span class="badge bg-warning text-dark">Probation</span>
-            {% else %}
-              <span class="badge bg-primary">Karyawan Tetap</span>
-            {% endif %}
-          </td>
-          <td>{{ p.total_hadir }}</td>
-          <td>{{ p.total_alpha }}</td>
-          <td>{{ p.total_telat_menit }}</td>
-          <td>{{ p.total_lembur_menit }}</td>
-          <td>{{ p.bonus_target | rupiah }}</td>
-          <td class="fw-semibold">{{ p.gaji_bersih | rupiah }}</td>
-          <td>
-            {% if p.status == 'Dibayar' %}
-              <span class="badge bg-success">Dibayar</span>
-            {% else %}
-              <span class="badge bg-secondary">Draft</span>
-            {% endif %}
-          </td>
-          <td class="text-end">
-            <a href="{{ url_for('penggajian_detail', payroll_id=p.id) }}" class="btn btn-sm btn-outline-primary">Lihat Slip</a>
-            {% if p.wa_link %}
-            <a href="{{ url_for('penggajian_pdf', payroll_id=p.id) }}" class="btn btn-sm btn-outline-secondary">PDF</a>
-            <a href="{{ p.wa_link }}" target="_blank" class="btn btn-sm btn-success">Kirim WA</a>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="10" class="text-center text-muted py-4">Belum ada slip gaji untuk periode ini. Klik "Generate" di atas.</td></tr>
-        {% endfor %}
-      </tbody>
-      {% if payrolls %}
-      <tfoot>
-        <tr class="fw-bold">
-          <td colspan="7" class="text-end">Total</td>
-          <td>{{ total_gaji | rupiah }}</td>
-          <td colspan="2"></td>
-        </tr>
-      </tfoot>
-      {% endif %}
-    </table>
-  </div>
+  <form method="post" action="{{ url_for('penggajian_kirim_email_massal') }}" id="formKirimMassal">
+    <input type="hidden" name="bulan" value="{{ bulan }}">
+    <input type="hidden" name="tahun" value="{{ tahun }}">
+    {% if payrolls %}
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <button type="submit" class="btn btn-outline-primary btn-sm" onclick="return confirm('Kirim slip gaji ke email semua karyawan yang dicentang?');">
+        Kirim Slip Terpilih ke Email
+      </button>
+      <span class="text-muted small">Centang karyawan lalu klik tombol ini untuk kirim slip PDF ke email masing-masing sekaligus.</span>
+    </div>
+    {% endif %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 36px;"><input type="checkbox" class="form-check-input" id="checkAll"></th>
+            <th>Nama</th>
+            <th>Tipe</th>
+            <th>Hadir</th>
+            <th>Alpha</th>
+            <th>Telat (mnt)</th>
+            <th>Lembur (mnt)</th>
+            <th>Bonus Target</th>
+            <th>Gaji Bersih</th>
+            <th>Status</th>
+            <th class="text-end">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in payrolls %}
+          <tr>
+            <td><input type="checkbox" class="form-check-input check-slip" name="payroll_ids" value="{{ p.id }}"></td>
+            <td>{{ p.employee.nama }}</td>
+            <td>
+              {% if p.tipe_pegawai == 'Freelance' %}
+                <span class="badge bg-info text-dark">Freelance</span>
+              {% elif p.tipe_pegawai == 'Probation' %}
+                <span class="badge bg-warning text-dark">Probation</span>
+              {% else %}
+                <span class="badge bg-primary">Karyawan Tetap</span>
+              {% endif %}
+            </td>
+            <td>{{ p.total_hadir }}</td>
+            <td>{{ p.total_alpha }}</td>
+            <td>{{ p.total_telat_menit }}</td>
+            <td>{{ p.total_lembur_menit }}</td>
+            <td>{{ p.bonus_target | rupiah }}</td>
+            <td class="fw-semibold">{{ p.gaji_bersih | rupiah }}</td>
+            <td>
+              {% if p.status == 'Dibayar' %}
+                <span class="badge bg-success">Dibayar</span>
+              {% else %}
+                <span class="badge bg-secondary">Draft</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <a href="{{ url_for('penggajian_detail', payroll_id=p.id) }}" class="btn btn-sm btn-outline-primary">Lihat Slip</a>
+              {% if p.wa_link %}
+              <a href="{{ url_for('penggajian_pdf', payroll_id=p.id) }}" class="btn btn-sm btn-outline-secondary">PDF</a>
+              <a href="{{ p.wa_link }}" target="_blank" class="btn btn-sm btn-success">Kirim WA</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11" class="text-center text-muted py-4">Belum ada slip gaji untuk periode ini. Klik "Generate" di atas.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if payrolls %}
+        <tfoot>
+          <tr class="fw-bold">
+            <td colspan="8" class="text-end">Total</td>
+            <td>{{ total_gaji | rupiah }}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var checkAll = document.getElementById('checkAll');
+  if (checkAll) {
+    checkAll.addEventListener('change', function () {
+      document.querySelectorAll('.check-slip').forEach(function (cb) {
+        cb.checked = checkAll.checked;
+      });
+    });
+  }
+</script>
 {% endblock %}

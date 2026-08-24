@@ -1836,6 +1836,37 @@ def create_app():
             flash(f"Gagal mengirim email: {pesan_error}", "danger")
         return redirect(url_for("penggajian_detail", payroll_id=payroll.id))
 
+    @app.route("/penggajian/kirim-email-massal", methods=["POST"])
+    @admin_required
+    def penggajian_kirim_email_massal():
+        bulan = int(request.form.get("bulan", today_wib().month))
+        tahun = int(request.form.get("tahun", today_wib().year))
+        payroll_ids = [int(x) for x in request.form.getlist("payroll_ids")]
+
+        if not payroll_ids:
+            flash("Pilih minimal satu slip untuk dikirim ke email.", "warning")
+            return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
+
+        settings = get_settings()
+        berhasil = []
+        gagal = []
+        for payroll_id in payroll_ids:
+            payroll = db.session.get(Payroll, payroll_id)
+            if not payroll:
+                continue
+            ok, pesan_error = kirim_email_slip(payroll, settings)
+            if ok:
+                berhasil.append(payroll.employee.nama)
+            else:
+                gagal.append(f"{payroll.employee.nama} ({pesan_error})")
+
+        if berhasil:
+            flash(f"Slip berhasil dikirim ke email {len(berhasil)} karyawan: {', '.join(berhasil)}.", "success")
+        if gagal:
+            flash(f"Gagal mengirim ke {len(gagal)} karyawan: {'; '.join(gagal)}.", "danger")
+
+        return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
+
     @app.route("/penggajian/<int:payroll_id>/bayar", methods=["POST"])
     @admin_required
     def penggajian_bayar(payroll_id):
