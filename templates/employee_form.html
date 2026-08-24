@@ -70,23 +70,30 @@
       <div class="alert alert-info mb-3 py-2">
         Total Gaji Pokok + Tunjangan: <strong id="total_gaji">Rp 0</strong>
       </div>
-      <label class="form-label fw-semibold">Potongan BPJS (Rp) <span class="text-muted fw-normal">- boleh 0 jika belum ikut BPJS</span></label>
+      <label class="form-label fw-semibold">Potongan BPJS Ketenagakerjaan (Rp) <span class="text-muted fw-normal">- boleh 0 jika belum ikut</span></label>
       <div class="row">
-        <div class="col-md-3 mb-2">
+        <div class="col-md-4 mb-2">
           <label class="form-label small">JKK</label>
           <input type="number" name="bpjs_jkk" class="form-control" min="0" value="{{ karyawan.bpjs_jkk if karyawan else 0 }}">
         </div>
-        <div class="col-md-3 mb-2">
+        <div class="col-md-4 mb-2">
           <label class="form-label small">JKM</label>
           <input type="number" name="bpjs_jkm" class="form-control" min="0" value="{{ karyawan.bpjs_jkm if karyawan else 0 }}">
         </div>
-        <div class="col-md-3 mb-2">
+        <div class="col-md-4 mb-2">
           <label class="form-label small">JHT</label>
           <input type="number" name="bpjs_jht" class="form-control" min="0" value="{{ karyawan.bpjs_jht if karyawan else 0 }}">
         </div>
-        <div class="col-md-3 mb-2">
-          <label class="form-label small">Kesehatan</label>
-          <input type="number" name="bpjs_kesehatan" class="form-control" min="0" value="{{ karyawan.bpjs_kesehatan if karyawan else 0 }}">
+      </div>
+      <div class="form-check mt-2">
+        <input type="checkbox" class="form-check-input" id="bpjs_kesehatan_terdaftar" name="bpjs_kesehatan_terdaftar"
+               {{ 'checked' if karyawan and karyawan.bpjs_kesehatan_terdaftar else '' }}>
+        <label class="form-check-label" for="bpjs_kesehatan_terdaftar">
+          Terdaftar BPJS Kesehatan
+        </label>
+        <div class="form-text">
+          Kalau dicentang, potongan dihitung otomatis tiap generate slip gaji: 1% dari gaji pokok + tunjangan
+          dipotong dari gaji karyawan, dan 4% ditanggung perusahaan (maks. dasar perhitungan Rp 12.000.000/bulan).
         </div>
       </div>
     </div>

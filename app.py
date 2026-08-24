@@ -63,6 +63,13 @@ JABATAN_LIST = [
     "Supervisor",
 ]
 
+# Skema BPJS Kesehatan sesuai Perpres 82/2018: total iuran 5% dari gaji (gaji pokok +
+# tunjangan tetap), dibagi 4% ditanggung perusahaan dan 1% dipotong dari gaji karyawan,
+# dengan batas atas gaji yang dihitung Rp 12.000.000/bulan.
+BATAS_GAJI_BPJS_KESEHATAN = 12_000_000
+PERSEN_BPJS_KESEHATAN_KARYAWAN = 0.01
+PERSEN_BPJS_KESEHATAN_PERUSAHAAN = 0.04
+
 KATEGORI_PENGELUARAN_RUTIN = [
     "Internet Indihome",
     "Internet Biznet",
@@ -831,7 +838,7 @@ def create_app():
                 bpjs_jkk=int(request.form.get("bpjs_jkk") or 0),
                 bpjs_jkm=int(request.form.get("bpjs_jkm") or 0),
                 bpjs_jht=int(request.form.get("bpjs_jht") or 0),
-                bpjs_kesehatan=int(request.form.get("bpjs_kesehatan") or 0),
+                bpjs_kesehatan_terdaftar=request.form.get("bpjs_kesehatan_terdaftar") == "on",
                 tarif_unit_freelance=int(request.form.get("tarif_unit_freelance") or 0),
                 co_host_bulan_ini=request.form.get("co_host_bulan_ini", "Tidak"),
                 status=request.form.get("status", "Aktif"),
@@ -880,7 +887,7 @@ def create_app():
             emp.bpjs_jkk = int(request.form.get("bpjs_jkk") or 0)
             emp.bpjs_jkm = int(request.form.get("bpjs_jkm") or 0)
             emp.bpjs_jht = int(request.form.get("bpjs_jht") or 0)
-            emp.bpjs_kesehatan = int(request.form.get("bpjs_kesehatan") or 0)
+            emp.bpjs_kesehatan_terdaftar = request.form.get("bpjs_kesehatan_terdaftar") == "on"
             emp.tarif_unit_freelance = int(request.form.get("tarif_unit_freelance") or 0)
             emp.co_host_bulan_ini = request.form.get("co_host_bulan_ini", "Tidak")
             emp.status = request.form.get("status", "Aktif")
@@ -1512,7 +1519,14 @@ def create_app():
             bpjs_jkk = emp.bpjs_jkk or 0
             bpjs_jkm = emp.bpjs_jkm or 0
             bpjs_jht = emp.bpjs_jht or 0
-            bpjs_kesehatan = emp.bpjs_kesehatan or 0
+
+            if emp.bpjs_kesehatan_terdaftar:
+                basis_bpjs_kesehatan = min(total_pokok, BATAS_GAJI_BPJS_KESEHATAN)
+                bpjs_kesehatan = round(basis_bpjs_kesehatan * PERSEN_BPJS_KESEHATAN_KARYAWAN)
+                bpjs_kesehatan_perusahaan = round(basis_bpjs_kesehatan * PERSEN_BPJS_KESEHATAN_PERUSAHAAN)
+            else:
+                bpjs_kesehatan = 0
+                bpjs_kesehatan_perusahaan = 0
 
             gaji_bersih = (
                 total_pokok
@@ -1556,6 +1570,7 @@ def create_app():
             payroll.bpjs_jkm = bpjs_jkm
             payroll.bpjs_jht = bpjs_jht
             payroll.bpjs_kesehatan = bpjs_kesehatan
+            payroll.bpjs_kesehatan_perusahaan = bpjs_kesehatan_perusahaan
             payroll.gaji_bersih = gaji_bersih
 
         db.session.commit()
@@ -1668,6 +1683,7 @@ def create_app():
             payroll.bpjs_jkm = 0
             payroll.bpjs_jht = 0
             payroll.bpjs_kesehatan = 0
+            payroll.bpjs_kesehatan_perusahaan = 0
             payroll.gaji_bersih = gaji_bersih
 
         db.session.commit()

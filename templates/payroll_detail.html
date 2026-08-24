@@ -105,9 +105,15 @@
           <td class="text-end text-danger">- {{ p.bpjs_jht | rupiah }}</td>
         </tr>
         <tr>
-          <td>Jaminan Kesehatan</td>
+          <td>Jaminan Kesehatan (1%)</td>
           <td class="text-end text-danger">- {{ p.bpjs_kesehatan | rupiah }}</td>
         </tr>
+        {% if p.bpjs_kesehatan_perusahaan %}
+        <tr>
+          <td class="text-muted">BPJS Kesehatan Ditanggung Perusahaan (4%)</td>
+          <td class="text-end text-muted">{{ p.bpjs_kesehatan_perusahaan | rupiah }}</td>
+        </tr>
+        {% endif %}
         {% endif %}
       </tbody>
     </table>

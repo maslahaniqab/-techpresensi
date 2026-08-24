@@ -71,7 +71,10 @@
     <tr><td>Jaminan Kecelakaan Kerja (JKK)</td><td class="right neg">- {{ p.bpjs_jkk | rupiah }}</td></tr>
     <tr><td>Jaminan Kematian (JKM)</td><td class="right neg">- {{ p.bpjs_jkm | rupiah }}</td></tr>
     <tr><td>Jaminan Hari Tua (JHT)</td><td class="right neg">- {{ p.bpjs_jht | rupiah }}</td></tr>
-    <tr><td>Jaminan Kesehatan</td><td class="right neg">- {{ p.bpjs_kesehatan | rupiah }}</td></tr>
+    <tr><td>Jaminan Kesehatan (1%)</td><td class="right neg">- {{ p.bpjs_kesehatan | rupiah }}</td></tr>
+    {% if p.bpjs_kesehatan_perusahaan %}
+    <tr><td>BPJS Kesehatan Ditanggung Perusahaan (4%)</td><td class="right">{{ p.bpjs_kesehatan_perusahaan | rupiah }}</td></tr>
+    {% endif %}
     {% endif %}
   </table>
 
