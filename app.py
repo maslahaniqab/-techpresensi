@@ -654,6 +654,8 @@ def create_app():
             return settings.jam_masuk_standar_freelance, settings.jam_pulang_standar_freelance
         return settings.jam_masuk_standar, settings.jam_pulang_standar
 
+    BATAS_MASUK_SHIFT_MALAM = 17 * 60  # 17:00 -- freelance yang absen masuk mulai jam ini dianggap shift malam
+
     def hitung_telat_lembur(jam_masuk, jam_pulang, settings, tipe_pegawai="Karyawan Tetap"):
         telat = 0
         lembur = 0
@@ -663,12 +665,22 @@ def create_app():
         actual_masuk = parse_hhmm(jam_masuk)
         actual_pulang = parse_hhmm(jam_pulang)
 
-        if standar_masuk is not None and actual_masuk is not None:
+        # Freelance yang absen masuk sore/malam (mis. shift co-host mulai ~18:00) punya jam
+        # kerja yang sama sekali berbeda dari standar freelance siang (08:00-17:00) yang
+        # dikonfigurasi di Pengaturan -- jangan hitung telat/lembur berdasarkan standar itu
+        # untuk mereka, karena jam standarnya memang tidak relevan untuk shift malam.
+        shift_malam = (
+            tipe_pegawai == "Freelance"
+            and actual_masuk is not None
+            and actual_masuk >= BATAS_MASUK_SHIFT_MALAM
+        )
+
+        if not shift_malam and standar_masuk is not None and actual_masuk is not None:
             selisih = actual_masuk - standar_masuk - (settings.toleransi_telat_menit or 0)
             if selisih > 0:
                 telat = selisih
 
-        if standar_pulang is not None and actual_pulang is not None:
+        if not shift_malam and standar_pulang is not None and actual_pulang is not None:
             selisih = actual_pulang - standar_pulang
             if selisih >= (settings.toleransi_lembur_menit or 0):
                 lembur = selisih
