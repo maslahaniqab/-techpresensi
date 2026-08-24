@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Upload Laporan Iklan Meta{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3 class="mb-0">Upload Laporan Iklan Meta</h3>
+  <a href="{{ url_for('marketing_meta_dashboard') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Dashboard</a>
+</div>
+
+<div class="card p-4" style="max-width: 640px;">
+  <p class="text-muted small">
+    Export laporan performa Iklan Meta (biaya, pajak, klik, pesanan, omzet) dari Meta Ads Manager
+    dalam format <strong>CSV</strong> atau <strong>XLSX</strong>, lalu upload di sini. Nama kolom di file
+    boleh berbeda-beda &mdash; Anda akan diminta mencocokkan kolom pada langkah berikutnya.
+  </p>
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">File Laporan (CSV/XLSX)</label>
+      <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xlsm" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Lanjut &rarr; Cocokkan Kolom</button>
+  </form>
+</div>
+{% endblock %}

@@ -217,6 +217,19 @@ class IklanMarketplace(db.Model):
     )
 
 
+class IklanMeta(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tanggal = db.Column(db.Date, nullable=False, unique=True)
+    biaya = db.Column(db.Integer, default=0)
+    pajak = db.Column(db.Integer, default=0)
+    impresi = db.Column(db.Integer, default=0)
+    klik = db.Column(db.Integer, default=0)
+    pesanan = db.Column(db.Integer, default=0)
+    omzet = db.Column(db.Integer, default=0)
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class ProdukIklan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     marketplace = db.Column(db.String(32), nullable=False)

@@ -137,6 +137,24 @@
           {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
         </tr>
         {% endfor %}
+        {% set nsm = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">Iklan Meta</td>
+          {% for d in data_per_periode %}
+          {% set nsm.total = nsm.total + d.iklan_meta_total %}
+          <td class="text-end">{{ d.iklan_meta_total | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ nsm.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% set nsp = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">Pajak Iklan</td>
+          {% for d in data_per_periode %}
+          {% set nsp.total = nsp.total + d.pajak_iklan_total %}
+          <td class="text-end">{{ d.pajak_iklan_total | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ nsp.total | rupiah }}</td>{% endif %}
+        </tr>
         {% set nsg = namespace(total=0) %}
         <tr>
           <td class="ps-3">Beban Gaji, Upah &amp; Honorer</td>
@@ -152,6 +170,18 @@
           <td class="ps-3">Beban {{ kat }}</td>
           {% for d in data_per_periode %}
           {% set v = d.opex_by_kategori.get(kat, 0) %}
+          {% set ns.total = ns.total + v %}
+          <td class="text-end">{{ v | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns.total | rupiah }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+        {% for label in beban_operasional_manual_labels %}
+        {% set ns = namespace(total=0) %}
+        <tr>
+          <td class="ps-3">{{ label }}</td>
+          {% for d in data_per_periode %}
+          {% set v = nilai(d.beban_operasional_manual_items, label) %}
           {% set ns.total = ns.total + v %}
           <td class="text-end">{{ v | rupiah }}</td>
           {% endfor %}
@@ -223,6 +253,16 @@
           <td class="text-end">{{ d.total_beban_non_op | rupiah }}</td>
           {% endfor %}
           {% if periode_list|length > 1 %}<td class="text-end">{{ ns8.total | rupiah }}</td>{% endif %}
+        </tr>
+
+        <tr class="fw-bold border-top">
+          <td>Jumlah Pendapatan dan Beban Non Operasional</td>
+          {% set ns10 = namespace(total=0) %}
+          {% for d in data_per_periode %}
+          {% set ns10.total = ns10.total + d.pendapatan_beban_non_op %}
+          <td class="text-end">{{ d.pendapatan_beban_non_op | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end">{{ ns10.total | rupiah }}</td>{% endif %}
         </tr>
 
         <tr class="fw-bold fs-5 border-top border-bottom border-2">

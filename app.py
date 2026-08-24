@@ -42,6 +42,7 @@ from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
+    IklanMeta,
 )
 
 BULAN_NAMA = [
@@ -67,11 +68,19 @@ KATEGORI_PENGELUARAN_RUTIN = [
     "Internet Biznet",
     "Listrik",
     "Air",
+    "PAM",
+    "Telekomunikasi",
+    "Bensin, Parkir, Tol Kendaraan",
+    "Perlengkapan Kantor",
+    "Sewa Gedung",
+    "Penyusutan Peralatan",
+    "Biaya Afiliasi Tokopedia Softsell",
 ]
 
 KELOMPOK_LABA_RUGI = [
     "Pendapatan",
     "Beban Pokok Penjualan",
+    "Beban Operasional",
     "Pendapatan Non Operasional",
     "Beban Non Operasional",
 ]
@@ -87,16 +96,25 @@ PRESET_LABA_RUGI = {
     ],
     "Beban Pokok Penjualan": [
         "Beban Pokok Penjualan (HPP)",
-        "Beban Ongkir Shopee",
-        "Beban Ongkir Tokopedia",
-        "Beban Ongkir TikTok Shop",
-        "Beban Ongkir Lazada",
-        "Biaya Layanan & Tambahan Shopee",
-        "Biaya Layanan & Tambahan Tokopedia",
-        "Biaya Layanan & Tambahan TikTok Shop",
-        "Biaya Layanan & Tambahan Lazada",
-        "Beban Kelebihan/Kekurangan Ongkir",
-        "Beban Affiliasi Shopee",
+        "Shopee - Beban Kelebihan/Kekurangan Ongkir",
+        "Shopee - Biaya Layanan dan Tambahan Platform",
+        "Shopee - Biaya Afiliasi",
+        "TikTok Shop - Beban Kelebihan/Kekurangan Ongkir",
+        "TikTok Shop - Biaya Layanan dan Tambahan Platform",
+        "TikTok Shop - Biaya Afiliasi",
+        "Tokopedia - Biaya Layanan dan Tambahan Platform",
+        "Lazada - Biaya Layanan dan Tambahan Platform",
+        "Beban Ongkir Manual",
+    ],
+    "Beban Operasional": [
+        "Iklan Shopee (Tambahan Manual)",
+        "Iklan Tokopedia (Tambahan Manual)",
+        "Iklan TikTok Shop (Tambahan Manual)",
+        "Iklan Lazada (Tambahan Manual)",
+        "Iklan Blibli (Tambahan Manual)",
+        "Iklan Meta (Tambahan Manual)",
+        "Pajak Iklan (Tambahan Manual)",
+        "Beban Gaji, Upah dan Honorer (Tambahan Manual)",
     ],
     "Pendapatan Non Operasional": [
         "Pendapatan Bunga Bank",
@@ -117,6 +135,10 @@ KOLOM_TARGET_IKLAN = [
     ("klik", "Klik", False, ["klik", "click", "jumlah klik"]),
     ("pesanan", "Pesanan/Konversi", False, ["pesanan", "konversi", "conversion", "order", "dibeli", "produk terjual", "checkout", "terjual"]),
     ("omzet", "Omzet Penjualan", False, ["omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales"]),
+]
+
+KOLOM_TARGET_META = KOLOM_TARGET_IKLAN + [
+    ("pajak", "Pajak Iklan", False, ["pajak", "tax", "ppn"]),
 ]
 
 
@@ -1928,6 +1950,11 @@ def create_app():
             for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Non Operasional")
             .order_by(ItemLabaRugi.id).all()
         ]
+        beban_operasional_manual_items = [
+            (i.deskripsi, i.jumlah)
+            for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Operasional")
+            .order_by(ItemLabaRugi.id).all()
+        ]
 
         penjualan_by_mp = {}
         for r in PenjualanMarketplace.query.filter(
@@ -1960,11 +1987,21 @@ def create_app():
         ).all():
             opex_by_kategori[r.kategori] = opex_by_kategori.get(r.kategori, 0) + (r.jumlah or 0)
 
-        total_beban_operasional = sum(iklan_by_mp.values()) + gaji_total + sum(opex_by_kategori.values())
+        meta_rows = IklanMeta.query.filter(IklanMeta.tanggal >= awal, IklanMeta.tanggal <= akhir).all()
+        iklan_meta_total = sum(r.biaya or 0 for r in meta_rows)
+        pajak_iklan_total = sum(r.pajak or 0 for r in meta_rows)
+
+        total_beban_operasional_manual = sum(v for _, v in beban_operasional_manual_items)
+
+        total_beban_operasional = (
+            sum(iklan_by_mp.values()) + gaji_total + sum(opex_by_kategori.values())
+            + iklan_meta_total + pajak_iklan_total + total_beban_operasional_manual
+        )
         pendapatan_operasional = laba_kotor - total_beban_operasional
 
         total_pendapatan_non_op = sum(v for _, v in pendapatan_non_op_items)
         total_beban_non_op = sum(v for _, v in beban_non_op_items)
+        pendapatan_beban_non_op = total_pendapatan_non_op - total_beban_non_op
         laba_bersih = pendapatan_operasional + total_pendapatan_non_op - total_beban_non_op
 
         return {
@@ -1978,12 +2015,16 @@ def create_app():
             "iklan_by_mp": iklan_by_mp,
             "gaji_total": gaji_total,
             "opex_by_kategori": opex_by_kategori,
+            "iklan_meta_total": iklan_meta_total,
+            "pajak_iklan_total": pajak_iklan_total,
+            "beban_operasional_manual_items": beban_operasional_manual_items,
             "total_beban_operasional": total_beban_operasional,
             "pendapatan_operasional": pendapatan_operasional,
             "pendapatan_non_op_items": pendapatan_non_op_items,
             "total_pendapatan_non_op": total_pendapatan_non_op,
             "beban_non_op_items": beban_non_op_items,
             "total_beban_non_op": total_beban_non_op,
+            "pendapatan_beban_non_op": pendapatan_beban_non_op,
             "laba_bersih": laba_bersih,
         }
 
@@ -2026,6 +2067,7 @@ def create_app():
         hpp_labels = kumpulkan_label("hpp_items")
         non_op_pendapatan_labels = kumpulkan_label("pendapatan_non_op_items")
         non_op_beban_labels = kumpulkan_label("beban_non_op_items")
+        beban_operasional_manual_labels = kumpulkan_label("beban_operasional_manual_items")
 
         marketplace_labels = []
         for d in data_per_periode:
@@ -2049,6 +2091,7 @@ def create_app():
             opex_labels=opex_labels,
             non_op_pendapatan_labels=non_op_pendapatan_labels,
             non_op_beban_labels=non_op_beban_labels,
+            beban_operasional_manual_labels=beban_operasional_manual_labels,
             nilai=_nilai_item,
             dari_bulan=dari_bulan,
             dari_tahun=dari_tahun,
@@ -2678,8 +2721,8 @@ def create_app():
 
             kunci = (nama_produk, tanggal) if butuh_produk else tanggal
             if kunci not in agregat:
-                agregat[kunci] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0}
-            for k in ("biaya", "impresi", "klik", "pesanan", "omzet"):
+                agregat[kunci] = {"biaya": 0, "impresi": 0, "klik": 0, "pesanan": 0, "omzet": 0, "pajak": 0}
+            for k in ("biaya", "impresi", "klik", "pesanan", "omzet", "pajak"):
                 nilai_mentah = ambil(k)
                 if nilai_mentah is not None:
                     agregat[kunci][k] += parse_angka_iklan(nilai_mentah)
@@ -2835,6 +2878,220 @@ def create_app():
             return redirect(url_for("marketing_iklan_dashboard", marketplace=marketplace))
         flash("Data tidak ditemukan.", "danger")
         return redirect(url_for("marketing_iklan_dashboard"))
+
+    # ---------- MARKETING: IKLAN META ----------
+    @app.route("/marketing/meta")
+    @marketing_required
+    def marketing_meta_dashboard():
+        hari_ini = today_wib()
+        default_dari = hari_ini.replace(day=1)
+        try:
+            dari = datetime.strptime(request.args.get("dari", ""), "%Y-%m-%d").date()
+        except ValueError:
+            dari = default_dari
+        try:
+            sampai = datetime.strptime(request.args.get("sampai", ""), "%Y-%m-%d").date()
+        except ValueError:
+            sampai = hari_ini
+        try:
+            threshold_roas = float(request.args.get("roas_min", 3))
+        except ValueError:
+            threshold_roas = 3.0
+        try:
+            threshold_ctr = float(request.args.get("ctr_min", 1))
+        except ValueError:
+            threshold_ctr = 1.0
+
+        data_terfilter = IklanMeta.query.filter(
+            IklanMeta.tanggal >= dari, IklanMeta.tanggal <= sampai
+        ).order_by(IklanMeta.tanggal).all()
+
+        total = {
+            "biaya": sum(d.biaya or 0 for d in data_terfilter),
+            "pajak": sum(d.pajak or 0 for d in data_terfilter),
+            "impresi": sum(d.impresi or 0 for d in data_terfilter),
+            "klik": sum(d.klik or 0 for d in data_terfilter),
+            "pesanan": sum(d.pesanan or 0 for d in data_terfilter),
+            "omzet": sum(d.omzet or 0 for d in data_terfilter),
+        }
+        ringkasan = {
+            **total,
+            "roas": (total["omzet"] / total["biaya"]) if total["biaya"] else 0,
+            "ctr": (total["klik"] / total["impresi"] * 100) if total["impresi"] else 0,
+            "cpc": (total["biaya"] / total["klik"]) if total["klik"] else 0,
+            "cpa": (total["biaya"] / total["pesanan"]) if total["pesanan"] else 0,
+            "konversi_rate": (total["pesanan"] / total["klik"] * 100) if total["klik"] else 0,
+        }
+
+        tren_map = {}
+        for d in data_terfilter:
+            key = d.tanggal.isoformat()
+            if key not in tren_map:
+                tren_map[key] = {"biaya": 0, "omzet": 0}
+            tren_map[key]["biaya"] += d.biaya or 0
+            tren_map[key]["omzet"] += d.omzet or 0
+        tren_tanggal = sorted(tren_map.keys())
+        tren_biaya = [tren_map[k]["biaya"] for k in tren_tanggal]
+        tren_omzet = [tren_map[k]["omzet"] for k in tren_tanggal]
+
+        return render_template(
+            "marketing/meta_dashboard.html",
+            dari=dari,
+            sampai=sampai,
+            threshold_roas=threshold_roas,
+            threshold_ctr=threshold_ctr,
+            ringkasan=ringkasan,
+            data_list=list(reversed(data_terfilter)),
+            tren_tanggal=tren_tanggal,
+            tren_biaya=tren_biaya,
+            tren_omzet=tren_omzet,
+            tanggal_default=today_wib().isoformat(),
+        )
+
+    @app.route("/marketing/meta/upload", methods=["GET", "POST"])
+    @marketing_required
+    def marketing_meta_upload():
+        bersihkan_tmp_iklan_lama()
+        if request.method == "POST":
+            file = request.files.get("file")
+            if not file or not file.filename:
+                flash("Pilih file laporan Iklan Meta (CSV/XLSX) terlebih dahulu.", "danger")
+                return redirect(url_for("marketing_meta_upload"))
+
+            token, headers, rows_bersih, idx_header, error = simpan_tmp_upload("meta", "Meta", file)
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("marketing_meta_upload"))
+
+            tebakan = tebak_kolom(headers, KOLOM_TARGET_META)
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace="Meta",
+                headers=headers,
+                preview_rows=rows_bersih[:8],
+                kolom_target=KOLOM_TARGET_META,
+                tebakan=tebakan,
+                jumlah_baris=len(rows_bersih),
+                baris_dilewati_awal=idx_header,
+                judul="Cocokkan Kolom — Iklan Meta",
+                konfirmasi_url=url_for("marketing_meta_konfirmasi"),
+                upload_url=url_for("marketing_meta_upload"),
+            )
+
+        return render_template("marketing/meta_upload.html")
+
+    @app.route("/marketing/meta/konfirmasi", methods=["POST"])
+    @marketing_required
+    def marketing_meta_konfirmasi():
+        token = request.form.get("token", "")
+        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"meta_{token}.json")
+        if not os.path.isfile(path_tmp):
+            flash("Sesi upload sudah kedaluwarsa, silakan upload ulang file.", "danger")
+            return redirect(url_for("marketing_meta_upload"))
+
+        with open(path_tmp, "r", encoding="utf-8") as f:
+            data_tmp = json.load(f)
+
+        mapping = {}
+        for key, label, wajib, _kk in KOLOM_TARGET_META:
+            nilai = request.form.get(f"map_{key}", "")
+            mapping[key] = int(nilai) if nilai != "" else None
+            if wajib and mapping[key] is None:
+                flash(f"Kolom '{label}' wajib dipilih.", "danger")
+                os.remove(path_tmp)
+                return redirect(url_for("marketing_meta_upload"))
+
+        agregat, dilewati, contoh_gagal = proses_baris_upload(data_tmp["rows"], mapping, butuh_produk=False)
+
+        if not agregat:
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+            if contoh_gagal:
+                contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
+                pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+            flash(pesan, "danger")
+            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_META}
+            return render_template(
+                "marketing/iklan_mapping.html",
+                token=token,
+                marketplace="Meta",
+                headers=data_tmp["headers"],
+                preview_rows=data_tmp["rows"][:8],
+                kolom_target=KOLOM_TARGET_META,
+                tebakan=tebakan_ulang,
+                jumlah_baris=len(data_tmp["rows"]),
+                judul="Cocokkan Kolom — Iklan Meta",
+                konfirmasi_url=url_for("marketing_meta_konfirmasi"),
+                upload_url=url_for("marketing_meta_upload"),
+            )
+
+        sumber_file = data_tmp.get("sumber_file", "")
+        for tanggal, nilai in agregat.items():
+            existing = IklanMeta.query.filter_by(tanggal=tanggal).first()
+            if not existing:
+                existing = IklanMeta(tanggal=tanggal)
+                db.session.add(existing)
+            existing.biaya = round(nilai["biaya"])
+            existing.pajak = round(nilai["pajak"])
+            existing.impresi = round(nilai["impresi"])
+            existing.klik = round(nilai["klik"])
+            existing.pesanan = round(nilai["pesanan"])
+            existing.omzet = round(nilai["omzet"])
+            existing.sumber_file = sumber_file
+            existing.dibuat_pada = now_wib()
+        db.session.commit()
+        os.remove(path_tmp)
+
+        tgl_min = min(agregat.keys())
+        tgl_max = max(agregat.keys())
+        pesan = f"Berhasil impor {len(agregat)} hari data Iklan Meta ({tgl_min.strftime('%d/%m/%Y')} - {tgl_max.strftime('%d/%m/%Y')})."
+        if dilewati:
+            pesan += f" {dilewati} baris dilewati karena tanggal tidak terbaca."
+            if contoh_gagal:
+                pesan += " Contoh: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+        flash(pesan, "success")
+
+        return redirect(url_for("marketing_meta_dashboard"))
+
+    @app.route("/marketing/meta/manual", methods=["POST"])
+    @marketing_required
+    def marketing_meta_manual():
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = None
+
+        if not tanggal:
+            flash("Tanggal wajib diisi dengan benar.", "danger")
+            return redirect(url_for("marketing_meta_dashboard"))
+
+        existing = IklanMeta.query.filter_by(tanggal=tanggal).first()
+        if not existing:
+            existing = IklanMeta(tanggal=tanggal)
+            db.session.add(existing)
+        existing.biaya = round(parse_angka_iklan(request.form.get("biaya", "0")))
+        existing.pajak = round(parse_angka_iklan(request.form.get("pajak", "0")))
+        existing.impresi = round(parse_angka_iklan(request.form.get("impresi", "0")))
+        existing.klik = round(parse_angka_iklan(request.form.get("klik", "0")))
+        existing.pesanan = round(parse_angka_iklan(request.form.get("pesanan", "0")))
+        existing.omzet = round(parse_angka_iklan(request.form.get("omzet", "0")))
+        existing.sumber_file = "Input manual"
+        existing.dibuat_pada = now_wib()
+        db.session.commit()
+        flash(f"Data Iklan Meta tanggal {tanggal.strftime('%d/%m/%Y')} berhasil disimpan.", "success")
+        return redirect(url_for("marketing_meta_dashboard"))
+
+    @app.route("/marketing/meta/hapus/<int:meta_id>", methods=["POST"])
+    @marketing_required
+    def marketing_meta_hapus(meta_id):
+        data = db.session.get(IklanMeta, meta_id)
+        if data:
+            db.session.delete(data)
+            db.session.commit()
+            flash("Data Iklan Meta berhasil dihapus.", "success")
+        else:
+            flash("Data tidak ditemukan.", "danger")
+        return redirect(url_for("marketing_meta_dashboard"))
 
     @app.route("/marketing/produk/upload", methods=["GET", "POST"])
     @marketing_required
