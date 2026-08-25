@@ -1092,12 +1092,14 @@ def create_app():
         jumlah_menunggu = PengajuanIzin.query.filter_by(status="Menunggu").count()
         settings = get_settings()
         wa_links = {p.id: buat_wa_link_notifikasi_izin(p, settings) for p in pengajuan}
+        wa_links_karyawan = {p.id: buat_wa_link_hasil_izin(p) for p in pengajuan}
         return render_template(
             "pengajuan_izin_list.html",
             pengajuan=pengajuan,
             status_filter=status_filter,
             jumlah_menunggu=jumlah_menunggu,
             wa_links=wa_links,
+            wa_links_karyawan=wa_links_karyawan,
         )
 
     @app.route("/pengajuan-izin/<int:pid>/setujui", methods=["POST"])
@@ -1140,7 +1142,28 @@ def create_app():
         hari_ini = today_wib()
         absen = Attendance.query.filter_by(employee_id=current_user.id, tanggal=hari_ini).first()
         settings = get_settings()
-        return render_template("pegawai/dashboard.html", absen=absen, settings=settings, hari_ini=hari_ini)
+
+        absensi_bulan_ini = Attendance.query.filter(
+            Attendance.employee_id == current_user.id,
+            db.extract("month", Attendance.tanggal) == hari_ini.month,
+            db.extract("year", Attendance.tanggal) == hari_ini.year,
+        ).all()
+        rekap_bulan_ini = {
+            "hadir": sum(1 for a in absensi_bulan_ini if a.status == "Hadir"),
+            "sakit": sum(1 for a in absensi_bulan_ini if a.status == "Sakit"),
+            "izin": sum(1 for a in absensi_bulan_ini if a.status == "Izin"),
+            "cuti": sum(1 for a in absensi_bulan_ini if a.status == "Cuti"),
+            "alpha": sum(1 for a in absensi_bulan_ini if a.status == "Alpha"),
+        }
+
+        return render_template(
+            "pegawai/dashboard.html",
+            absen=absen,
+            settings=settings,
+            hari_ini=hari_ini,
+            rekap_bulan_ini=rekap_bulan_ini,
+            bulan_nama=BULAN_NAMA[hari_ini.month],
+        )
 
     @app.route("/pegawai/absen", methods=["POST"])
     @pegawai_required
@@ -1409,11 +1432,13 @@ def create_app():
             query = query.filter(PengajuanLembur.status == status_filter)
         pengajuan = query.order_by(PengajuanLembur.tanggal_diajukan.desc()).all()
         jumlah_menunggu = PengajuanLembur.query.filter_by(status="Menunggu").count()
+        wa_links_karyawan = {p.id: buat_wa_link_hasil_lembur(p) for p in pengajuan}
         return render_template(
             "pengajuan_lembur_list.html",
             pengajuan=pengajuan,
             status_filter=status_filter,
             jumlah_menunggu=jumlah_menunggu,
+            wa_links_karyawan=wa_links_karyawan,
         )
 
     @app.route("/pengajuan-lembur/<int:pid>/setujui", methods=["POST"])
@@ -1826,6 +1851,45 @@ def create_app():
             f"untuk tanggal {pengajuan.tanggal.strftime('%d-%m-%Y')}. "
             f"Alasan: {pengajuan.alasan or '-'}. Mohon dicek & disetujui di MN Portal ya."
         )
+        return f"https://wa.me/{nomor}?text={quote(pesan)}"
+
+    def buat_wa_link_hasil_izin(pengajuan):
+        nomor = normalisasi_no_hp_wa(pengajuan.employee.no_hp)
+        if not nomor:
+            return None
+        if pengajuan.status == "Disetujui":
+            pesan = (
+                f"Halo {pengajuan.employee.nama}, pengajuan {pengajuan.jenis} Anda untuk tanggal "
+                f"{pengajuan.tanggal.strftime('%d-%m-%Y')} sudah *DISETUJUI*. Terima kasih."
+            )
+        elif pengajuan.status == "Ditolak":
+            pesan = (
+                f"Halo {pengajuan.employee.nama}, mohon maaf pengajuan {pengajuan.jenis} Anda untuk tanggal "
+                f"{pengajuan.tanggal.strftime('%d-%m-%Y')} *DITOLAK*."
+                + (f" Alasan: {pengajuan.catatan_admin}." if pengajuan.catatan_admin else "")
+            )
+        else:
+            return None
+        return f"https://wa.me/{nomor}?text={quote(pesan)}"
+
+    def buat_wa_link_hasil_lembur(pengajuan):
+        nomor = normalisasi_no_hp_wa(pengajuan.employee.no_hp)
+        if not nomor:
+            return None
+        if pengajuan.status == "Disetujui":
+            pesan = (
+                f"Halo {pengajuan.employee.nama}, pengajuan lembur Anda tanggal "
+                f"{pengajuan.tanggal.strftime('%d-%m-%Y')} pukul {pengajuan.jam_mulai}-{pengajuan.jam_selesai} "
+                f"sudah *DISETUJUI* dan sudah masuk ke absensi. Terima kasih."
+            )
+        elif pengajuan.status == "Ditolak":
+            pesan = (
+                f"Halo {pengajuan.employee.nama}, mohon maaf pengajuan lembur Anda tanggal "
+                f"{pengajuan.tanggal.strftime('%d-%m-%Y')} *DITOLAK*."
+                + (f" Alasan: {pengajuan.catatan_admin}." if pengajuan.catatan_admin else "")
+            )
+        else:
+            return None
         return f"https://wa.me/{nomor}?text={quote(pesan)}"
 
     @app.route("/penggajian/<int:payroll_id>/pdf")

@@ -27,6 +27,32 @@
   {% endif %}
 </div>
 
+<div class="card p-3 mb-3">
+  <div class="text-muted small mb-2">Rekap Absensi {{ bulan_nama }} Ini</div>
+  <div class="row g-2 text-center">
+    <div class="col">
+      <div class="fs-5 fw-bold text-success">{{ rekap_bulan_ini.hadir }}</div>
+      <div class="text-muted small">Hadir</div>
+    </div>
+    <div class="col">
+      <div class="fs-5 fw-bold text-warning">{{ rekap_bulan_ini.sakit }}</div>
+      <div class="text-muted small">Sakit</div>
+    </div>
+    <div class="col">
+      <div class="fs-5 fw-bold text-info">{{ rekap_bulan_ini.izin }}</div>
+      <div class="text-muted small">Izin</div>
+    </div>
+    <div class="col">
+      <div class="fs-5 fw-bold text-secondary">{{ rekap_bulan_ini.cuti }}</div>
+      <div class="text-muted small">Cuti</div>
+    </div>
+    <div class="col">
+      <div class="fs-5 fw-bold text-danger">{{ rekap_bulan_ini.alpha }}</div>
+      <div class="text-muted small">Alpha</div>
+    </div>
+  </div>
+</div>
+
 <div class="row g-3">
   <div class="col-md-6">
     <a href="{{ url_for('pegawai_riwayat') }}" class="card p-3 text-decoration-none text-dark d-block">

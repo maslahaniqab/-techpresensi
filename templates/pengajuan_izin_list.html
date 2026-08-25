@@ -70,6 +70,9 @@
             </div>
             {% else %}
             <span class="text-muted small">{{ p.catatan_admin or '-' }}</span>
+            {% if wa_links_karyawan.get(p.id) %}
+            <a href="{{ wa_links_karyawan.get(p.id) }}" target="_blank" class="btn btn-sm btn-outline-success ms-1">Kirim WA ke Karyawan</a>
+            {% endif %}
             {% endif %}
           </td>
         </tr>

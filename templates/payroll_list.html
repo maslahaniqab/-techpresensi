@@ -63,6 +63,9 @@
             <th>Nama</th>
             <th>Tipe</th>
             <th>Hadir</th>
+            <th>Sakit</th>
+            <th>Izin</th>
+            <th>Cuti</th>
             <th>Alpha</th>
             <th>Telat (mnt)</th>
             <th>Lembur (mnt)</th>
@@ -87,6 +90,9 @@
               {% endif %}
             </td>
             <td>{{ p.total_hadir }}</td>
+            <td>{{ p.total_sakit }}</td>
+            <td>{{ p.total_izin }}</td>
+            <td>{{ p.total_cuti }}</td>
             <td>{{ p.total_alpha }}</td>
             <td>{{ p.total_telat_menit }}</td>
             <td>{{ p.total_lembur_menit }}</td>
@@ -108,13 +114,13 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="11" class="text-center text-muted py-4">Belum ada slip gaji untuk periode ini. Klik "Generate" di atas.</td></tr>
+          <tr><td colspan="14" class="text-center text-muted py-4">Belum ada slip gaji untuk periode ini. Klik "Generate" di atas.</td></tr>
           {% endfor %}
         </tbody>
         {% if payrolls %}
         <tfoot>
           <tr class="fw-bold">
-            <td colspan="8" class="text-end">Total</td>
+            <td colspan="11" class="text-end">Total</td>
             <td>{{ total_gaji | rupiah }}</td>
             <td colspan="2"></td>
           </tr>
