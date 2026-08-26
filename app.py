@@ -42,8 +42,38 @@ from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
-    IklanMeta,
+    IklanMeta, HariLibur,
 )
+
+HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+
+HARI_LIBUR_2026 = [
+    ("2026-01-01", "Tahun Baru Masehi"),
+    ("2026-01-16", "Isra Mikraj Nabi Muhammad SAW"),
+    ("2026-02-16", "Cuti Bersama Tahun Baru Imlek"),
+    ("2026-02-17", "Tahun Baru Imlek 2577 Kongzili"),
+    ("2026-03-18", "Cuti Bersama Hari Suci Nyepi"),
+    ("2026-03-19", "Hari Suci Nyepi (Tahun Baru Saka 1948)"),
+    ("2026-03-20", "Cuti Bersama Idulfitri"),
+    ("2026-03-21", "Idulfitri 1447 H"),
+    ("2026-03-22", "Idulfitri 1447 H"),
+    ("2026-03-23", "Cuti Bersama Idulfitri"),
+    ("2026-03-24", "Cuti Bersama Idulfitri"),
+    ("2026-04-03", "Wafat Yesus Kristus"),
+    ("2026-04-05", "Kebangkitan Yesus Kristus (Paskah)"),
+    ("2026-05-01", "Hari Buruh Internasional"),
+    ("2026-05-14", "Kenaikan Yesus Kristus"),
+    ("2026-05-15", "Cuti Bersama Kenaikan Yesus Kristus"),
+    ("2026-05-27", "Iduladha 1447 H"),
+    ("2026-05-28", "Cuti Bersama Iduladha"),
+    ("2026-05-31", "Hari Raya Waisak 2570 BE"),
+    ("2026-06-01", "Hari Lahir Pancasila"),
+    ("2026-06-16", "Tahun Baru Islam 1448 H (1 Muharam)"),
+    ("2026-08-17", "Proklamasi Kemerdekaan RI"),
+    ("2026-08-25", "Maulid Nabi Muhammad SAW"),
+    ("2026-12-24", "Cuti Bersama Hari Raya Natal"),
+    ("2026-12-25", "Kelahiran Yesus Kristus (Natal)"),
+]
 
 BULAN_NAMA = [
     "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -663,6 +693,16 @@ def create_app():
 
     app.jinja_env.filters["tanggal_panjang"] = format_tanggal_panjang
 
+    def format_tanggal_lengkap(d):
+        return f"{HARI_NAMA[d.weekday()]}, {d.day:02d} {BULAN_NAMA[d.month]} {d.year}"
+
+    app.jinja_env.filters["tanggal_lengkap"] = format_tanggal_lengkap
+
+    def apakah_hari_libur(tanggal):
+        if tanggal is None:
+            return None
+        return HariLibur.query.filter_by(tanggal=tanggal).first()
+
     def get_settings():
         settings = Settings.query.first()
         if not settings:
@@ -685,14 +725,30 @@ def create_app():
 
     BATAS_MASUK_SHIFT_MALAM = 17 * 60  # 17:00 -- freelance yang absen masuk mulai jam ini dianggap shift malam
 
-    def hitung_telat_lembur(jam_masuk, jam_pulang, settings, tipe_pegawai="Karyawan Tetap"):
+    def hitung_telat_lembur(jam_masuk, jam_pulang, settings, tipe_pegawai="Karyawan Tetap", tanggal=None, employee_id=None):
         telat = 0
         lembur = 0
+        actual_masuk = parse_hhmm(jam_masuk)
+        actual_pulang = parse_hhmm(jam_pulang)
+
+        # Karyawan Tetap/Probation yang masuk di tanggal merah tanpa pernah mengajukan
+        # lembur untuk tanggal itu: seluruh jam kerja hari itu dihitung lembur (bukan
+        # dibandingkan ke jam standar, karena hari itu bukan hari kerja wajib). Freelance
+        # tidak ikut aturan ini -- upahnya tetap dihitung harian seperti biasa.
+        if (
+            tipe_pegawai in ("Karyawan Tetap", "Probation")
+            and tanggal is not None
+            and employee_id is not None
+            and apakah_hari_libur(tanggal)
+            and not PengajuanLembur.query.filter_by(employee_id=employee_id, tanggal=tanggal).first()
+        ):
+            if actual_masuk is not None and actual_pulang is not None:
+                lembur = max(actual_pulang - actual_masuk, 0)
+            return 0, lembur
+
         jam_masuk_standar, jam_pulang_standar = standar_jam_pegawai(settings, tipe_pegawai)
         standar_masuk = parse_hhmm(jam_masuk_standar)
         standar_pulang = parse_hhmm(jam_pulang_standar)
-        actual_masuk = parse_hhmm(jam_masuk)
-        actual_pulang = parse_hhmm(jam_pulang)
 
         # Freelance yang absen masuk sore/malam (mis. shift co-host mulai ~18:00) punya jam
         # kerja yang sama sekali berbeda dari standar freelance siang (08:00-17:00) yang
@@ -737,6 +793,13 @@ def create_app():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
             db.session.add(admin)
+            db.session.commit()
+        if not HariLibur.query.first():
+            for tanggal_str, keterangan in HARI_LIBUR_2026:
+                db.session.add(HariLibur(
+                    tanggal=datetime.strptime(tanggal_str, "%Y-%m-%d").date(),
+                    keterangan=keterangan,
+                ))
             db.session.commit()
         get_settings()
 
@@ -1038,7 +1101,9 @@ def create_app():
             if status == "Hadir":
                 emp_koreksi = db.session.get(Employee, employee_id)
                 tipe_koreksi = emp_koreksi.tipe_pegawai if emp_koreksi else "Karyawan Tetap"
-                telat, lembur = hitung_telat_lembur(jam_masuk, jam_pulang, settings, tipe_koreksi)
+                telat, lembur = hitung_telat_lembur(
+                    jam_masuk, jam_pulang, settings, tipe_koreksi, tanggal=tanggal, employee_id=employee_id
+                )
             else:
                 jam_masuk, jam_pulang = None, None
 
@@ -1079,6 +1144,50 @@ def create_app():
         db.session.commit()
         flash("Data absensi dihapus.", "info")
         return redirect(url_for("absensi_list", tanggal=tanggal.isoformat()))
+
+    # ---------- HARI LIBUR ----------
+    @app.route("/hari-libur")
+    @admin_required
+    def hari_libur_list():
+        tahun = int(request.args.get("tahun", today_wib().year))
+        daftar = (
+            HariLibur.query.filter(db.extract("year", HariLibur.tanggal) == tahun)
+            .order_by(HariLibur.tanggal)
+            .all()
+        )
+        return render_template("hari_libur_list.html", daftar=daftar, tahun=tahun)
+
+    @app.route("/hari-libur/tambah", methods=["POST"])
+    @admin_required
+    def hari_libur_tambah():
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = None
+        keterangan = request.form.get("keterangan", "").strip()
+
+        if not tanggal or not keterangan:
+            flash("Tanggal dan keterangan wajib diisi.", "danger")
+            return redirect(url_for("hari_libur_list"))
+
+        if HariLibur.query.filter_by(tanggal=tanggal).first():
+            flash(f"Tanggal {tanggal.strftime('%d-%m-%Y')} sudah ada di daftar hari libur.", "danger")
+            return redirect(url_for("hari_libur_list", tahun=tanggal.year))
+
+        db.session.add(HariLibur(tanggal=tanggal, keterangan=keterangan))
+        db.session.commit()
+        flash(f"Hari libur {tanggal.strftime('%d-%m-%Y')} berhasil ditambahkan.", "success")
+        return redirect(url_for("hari_libur_list", tahun=tanggal.year))
+
+    @app.route("/hari-libur/<int:hl_id>/hapus", methods=["POST"])
+    @admin_required
+    def hari_libur_hapus(hl_id):
+        hl = db.session.get(HariLibur, hl_id) or abort_404()
+        tahun = hl.tanggal.year
+        db.session.delete(hl)
+        db.session.commit()
+        flash("Hari libur dihapus.", "info")
+        return redirect(url_for("hari_libur_list", tahun=tahun))
 
     # ---------- PENGAJUAN IZIN (ADMIN) ----------
     @app.route("/pengajuan-izin")
@@ -1190,7 +1299,9 @@ def create_app():
         att = Attendance.query.filter_by(employee_id=current_user.id, tanggal=hari_ini).first()
 
         if not att or not att.jam_masuk:
-            telat, _ = hitung_telat_lembur(jam_sekarang, None, settings, tipe_pegawai)
+            telat, _ = hitung_telat_lembur(
+                jam_sekarang, None, settings, tipe_pegawai, tanggal=hari_ini, employee_id=current_user.id
+            )
             if not att:
                 att = Attendance(employee_id=current_user.id, tanggal=hari_ini)
                 db.session.add(att)
@@ -1206,7 +1317,9 @@ def create_app():
             return jsonify(success=True, aksi="masuk", message=pesan, telat=telat)
 
         if not att.jam_pulang:
-            _, lembur = hitung_telat_lembur(att.jam_masuk, jam_sekarang, settings, tipe_pegawai)
+            _, lembur = hitung_telat_lembur(
+                att.jam_masuk, jam_sekarang, settings, tipe_pegawai, tanggal=hari_ini, employee_id=current_user.id
+            )
             pulang_cepat = cek_pulang_cepat(jam_sekarang, settings, tipe_pegawai)
             att.jam_pulang = jam_sekarang
             att.lembur_menit = lembur
