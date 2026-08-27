@@ -166,12 +166,21 @@ PRESET_LABA_RUGI = {
 MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
 
 KOLOM_TARGET_IKLAN = [
-    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode"]),
-    ("biaya", "Biaya Iklan", True, ["biaya", "cost", "spend", "pengeluaran", "biaya iklan"]),
-    ("impresi", "Impresi/Dilihat", False, ["impresi", "impression", "dilihat", "views", "tayangan", "reach"]),
+    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode", "reporting starts", "reporting ends"]),
+    ("biaya", "Biaya Iklan", True, [
+        "biaya", "cost", "spend", "spent", "pengeluaran", "biaya iklan", "amount spent", "belanja iklan",
+        "dibelanjakan",
+    ]),
+    ("impresi", "Impresi/Dilihat", False, ["impresi", "impression", "dilihat", "views", "tayangan", "reach", "jangkauan"]),
     ("klik", "Klik", False, ["klik", "click", "jumlah klik"]),
-    ("pesanan", "Pesanan/Konversi", False, ["pesanan", "konversi", "conversion", "order", "dibeli", "produk terjual", "checkout", "terjual"]),
-    ("omzet", "Omzet Penjualan", False, ["omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales"]),
+    ("pesanan", "Pesanan/Konversi", False, [
+        "pesanan", "konversi", "conversion", "order", "dibeli", "produk terjual", "checkout", "terjual",
+        "purchase", "result", "hasil",
+    ]),
+    ("omzet", "Omzet Penjualan", False, [
+        "omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales", "conversion value",
+        "purchase value", "purchases conversion value", "nilai konversi", "nilai pembelian",
+    ]),
 ]
 
 KOLOM_TARGET_META = KOLOM_TARGET_IKLAN + [
@@ -398,6 +407,57 @@ def _cari_baris_header(semua):
         if skor > skor_terbaik:
             skor_terbaik, idx_terbaik = skor, idx
     return idx_terbaik
+
+
+def deteksi_otomatis_kolom_iklan(headers, rows, kolom_target):
+    """Deteksi kolom Tanggal/Biaya/dst dari nama header + validasi isi datanya, tanpa
+    perlu form cocokkan kolom manual. Kolom WAJIB (tanggal, biaya) divalidasi isinya
+    (harus mayoritas berupa tanggal/angka valid) sebelum dianggap cocok; kalau kolom
+    yang cocok nama tapi isinya tidak valid, dicoba kolom lain yang juga cocok nama,
+    lalu (khusus tanggal) fallback ke pemindaian isi tanpa syarat nama kolom."""
+    sampel = rows[:20] or rows
+    headers_lower = [str(h).strip().lower() for h in headers]
+    n = len(headers)
+
+    def rate_tanggal(idx):
+        ok = sum(1 for r in sampel if idx < len(r) and parse_tanggal_iklan(r[idx]))
+        return ok / max(1, len(sampel))
+
+    def rate_numerik(idx):
+        total = ok = 0
+        for r in sampel:
+            if idx < len(r) and str(r[idx]).strip() != "":
+                total += 1
+                if parse_angka_iklan(r[idx]):
+                    ok += 1
+        return (ok / total) if total else 0
+
+    hasil = {}
+    idx_terpakai = set()
+
+    for key, _label, wajib, kata_kunci in kolom_target:
+        cek = rate_tanggal if key == "tanggal" else rate_numerik
+        ambang = 0.6 if key == "tanggal" else 0.5
+        idx_pilihan = None
+        for idx, h in enumerate(headers_lower):
+            if idx in idx_terpakai:
+                continue
+            if any(kk in h for kk in kata_kunci) and cek(idx) >= ambang:
+                idx_pilihan = idx
+                break
+        if idx_pilihan is None and key == "tanggal":
+            skor_terbaik = 0
+            for idx in range(n):
+                if idx in idx_terpakai:
+                    continue
+                rate = rate_tanggal(idx)
+                if rate >= 0.7 and rate > skor_terbaik:
+                    skor_terbaik, idx_pilihan = rate, idx
+        hasil[key] = idx_pilihan
+        if idx_pilihan is not None:
+            idx_terpakai.add(idx_pilihan)
+
+    return hasil
 
 
 def baca_file_iklan(file_storage):
@@ -3191,19 +3251,54 @@ def create_app():
             if error:
                 flash(error, "danger")
                 return redirect(url_for("marketing_meta_upload"))
+            path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"meta_{token}.json")
 
-            tebakan = tebak_kolom(headers, KOLOM_TARGET_META)
+            mapping = deteksi_otomatis_kolom_iklan(headers, rows_bersih, KOLOM_TARGET_META)
+            if mapping.get("tanggal") is None or mapping.get("biaya") is None:
+                os.remove(path_tmp)
+                flash(
+                    "Sistem tidak berhasil mengenali kolom Tanggal dan/atau Biaya Iklan secara otomatis dari file "
+                    f"ini. Header yang terbaca: {', '.join(str(h) for h in headers)}. Kirimkan daftar kolom ini "
+                    "biar formatnya bisa didukung.",
+                    "danger",
+                )
+                return redirect(url_for("marketing_meta_upload"))
+
+            agregat, dilewati, contoh_gagal = proses_baris_upload(rows_bersih, mapping, butuh_produk=False)
+            if not agregat:
+                os.remove(path_tmp)
+                pesan = "Kolom Tanggal terdeteksi tapi isinya sepertinya bukan tanggal yang valid."
+                if contoh_gagal:
+                    pesan += " Contoh nilai: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+                flash(pesan, "danger")
+                return redirect(url_for("marketing_meta_upload"))
+
+            def nama_kolom(key):
+                idx = mapping.get(key)
+                return str(headers[idx]).strip() if idx is not None and idx < len(headers) else None
+
+            kolom_terdeteksi = [
+                (label, nama_kolom(key)) for key, label, _wajib, _kk in KOLOM_TARGET_META
+            ]
+            preview = []
+            for tanggal in sorted(agregat.keys()):
+                nilai = agregat[tanggal]
+                biaya = round(nilai["biaya"])
+                pajak = round(nilai["pajak"]) or hitung_pajak_meta(biaya)
+                preview.append({
+                    "tanggal": tanggal, "biaya": biaya, "pajak": pajak,
+                    "impresi": round(nilai["impresi"]), "klik": round(nilai["klik"]),
+                    "pesanan": round(nilai["pesanan"]), "omzet": round(nilai["omzet"]),
+                })
+
             return render_template(
-                "marketing/iklan_mapping.html",
+                "marketing/meta_review.html",
                 token=token,
-                marketplace="Meta",
-                headers=headers,
-                preview_rows=rows_bersih[:8],
-                kolom_target=KOLOM_TARGET_META,
-                tebakan=tebakan,
-                jumlah_baris=len(rows_bersih),
-                baris_dilewati_awal=idx_header,
-                judul="Cocokkan Kolom — Iklan Meta",
+                mapping=mapping,
+                kolom_terdeteksi=kolom_terdeteksi,
+                preview=preview,
+                dilewati=dilewati,
+                contoh_gagal=contoh_gagal,
                 konfirmasi_url=url_for("marketing_meta_konfirmasi"),
                 upload_url=url_for("marketing_meta_upload"),
             )

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Review Data Iklan Meta{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3 class="mb-0">Review Data Iklan Meta</h3>
+  <a href="{{ upload_url }}" class="btn btn-outline-secondary btn-sm">&larr; Upload Ulang</a>
+</div>
+
+<div class="alert alert-success small">
+  Kolom berhasil dikenali otomatis dari file, tidak perlu diisi manual. Periksa hasilnya di bawah, lalu klik
+  <strong>Import Data</strong> kalau sudah sesuai.
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="text-muted small mb-2">Kolom yang terdeteksi:</div>
+  <div class="d-flex flex-wrap gap-2">
+    {% for label, nama in kolom_terdeteksi %}
+    {% if nama %}
+    <span class="badge bg-light text-dark border">{{ label }} = "{{ nama }}"</span>
+    {% else %}
+    <span class="badge bg-light text-muted border">{{ label }} = tidak ditemukan</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% if dilewati %}
+  <div class="small text-warning mt-2">
+    {{ dilewati }} baris di file dilewati karena tanggalnya tidak terbaca.
+    {% if contoh_gagal %}Contoh: {% for c in contoh_gagal %}'{{ c }}'{% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card p-3 mb-4" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">Pratinjau {{ preview|length }} hari data yang akan diimpor:</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Tanggal</th>
+        <th class="text-end">Biaya</th>
+        <th class="text-end">Pajak</th>
+        <th class="text-end">Impresi</th>
+        <th class="text-end">Klik</th>
+        <th class="text-end">Pesanan</th>
+        <th class="text-end">Omzet</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in preview %}
+      <tr>
+        <td>{{ p.tanggal.strftime("%d/%m/%Y") }}</td>
+        <td class="text-end">{{ p.biaya | rupiah }}</td>
+        <td class="text-end">{{ p.pajak | rupiah }}</td>
+        <td class="text-end">{{ p.impresi }}</td>
+        <td class="text-end">{{ p.klik }}</td>
+        <td class="text-end">{{ p.pesanan }}</td>
+        <td class="text-end">{{ p.omzet | rupiah }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<form method="post" action="{{ konfirmasi_url }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  {% for key, idx in mapping.items() %}
+  <input type="hidden" name="map_{{ key }}" value="{{ idx if idx is not none else '' }}">
+  {% endfor %}
+  <button type="submit" class="btn btn-primary">Import Data</button>
+  <a href="{{ upload_url }}" class="btn btn-outline-secondary">Batal</a>
+</form>
+{% endblock %}
