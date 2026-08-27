@@ -155,6 +155,31 @@
           {% endfor %}
           {% if periode_list|length > 1 %}<td class="text-end">{{ nsp.total | rupiah }}</td>{% endif %}
         </tr>
+        {% set nso = namespace(omzet=0, klik=0, impresi=0, pesanan=0, biaya=0) %}
+        <tr class="table-light">
+          <td class="ps-4 small text-muted">&#8618; Omzet dari Iklan Meta</td>
+          {% for d in data_per_periode %}
+          {% set nso.omzet = nso.omzet + d.meta_omzet_total %}
+          {% set nso.klik = nso.klik + d.meta_klik_total %}
+          {% set nso.impresi = nso.impresi + d.meta_impresi_total %}
+          {% set nso.pesanan = nso.pesanan + d.meta_pesanan_total %}
+          {% set nso.biaya = nso.biaya + d.meta_biaya_kotor %}
+          <td class="text-end small text-muted">{{ d.meta_omzet_total | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}<td class="text-end small text-muted">{{ nso.omzet | rupiah }}</td>{% endif %}
+        </tr>
+        <tr class="table-light">
+          <td class="ps-4 small text-muted">&#8618; ROAS &middot; CTR &middot; CPA Iklan Meta</td>
+          {% for d in data_per_periode %}
+          <td class="text-end small text-muted">{{ "%.2f"|format(d.meta_roas) }}x &middot; {{ "%.2f"|format(d.meta_ctr) }}% &middot; {{ d.meta_cpa | rupiah }}</td>
+          {% endfor %}
+          {% if periode_list|length > 1 %}
+          {% set roas_gab = (nso.omzet / nso.biaya) if nso.biaya else 0 %}
+          {% set ctr_gab = (nso.klik / nso.impresi * 100) if nso.impresi else 0 %}
+          {% set cpa_gab = (nso.biaya / nso.pesanan) if nso.pesanan else 0 %}
+          <td class="text-end small text-muted">{{ "%.2f"|format(roas_gab) }}x &middot; {{ "%.2f"|format(ctr_gab) }}% &middot; {{ cpa_gab | rupiah }}</td>
+          {% endif %}
+        </tr>
         {% set nsg = namespace(total=0) %}
         <tr>
           <td class="ps-3">Beban Gaji, Upah &amp; Honorer</td>

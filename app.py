@@ -2212,14 +2212,28 @@ def create_app():
             opex_by_kategori[r.kategori] = opex_by_kategori.get(r.kategori, 0) + (r.jumlah or 0)
 
         meta_rows = IklanMeta.query.filter(IklanMeta.tanggal >= awal, IklanMeta.tanggal <= akhir).all()
-        iklan_meta_total = sum(r.biaya or 0 for r in meta_rows)
+        # "biaya" di laporan Iklan Meta adalah total yang sudah termasuk pajak (PPN), jadi "Pajak Iklan"
+        # bukan beban tambahan di luar biaya itu -- melainkan pecahan dari biaya yang sama. iklan_meta_total
+        # yang ditampilkan/dihitung di beban operasional dibuat NET (biaya - pajak) supaya tidak dobel hitung;
+        # pajak_iklan_total tetap ditampilkan terpisah sebagai rincian, dan keduanya berjumlah sama dengan
+        # meta_biaya_kotor (total riil yang dibayar ke Meta).
+        meta_biaya_kotor = sum(r.biaya or 0 for r in meta_rows)
         pajak_iklan_total = sum(r.pajak or 0 for r in meta_rows)
+        iklan_meta_total = meta_biaya_kotor - pajak_iklan_total
+
+        meta_omzet_total = sum(r.omzet or 0 for r in meta_rows)
+        meta_klik_total = sum(r.klik or 0 for r in meta_rows)
+        meta_impresi_total = sum(r.impresi or 0 for r in meta_rows)
+        meta_pesanan_total = sum(r.pesanan or 0 for r in meta_rows)
+        meta_roas = (meta_omzet_total / meta_biaya_kotor) if meta_biaya_kotor else 0
+        meta_ctr = (meta_klik_total / meta_impresi_total * 100) if meta_impresi_total else 0
+        meta_cpa = (meta_biaya_kotor / meta_pesanan_total) if meta_pesanan_total else 0
 
         total_beban_operasional_manual = sum(v for _, v in beban_operasional_manual_items)
 
         total_beban_operasional = (
             sum(iklan_by_mp.values()) + gaji_total + sum(opex_by_kategori.values())
-            + iklan_meta_total + pajak_iklan_total + total_beban_operasional_manual
+            + meta_biaya_kotor + total_beban_operasional_manual
         )
         pendapatan_operasional = laba_kotor - total_beban_operasional
 
@@ -2241,6 +2255,14 @@ def create_app():
             "opex_by_kategori": opex_by_kategori,
             "iklan_meta_total": iklan_meta_total,
             "pajak_iklan_total": pajak_iklan_total,
+            "meta_biaya_kotor": meta_biaya_kotor,
+            "meta_omzet_total": meta_omzet_total,
+            "meta_klik_total": meta_klik_total,
+            "meta_impresi_total": meta_impresi_total,
+            "meta_pesanan_total": meta_pesanan_total,
+            "meta_roas": meta_roas,
+            "meta_ctr": meta_ctr,
+            "meta_cpa": meta_cpa,
             "beban_operasional_manual_items": beban_operasional_manual_items,
             "total_beban_operasional": total_beban_operasional,
             "pendapatan_operasional": pendapatan_operasional,
@@ -3107,36 +3129,17 @@ def create_app():
     @app.route("/marketing/meta")
     @marketing_required
     def marketing_meta_dashboard():
-        hari_ini = today_wib()
-        default_dari = hari_ini.replace(day=1)
-        try:
-            dari = datetime.strptime(request.args.get("dari", ""), "%Y-%m-%d").date()
-        except ValueError:
-            dari = default_dari
-        try:
-            sampai = datetime.strptime(request.args.get("sampai", ""), "%Y-%m-%d").date()
-        except ValueError:
-            sampai = hari_ini
-        try:
-            threshold_roas = float(request.args.get("roas_min", 3))
-        except ValueError:
-            threshold_roas = 3.0
-        try:
-            threshold_ctr = float(request.args.get("ctr_min", 1))
-        except ValueError:
-            threshold_ctr = 1.0
-
-        data_terfilter = IklanMeta.query.filter(
-            IklanMeta.tanggal >= dari, IklanMeta.tanggal <= sampai
-        ).order_by(IklanMeta.tanggal).all()
+        # Sengaja tanpa filter tanggal/threshold apa pun -- tampilkan semua data yang
+        # pernah diupload/diinput user apa adanya, sebagai data pendukung Laba Rugi.
+        semua_data = IklanMeta.query.order_by(IklanMeta.tanggal).all()
 
         total = {
-            "biaya": sum(d.biaya or 0 for d in data_terfilter),
-            "pajak": sum(d.pajak or 0 for d in data_terfilter),
-            "impresi": sum(d.impresi or 0 for d in data_terfilter),
-            "klik": sum(d.klik or 0 for d in data_terfilter),
-            "pesanan": sum(d.pesanan or 0 for d in data_terfilter),
-            "omzet": sum(d.omzet or 0 for d in data_terfilter),
+            "biaya": sum(d.biaya or 0 for d in semua_data),
+            "pajak": sum(d.pajak or 0 for d in semua_data),
+            "impresi": sum(d.impresi or 0 for d in semua_data),
+            "klik": sum(d.klik or 0 for d in semua_data),
+            "pesanan": sum(d.pesanan or 0 for d in semua_data),
+            "omzet": sum(d.omzet or 0 for d in semua_data),
         }
         ringkasan = {
             **total,
@@ -3148,7 +3151,7 @@ def create_app():
         }
 
         tren_map = {}
-        for d in data_terfilter:
+        for d in semua_data:
             key = d.tanggal.isoformat()
             if key not in tren_map:
                 tren_map[key] = {"biaya": 0, "omzet": 0}
@@ -3160,12 +3163,8 @@ def create_app():
 
         return render_template(
             "marketing/meta_dashboard.html",
-            dari=dari,
-            sampai=sampai,
-            threshold_roas=threshold_roas,
-            threshold_ctr=threshold_ctr,
             ringkasan=ringkasan,
-            data_list=list(reversed(data_terfilter)),
+            data_list=list(reversed(semua_data)),
             tren_tanggal=tren_tanggal,
             tren_biaya=tren_biaya,
             tren_omzet=tren_omzet,
