@@ -4,6 +4,9 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <h3 class="mb-0">Iklan Meta</h3>
   <div class="d-flex gap-2">
+    <form method="post" action="{{ url_for('marketing_meta_hitung_ulang_pajak') }}" onsubmit="return confirm('Hitung ulang Pajak Iklan (11% dari Biaya) untuk SEMUA baris data? Nilai pajak yang ada sekarang akan ditimpa.');">
+      <button type="submit" class="btn btn-outline-secondary">Hitung Ulang Pajak (11%)</button>
+    </form>
     <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalManual">+ Input Manual</button>
     <a href="{{ url_for('marketing_meta_upload') }}" class="btn btn-primary">+ Upload Laporan Iklan Meta</a>
   </div>
@@ -12,7 +15,8 @@
 <div class="alert alert-info small mb-4">
   Menampilkan <strong>semua</strong> data Iklan Meta yang pernah diupload/diinput, tanpa filter tanggal
   &mdash; data ini dipakai sebagai pendukung perhitungan Laba Rugi. Untuk koreksi/hapus data tertentu,
-  gunakan tombol Hapus di tabel bawah.
+  gunakan tombol Hapus di tabel bawah. Kolom Biaya dianggap sudah termasuk pajak (PPN 11%) &mdash; kalau
+  Pajak Iklan tidak diisi manual/tidak ada di file, otomatis dihitung 11% dari Biaya.
 </div>
 
 <div class="row g-3 mb-4">

@@ -178,6 +178,12 @@ KOLOM_TARGET_META = KOLOM_TARGET_IKLAN + [
     ("pajak", "Pajak Iklan", False, ["pajak", "tax", "ppn"]),
 ]
 
+TARIF_PAJAK_META = 0.11  # PPN 11% -- "Biaya" Iklan Meta sudah termasuk pajak ini
+
+
+def hitung_pajak_meta(biaya):
+    return round((biaya or 0) * TARIF_PAJAK_META)
+
 
 KOLOM_TARGET_PRODUK = [
     ("nama_produk", "Nama Produk", True, ["nama produk", "produk", "product", "nama barang", "item name", "item"]),
@@ -3255,7 +3261,7 @@ def create_app():
                 existing = IklanMeta(tanggal=tanggal)
                 db.session.add(existing)
             existing.biaya = round(nilai["biaya"])
-            existing.pajak = round(nilai["pajak"])
+            existing.pajak = round(nilai["pajak"]) or hitung_pajak_meta(nilai["biaya"])
             existing.impresi = round(nilai["impresi"])
             existing.klik = round(nilai["klik"])
             existing.pesanan = round(nilai["pesanan"])
@@ -3293,7 +3299,7 @@ def create_app():
             existing = IklanMeta(tanggal=tanggal)
             db.session.add(existing)
         existing.biaya = round(parse_angka_iklan(request.form.get("biaya", "0")))
-        existing.pajak = round(parse_angka_iklan(request.form.get("pajak", "0")))
+        existing.pajak = round(parse_angka_iklan(request.form.get("pajak", "0"))) or hitung_pajak_meta(existing.biaya)
         existing.impresi = round(parse_angka_iklan(request.form.get("impresi", "0")))
         existing.klik = round(parse_angka_iklan(request.form.get("klik", "0")))
         existing.pesanan = round(parse_angka_iklan(request.form.get("pesanan", "0")))
@@ -3314,6 +3320,23 @@ def create_app():
             flash("Data Iklan Meta berhasil dihapus.", "success")
         else:
             flash("Data tidak ditemukan.", "danger")
+        return redirect(url_for("marketing_meta_dashboard"))
+
+    @app.route("/marketing/meta/hitung-ulang-pajak", methods=["POST"])
+    @marketing_required
+    def marketing_meta_hitung_ulang_pajak():
+        semua = IklanMeta.query.all()
+        jumlah = 0
+        for r in semua:
+            pajak_baru = hitung_pajak_meta(r.biaya)
+            if r.pajak != pajak_baru:
+                r.pajak = pajak_baru
+                jumlah += 1
+        db.session.commit()
+        flash(
+            f"Pajak Iklan dihitung ulang ({int(TARIF_PAJAK_META * 100)}% dari Biaya) untuk {jumlah} dari {len(semua)} baris data.",
+            "success",
+        )
         return redirect(url_for("marketing_meta_dashboard"))
 
     @app.route("/marketing/produk/upload", methods=["GET", "POST"])
