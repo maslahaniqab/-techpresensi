@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Upload Data Produk{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3 class="mb-0">Upload Data Produk</h3>
+  <a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali</a>
+</div>
+
+<div class="card p-4" style="max-width: 640px;">
+  <p class="text-muted small">
+    Upload file data produk (CSV/XLSX), misalnya laporan "Online Products" dari Shopee yang berisi kolom
+    Nama Produk, Variasi, HPP, dan Harga Jual. Kolom otomatis dikenali dari file &mdash; tidak perlu isi form
+    apa pun. Produk dengan variasi (warna/ukuran) akan menjadi baris tersendiri, misal
+    "Nama Produk - Hitam". Kalau nama produk sudah ada di tabel, datanya akan diperbarui; kalau belum ada,
+    akan ditambahkan sebagai produk baru &mdash; struktur tabel yang sudah ada tidak berubah.
+  </p>
+  <form method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label class="form-label">File Data Produk (CSV/XLSX)</label>
+      <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xlsm" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Upload &amp; Review</button>
+  </form>
+</div>
+{% endblock %}

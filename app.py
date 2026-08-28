@@ -460,6 +460,29 @@ def deteksi_otomatis_kolom_iklan(headers, rows, kolom_target):
     return hasil
 
 
+def deteksi_kolom_produk(headers):
+    """Deteksi kolom Nama Produk/Variasi/HPP/Harga Jual dari nama header (mis. laporan
+    'Online Products' Shopee), tanpa form cocokkan kolom manual."""
+    headers_lower = [str(h).strip().lower() for h in headers]
+    idx_terpakai = set()
+
+    def cari(kata_kunci):
+        for idx, h in enumerate(headers_lower):
+            if idx in idx_terpakai:
+                continue
+            if any(kk in h for kk in kata_kunci):
+                idx_terpakai.add(idx)
+                return idx
+        return None
+
+    return {
+        "nama_produk": cari(["nama produk", "product name", "nama barang"]),
+        "variasi": cari(["variasi", "variant", "varian"]),
+        "hpp": cari(["hpp", "harga pokok", "cost"]),
+        "harga_jual": cari(["harga jual", "selling price", "price"]),
+    }
+
+
 def baca_file_iklan(file_storage):
     filename = file_storage.filename or ""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -1118,6 +1141,118 @@ def create_app():
         db.session.delete(produk)
         db.session.commit()
         flash(f"Produk {nama} dihapus.", "info")
+        return redirect(url_for("produk_list"))
+
+    @app.route("/produk/upload", methods=["GET", "POST"])
+    @admin_required
+    def produk_upload():
+        bersihkan_tmp_iklan_lama()
+        if request.method == "POST":
+            file = request.files.get("file")
+            if not file or not file.filename:
+                flash("Pilih file data produk (CSV/XLSX) terlebih dahulu.", "danger")
+                return redirect(url_for("produk_upload"))
+
+            headers, rows, _idx_header, error = baca_file_iklan(file)
+            if error:
+                flash(error, "danger")
+                return redirect(url_for("produk_upload"))
+
+            mapping = deteksi_kolom_produk(headers)
+            if mapping.get("nama_produk") is None or mapping.get("hpp") is None or mapping.get("harga_jual") is None:
+                flash(
+                    "Sistem tidak berhasil mengenali kolom Nama Produk/HPP/Harga Jual secara otomatis dari file "
+                    f"ini. Header yang terbaca: {', '.join(str(h) for h in headers)}. Kirimkan daftar kolom ini "
+                    "biar formatnya bisa didukung.",
+                    "danger",
+                )
+                return redirect(url_for("produk_upload"))
+
+            idx_nama = mapping["nama_produk"]
+            idx_variasi = mapping.get("variasi")
+            idx_hpp = mapping["hpp"]
+            idx_harga = mapping["harga_jual"]
+
+            preview = []
+            dilewati = 0
+            for row in rows:
+                nama_raw = row[idx_nama] if idx_nama < len(row) else None
+                nama = str(nama_raw).strip() if nama_raw is not None else ""
+                if not nama:
+                    dilewati += 1
+                    continue
+                variasi_raw = row[idx_variasi] if idx_variasi is not None and idx_variasi < len(row) else None
+                variasi = str(variasi_raw).strip() if variasi_raw not in (None, "") else ""
+                nama_final = (f"{nama} - {variasi}" if variasi else nama)[:128]
+
+                hpp_val = round(parse_angka_iklan(row[idx_hpp])) if idx_hpp < len(row) else 0
+                harga_val = round(parse_angka_iklan(row[idx_harga])) if idx_harga < len(row) else 0
+                preview.append({"nama_produk": nama_final, "hpp": hpp_val, "harga_jual": harga_val})
+
+            if not preview:
+                flash("Tidak ada baris data produk yang valid di file ini (kolom Nama Produk kosong semua).", "danger")
+                return redirect(url_for("produk_upload"))
+
+            token = uuid.uuid4().hex
+            path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produkharga_{token}.json")
+            with open(path_tmp, "w", encoding="utf-8") as f:
+                json.dump({"preview": preview, "sumber_file": secure_filename(file.filename)}, f)
+
+            def nama_kolom(idx):
+                return str(headers[idx]).strip() if idx is not None and idx < len(headers) else None
+
+            kolom_terdeteksi = [
+                ("Nama Produk", nama_kolom(idx_nama)),
+                ("Variasi", nama_kolom(idx_variasi)),
+                ("HPP", nama_kolom(idx_hpp)),
+                ("Harga Jual", nama_kolom(idx_harga)),
+            ]
+
+            return render_template(
+                "produk_review.html",
+                token=token,
+                kolom_terdeteksi=kolom_terdeteksi,
+                preview=preview,
+                dilewati=dilewati,
+            )
+
+        return render_template("produk_upload.html")
+
+    @app.route("/produk/upload/konfirmasi", methods=["POST"])
+    @admin_required
+    def produk_upload_konfirmasi():
+        token = request.form.get("token", "")
+        path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produkharga_{token}.json")
+        if not os.path.isfile(path_tmp):
+            flash("Sesi upload sudah kedaluwarsa, silakan upload ulang file.", "danger")
+            return redirect(url_for("produk_upload"))
+
+        with open(path_tmp, "r", encoding="utf-8") as f:
+            data_tmp = json.load(f)
+
+        jumlah_baru = jumlah_update = 0
+        for item in data_tmp["preview"]:
+            nama = item["nama_produk"]
+            existing = Produk.query.filter_by(nama_produk=nama).first()
+            if not existing:
+                existing = Produk(nama_produk=nama)
+                db.session.add(existing)
+                jumlah_baru += 1
+            else:
+                jumlah_update += 1
+            existing.modal = item["hpp"]
+            existing.hpp = item["hpp"]
+            existing.harga_dasar = item["harga_jual"]
+            existing.harga_normal = item["harga_jual"]
+            existing.harga_flash_sale = item["harga_jual"]
+            existing.harga_big_campaign = item["harga_jual"]
+        db.session.commit()
+        os.remove(path_tmp)
+
+        flash(
+            f"Berhasil impor {len(data_tmp['preview'])} produk ({jumlah_baru} baru, {jumlah_update} diperbarui).",
+            "success",
+        )
         return redirect(url_for("produk_list"))
 
     # ---------- ABSENSI ----------

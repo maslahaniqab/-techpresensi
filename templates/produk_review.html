@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Review Data Produk{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h3 class="mb-0">Review Data Produk</h3>
+  <a href="{{ url_for('produk_upload') }}" class="btn btn-outline-secondary btn-sm">&larr; Upload Ulang</a>
+</div>
+
+<div class="alert alert-success small">
+  Kolom berhasil dikenali otomatis dari file, tidak perlu diisi manual. Harga Jual dipakai untuk mengisi
+  Harga Dasar, Harga Normal, Harga Flash Sale, dan Harga BIG Campaign sekaligus (bisa dikoreksi manual per
+  produk setelah diimpor). Periksa hasilnya di bawah, lalu klik <strong>Import Data</strong> kalau sudah sesuai.
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="text-muted small mb-2">Kolom yang terdeteksi:</div>
+  <div class="d-flex flex-wrap gap-2">
+    {% for label, nama in kolom_terdeteksi %}
+    {% if nama %}
+    <span class="badge bg-light text-dark border">{{ label }} = "{{ nama }}"</span>
+    {% else %}
+    <span class="badge bg-light text-muted border">{{ label }} = tidak ditemukan</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% if dilewati %}
+  <div class="small text-warning mt-2">{{ dilewati }} baris dilewati karena Nama Produk kosong.</div>
+  {% endif %}
+</div>
+
+<div class="card p-3 mb-4" style="overflow-x:auto; max-height: 500px;">
+  <div class="text-muted small mb-2">Pratinjau {{ preview|length }} produk yang akan diimpor:</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Nama Produk</th>
+        <th class="text-end">Modal / HPP</th>
+        <th class="text-end">Harga Jual (semua tingkat harga)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in preview %}
+      <tr>
+        <td>{{ p.nama_produk }}</td>
+        <td class="text-end">{{ p.hpp | rupiah }}</td>
+        <td class="text-end">{{ p.harga_jual | rupiah }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<form method="post" action="{{ url_for('produk_upload_konfirmasi') }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button type="submit" class="btn btn-primary">Import Data</button>
+  <a href="{{ url_for('produk_upload') }}" class="btn btn-outline-secondary">Batal</a>
+</form>
+{% endblock %}
