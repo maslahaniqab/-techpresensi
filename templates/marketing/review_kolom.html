@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Review Data Iklan Meta{% endblock %}
+{% block title %}{{ judul }}{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h3 class="mb-0">Review Data Iklan Meta</h3>
+  <h3 class="mb-0">{{ judul }}</h3>
   <a href="{{ upload_url }}" class="btn btn-outline-secondary btn-sm">&larr; Upload Ulang</a>
 </div>
 
@@ -24,20 +24,21 @@
   </div>
   {% if dilewati %}
   <div class="small text-warning mt-2">
-    {{ dilewati }} baris di file dilewati karena tanggalnya tidak terbaca.
+    {{ dilewati }} baris di file dilewati karena datanya tidak terbaca.
     {% if contoh_gagal %}Contoh: {% for c in contoh_gagal %}'{{ c }}'{% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}
   </div>
   {% endif %}
 </div>
 
-<div class="card p-3 mb-4" style="overflow-x:auto;">
-  <div class="text-muted small mb-2">Pratinjau {{ preview|length }} hari data yang akan diimpor:</div>
+<div class="card p-3 mb-4" style="overflow-x:auto; max-height: 500px;">
+  <div class="text-muted small mb-2">Pratinjau {{ preview|length }} baris data yang akan diimpor:</div>
   <table class="table table-sm align-middle mb-0">
     <thead>
       <tr>
+        {% if tampilkan_produk %}<th>Produk</th>{% endif %}
         <th>Tanggal</th>
         <th class="text-end">Biaya</th>
-        <th class="text-end">Pajak</th>
+        {% if tampilkan_pajak %}<th class="text-end">Pajak</th>{% endif %}
         <th class="text-end">Impresi</th>
         <th class="text-end">Klik</th>
         <th class="text-end">Pesanan</th>
@@ -47,9 +48,10 @@
     <tbody>
       {% for p in preview %}
       <tr>
+        {% if tampilkan_produk %}<td>{{ p.nama_produk }}</td>{% endif %}
         <td>{{ p.tanggal.strftime("%d/%m/%Y") }}</td>
         <td class="text-end">{{ p.biaya | rupiah }}</td>
-        <td class="text-end">{{ p.pajak | rupiah }}</td>
+        {% if tampilkan_pajak %}<td class="text-end">{{ p.pajak | rupiah }}</td>{% endif %}
         <td class="text-end">{{ p.impresi }}</td>
         <td class="text-end">{{ p.klik }}</td>
         <td class="text-end">{{ p.pesanan }}</td>

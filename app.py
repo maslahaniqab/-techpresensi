@@ -353,20 +353,6 @@ def deteksi_otomatis_kolom_penjualan(headers, rows):
     }
 
 
-def tebak_kolom(headers, target_list=None):
-    target_list = target_list or KOLOM_TARGET_IKLAN
-    tebakan = {}
-    headers_lower = [str(h).strip().lower() for h in headers]
-    for key, _label, _wajib, kata_kunci in target_list:
-        pilihan = ""
-        for idx, h in enumerate(headers_lower):
-            if any(kk in h for kk in kata_kunci):
-                pilihan = str(idx)
-                break
-        tebakan[key] = pilihan
-    return tebakan
-
-
 _KATA_KUNCI_HEADER = set()
 for _key, _label, _wajib, _kk in KOLOM_TARGET_IKLAN + KOLOM_TARGET_PRODUK + KOLOM_TARGET_PENJUALAN:
     _KATA_KUNCI_HEADER.update(_kk)
@@ -432,12 +418,25 @@ def deteksi_otomatis_kolom_iklan(headers, rows, kolom_target):
                     ok += 1
         return (ok / total) if total else 0
 
+    def rate_non_kosong(idx):
+        total = ok = 0
+        for r in sampel:
+            if idx < len(r):
+                total += 1
+                if str(r[idx]).strip():
+                    ok += 1
+        return (ok / total) if total else 0
+
     hasil = {}
     idx_terpakai = set()
 
     for key, _label, wajib, kata_kunci in kolom_target:
-        cek = rate_tanggal if key == "tanggal" else rate_numerik
-        ambang = 0.6 if key == "tanggal" else 0.5
+        if key == "tanggal":
+            cek, ambang = rate_tanggal, 0.6
+        elif key == "nama_produk":
+            cek, ambang = rate_non_kosong, 0.5
+        else:
+            cek, ambang = rate_numerik, 0.5
         idx_pilihan = None
         for idx, h in enumerate(headers_lower):
             if idx in idx_terpakai:
@@ -3194,19 +3193,51 @@ def create_app():
             if error:
                 flash(error, "danger")
                 return redirect(url_for("marketing_iklan_upload"))
+            path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"iklan_{token}.json")
 
-            tebakan = tebak_kolom(headers, KOLOM_TARGET_IKLAN)
+            mapping = deteksi_otomatis_kolom_iklan(headers, rows_bersih, KOLOM_TARGET_IKLAN)
+            if mapping.get("tanggal") is None or mapping.get("biaya") is None:
+                os.remove(path_tmp)
+                flash(
+                    "Sistem tidak berhasil mengenali kolom Tanggal dan/atau Biaya Iklan secara otomatis dari file "
+                    f"ini. Header yang terbaca: {', '.join(str(h) for h in headers)}. Kirimkan daftar kolom ini "
+                    "biar formatnya bisa didukung.",
+                    "danger",
+                )
+                return redirect(url_for("marketing_iklan_upload"))
+
+            agregat, dilewati, contoh_gagal = proses_baris_upload(rows_bersih, mapping, butuh_produk=False)
+            if not agregat:
+                os.remove(path_tmp)
+                pesan = "Kolom Tanggal terdeteksi tapi isinya sepertinya bukan tanggal yang valid."
+                if contoh_gagal:
+                    pesan += " Contoh nilai: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+                flash(pesan, "danger")
+                return redirect(url_for("marketing_iklan_upload"))
+
+            def nama_kolom(idx):
+                return str(headers[idx]).strip() if idx is not None and idx < len(headers) else None
+
+            kolom_terdeteksi = [(label, nama_kolom(mapping.get(key))) for key, label, _w, _kk in KOLOM_TARGET_IKLAN]
+            preview = []
+            for tanggal in sorted(agregat.keys()):
+                nilai = agregat[tanggal]
+                preview.append({
+                    "tanggal": tanggal, "biaya": round(nilai["biaya"]), "impresi": round(nilai["impresi"]),
+                    "klik": round(nilai["klik"]), "pesanan": round(nilai["pesanan"]), "omzet": round(nilai["omzet"]),
+                })
+
             return render_template(
-                "marketing/iklan_mapping.html",
+                "marketing/review_kolom.html",
+                judul=f"Review Data Iklan — {marketplace}",
                 token=token,
-                marketplace=marketplace,
-                headers=headers,
-                preview_rows=rows_bersih[:8],
-                kolom_target=KOLOM_TARGET_IKLAN,
-                tebakan=tebakan,
-                jumlah_baris=len(rows_bersih),
-                baris_dilewati_awal=idx_header,
-                judul="Cocokkan Kolom",
+                mapping=mapping,
+                kolom_terdeteksi=kolom_terdeteksi,
+                preview=preview,
+                tampilkan_produk=False,
+                tampilkan_pajak=False,
+                dilewati=dilewati,
+                contoh_gagal=contoh_gagal,
                 konfirmasi_url=url_for("marketing_iklan_konfirmasi"),
                 upload_url=url_for("marketing_iklan_upload"),
             )
@@ -3237,25 +3268,13 @@ def create_app():
         agregat, dilewati, contoh_gagal = proses_baris_upload(data_tmp["rows"], mapping, butuh_produk=False)
 
         if not agregat:
-            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+            os.remove(path_tmp)
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom Tanggal sepertinya bukan tanggal yang valid."
             if contoh_gagal:
                 contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
-                pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+                pesan += f" Contoh nilai di kolom itu: {contoh}."
             flash(pesan, "danger")
-            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_IKLAN}
-            return render_template(
-                "marketing/iklan_mapping.html",
-                token=token,
-                marketplace=data_tmp["marketplace"],
-                headers=data_tmp["headers"],
-                preview_rows=data_tmp["rows"][:8],
-                kolom_target=KOLOM_TARGET_IKLAN,
-                tebakan=tebakan_ulang,
-                jumlah_baris=len(data_tmp["rows"]),
-                judul="Cocokkan Kolom",
-                konfirmasi_url=url_for("marketing_iklan_konfirmasi"),
-                upload_url=url_for("marketing_iklan_upload"),
-            )
+            return redirect(url_for("marketing_iklan_upload"))
 
         marketplace = data_tmp["marketplace"]
         sumber_file = data_tmp.get("sumber_file", "")
@@ -3427,11 +3446,14 @@ def create_app():
                 })
 
             return render_template(
-                "marketing/meta_review.html",
+                "marketing/review_kolom.html",
+                judul="Review Data Iklan Meta",
                 token=token,
                 mapping=mapping,
                 kolom_terdeteksi=kolom_terdeteksi,
                 preview=preview,
+                tampilkan_produk=False,
+                tampilkan_pajak=True,
                 dilewati=dilewati,
                 contoh_gagal=contoh_gagal,
                 konfirmasi_url=url_for("marketing_meta_konfirmasi"),
@@ -3464,25 +3486,13 @@ def create_app():
         agregat, dilewati, contoh_gagal = proses_baris_upload(data_tmp["rows"], mapping, butuh_produk=False)
 
         if not agregat:
-            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Tanggal' yang dipilih sepertinya bukan tanggal yang valid."
+            os.remove(path_tmp)
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom Tanggal sepertinya bukan tanggal yang valid."
             if contoh_gagal:
                 contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
-                pesan += f" Contoh nilai di kolom itu: {contoh}. Coba pilih kolom Tanggal yang lain di bawah."
+                pesan += f" Contoh nilai di kolom itu: {contoh}."
             flash(pesan, "danger")
-            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_META}
-            return render_template(
-                "marketing/iklan_mapping.html",
-                token=token,
-                marketplace="Meta",
-                headers=data_tmp["headers"],
-                preview_rows=data_tmp["rows"][:8],
-                kolom_target=KOLOM_TARGET_META,
-                tebakan=tebakan_ulang,
-                jumlah_baris=len(data_tmp["rows"]),
-                judul="Cocokkan Kolom — Iklan Meta",
-                konfirmasi_url=url_for("marketing_meta_konfirmasi"),
-                upload_url=url_for("marketing_meta_upload"),
-            )
+            return redirect(url_for("marketing_meta_upload"))
 
         sumber_file = data_tmp.get("sumber_file", "")
         for tanggal, nilai in agregat.items():
@@ -3587,19 +3597,52 @@ def create_app():
             if error:
                 flash(error, "danger")
                 return redirect(url_for("marketing_produk_upload"))
+            path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produk_{token}.json")
 
-            tebakan = tebak_kolom(headers, KOLOM_TARGET_PRODUK)
+            mapping = deteksi_otomatis_kolom_iklan(headers, rows_bersih, KOLOM_TARGET_PRODUK)
+            if mapping.get("nama_produk") is None or mapping.get("tanggal") is None or mapping.get("biaya") is None:
+                os.remove(path_tmp)
+                flash(
+                    "Sistem tidak berhasil mengenali kolom Nama Produk/Tanggal/Biaya Iklan secara otomatis dari "
+                    f"file ini. Header yang terbaca: {', '.join(str(h) for h in headers)}. Kirimkan daftar kolom "
+                    "ini biar formatnya bisa didukung.",
+                    "danger",
+                )
+                return redirect(url_for("marketing_produk_upload"))
+
+            agregat, dilewati, contoh_gagal = proses_baris_upload(rows_bersih, mapping, butuh_produk=True)
+            if not agregat:
+                os.remove(path_tmp)
+                pesan = "Kolom Nama Produk/Tanggal terdeteksi tapi isinya sepertinya tidak valid."
+                if contoh_gagal:
+                    pesan += " Contoh nilai Tanggal: " + ", ".join(f"'{c}'" for c in contoh_gagal) + "."
+                flash(pesan, "danger")
+                return redirect(url_for("marketing_produk_upload"))
+
+            def nama_kolom(idx):
+                return str(headers[idx]).strip() if idx is not None and idx < len(headers) else None
+
+            kolom_terdeteksi = [(label, nama_kolom(mapping.get(key))) for key, label, _w, _kk in KOLOM_TARGET_PRODUK]
+            preview = []
+            for (nama_produk, tanggal) in sorted(agregat.keys(), key=lambda k: (k[1], k[0])):
+                nilai = agregat[(nama_produk, tanggal)]
+                preview.append({
+                    "nama_produk": nama_produk, "tanggal": tanggal, "biaya": round(nilai["biaya"]),
+                    "impresi": round(nilai["impresi"]), "klik": round(nilai["klik"]),
+                    "pesanan": round(nilai["pesanan"]), "omzet": round(nilai["omzet"]),
+                })
+
             return render_template(
-                "marketing/iklan_mapping.html",
+                "marketing/review_kolom.html",
+                judul=f"Review Data Performa Produk — {marketplace}",
                 token=token,
-                marketplace=marketplace,
-                headers=headers,
-                preview_rows=rows_bersih[:8],
-                kolom_target=KOLOM_TARGET_PRODUK,
-                tebakan=tebakan,
-                jumlah_baris=len(rows_bersih),
-                baris_dilewati_awal=idx_header,
-                judul="Cocokkan Kolom — Laporan Per Produk",
+                mapping=mapping,
+                kolom_terdeteksi=kolom_terdeteksi,
+                preview=preview,
+                tampilkan_produk=True,
+                tampilkan_pajak=False,
+                dilewati=dilewati,
+                contoh_gagal=contoh_gagal,
                 konfirmasi_url=url_for("marketing_produk_konfirmasi"),
                 upload_url=url_for("marketing_produk_upload"),
             )
@@ -3630,25 +3673,13 @@ def create_app():
         agregat, dilewati, contoh_gagal = proses_baris_upload(data_tmp["rows"], mapping, butuh_produk=True)
 
         if not agregat:
-            pesan = "Tidak ada baris data yang berhasil diproses — kolom 'Nama Produk' kosong, atau kolom 'Tanggal' yang dipilih bukan tanggal yang valid."
+            os.remove(path_tmp)
+            pesan = "Tidak ada baris data yang berhasil diproses — kolom Nama Produk kosong, atau kolom Tanggal bukan tanggal yang valid."
             if contoh_gagal:
                 contoh = ", ".join(f"'{c}'" for c in contoh_gagal)
-                pesan += f" Contoh nilai di kolom Tanggal: {contoh}. Coba pilih kolom yang lain di bawah."
+                pesan += f" Contoh nilai di kolom Tanggal: {contoh}."
             flash(pesan, "danger")
-            tebakan_ulang = {key: (str(mapping[key]) if mapping.get(key) is not None else "") for key, *_ in KOLOM_TARGET_PRODUK}
-            return render_template(
-                "marketing/iklan_mapping.html",
-                token=token,
-                marketplace=data_tmp["marketplace"],
-                headers=data_tmp["headers"],
-                preview_rows=data_tmp["rows"][:8],
-                kolom_target=KOLOM_TARGET_PRODUK,
-                tebakan=tebakan_ulang,
-                jumlah_baris=len(data_tmp["rows"]),
-                judul="Cocokkan Kolom — Laporan Per Produk",
-                konfirmasi_url=url_for("marketing_produk_konfirmasi"),
-                upload_url=url_for("marketing_produk_upload"),
-            )
+            return redirect(url_for("marketing_produk_upload"))
 
         marketplace = data_tmp["marketplace"]
         sumber_file = data_tmp.get("sumber_file", "")
