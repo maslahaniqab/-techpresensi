@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Order & Income{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h3 class="mb-0">Order &amp; Income</h3>
+  <a href="{{ url_for('profit_upload') }}" class="btn btn-primary">+ Upload Order / Income</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Baris Pesanan (item produk)</div>
+      <div class="fs-5 fw-bold">{{ total_pesanan }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Pesanan Unik (No. Pesanan)</div>
+      <div class="fs-5 fw-bold">{{ jumlah_order_unik }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Sudah Cocok dengan Income</div>
+      <div class="fs-5 fw-bold text-success">{{ jumlah_sudah_cocok }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Belum Ada Data Income</div>
+      <div class="fs-5 fw-bold text-warning">{{ jumlah_belum_ada_income }}</div>
+    </div>
+  </div>
+</div>
+
+{% if jumlah_belum_ada_income %}
+<div class="alert alert-warning small">
+  Ada {{ jumlah_belum_ada_income }} pesanan yang belum ketemu data Income-nya &mdash; biasanya karena dana belum
+  dilepaskan Shopee, pesanan dibatalkan, atau file Income untuk periode itu belum diupload.
+</div>
+{% endif %}
+
+<form method="get" class="card p-3 mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label small">Cari No. Pesanan / Nama Produk</label>
+      <input type="text" name="cari" class="form-control" value="{{ cari }}" placeholder="mis. 260601UU5HNMJJ atau Niqab Tali">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small">Bulan</label>
+      <input type="month" name="bulan" class="form-control" value="{{ bulan_filter }}">
+    </div>
+    <div class="col-md-4">
+      <button type="submit" class="btn btn-primary">Terapkan Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">Menampilkan {{ item_pesanan|length }} baris terbaru (maks. 500)</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>No. Pesanan</th>
+        <th>Tanggal</th>
+        <th>Status</th>
+        <th>Produk</th>
+        <th class="text-end">Qty</th>
+        <th class="text-end">Subtotal</th>
+        <th class="text-end">Total Penghasilan (per pesanan)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in item_pesanan %}
+      {% set inc = income_map.get(p.no_pesanan) %}
+      <tr>
+        <td class="small">{{ p.no_pesanan }}</td>
+        <td>{{ p.tanggal_pesanan.strftime("%d/%m/%Y") }}</td>
+        <td class="small">{{ p.status_pesanan }}</td>
+        <td class="small">{{ p.nama_produk }}</td>
+        <td class="text-end">{{ p.jumlah }}</td>
+        <td class="text-end">{{ p.subtotal | rupiah }}</td>
+        <td class="text-end">
+          {% if inc %}{{ inc.total_penghasilan | rupiah }}{% else %}<span class="text-muted">belum ada</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-muted py-4">Belum ada data. Upload Laporan Order/Income dulu.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -291,6 +291,43 @@ class PenjualanMarketplace(db.Model):
     )
 
 
+class PesananMarketplace(db.Model):
+    """Baris per item produk dari laporan Order marketplace (Shopee dkk)."""
+    id = db.Column(db.Integer, primary_key=True)
+    marketplace = db.Column(db.String(32), nullable=False)
+    no_pesanan = db.Column(db.String(64), nullable=False)
+    tanggal_pesanan = db.Column(db.Date, nullable=False)
+    status_pesanan = db.Column(db.String(32), default="")
+    nama_produk = db.Column(db.String(256), default="")
+    sku = db.Column(db.String(128), default="")
+    jumlah = db.Column(db.Integer, default=0)
+    subtotal = db.Column(db.Integer, default=0)  # nilai jual baris ini (sebelum dipotong biaya platform)
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    __table_args__ = (
+        db.UniqueConstraint("marketplace", "no_pesanan", "sku", "nama_produk", name="uq_pesanan_item"),
+    )
+
+
+class PendapatanPesanan(db.Model):
+    """Ringkasan dana yang benar-benar diterima per pesanan, dari laporan Income marketplace."""
+    id = db.Column(db.Integer, primary_key=True)
+    marketplace = db.Column(db.String(32), nullable=False)
+    no_pesanan = db.Column(db.String(64), nullable=False)
+    tanggal_dana_dilepas = db.Column(db.Date)
+    total_penghasilan = db.Column(db.Integer, default=0)  # dana bersih diterima, sudah dipotong semua biaya
+    biaya_admin = db.Column(db.Integer, default=0)
+    biaya_layanan = db.Column(db.Integer, default=0)
+    biaya_lainnya = db.Column(db.Integer, default=0)  # gabungan biaya transaksi/kampanye/komisi ads/proses/dll
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    __table_args__ = (
+        db.UniqueConstraint("marketplace", "no_pesanan", name="uq_pendapatan_pesanan"),
+    )
+
+
 class PengajuanLembur(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
