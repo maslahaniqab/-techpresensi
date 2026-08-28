@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 import openpyxl
 from dateutil import parser as date_parser
+from python_calamine import CalamineWorkbook
 
 WIB = ZoneInfo("Asia/Jakarta")
 
@@ -488,50 +489,83 @@ KOLOM_LAIN_INCOME_SHOPEE = [
 ]
 
 
+_MAX_KOLOM_LAPORAN_SHOPEE = 80  # cukup lebar utk laporan asli (~50-53 kolom); mencegah baca kolom "hantu"
+
+
+def _cek_header_shopee(sel):
+    """sel = list header (sudah lower+strip). Kembalikan 'order'/'income'/None."""
+    if "no. pesanan" in sel and "status pesanan" in sel:
+        return "order"
+    if "no. pesanan" in sel and "lihat berdasarkan" in sel:
+        return "income"
+    return None
+
+
 def baca_laporan_shopee(file_storage):
     """Baca file xlsx/csv lalu deteksi apakah ini Laporan Pesanan (Order) atau Laporan
     Pendapatan (Income) Shopee dari nama kolomnya -- mengembalikan (tipe, headers,
-    baris_data, error). tipe bernilai 'order'/'income'/None."""
+    baris_data, error). tipe bernilai 'order'/'income'/None.
+
+    Dibatasi _MAX_KOLOM_LAPORAN_SHOPEE kolom saat baca xlsx supaya tidak ikut membaca
+    kolom "hantu" (sisa format/formula lama) yang bisa melebar sampai ratusan/ribuan
+    kolom kosong pada file laporan Shopee asli -- kalau tidak dibatasi, baca 1 file bisa
+    makan waktu sangat lama dan bikin request timeout di server.
+    """
     filename = file_storage.filename or ""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     raw = file_storage.read()
 
-    semua_per_sheet = []
     if ext == "csv":
         text = raw.decode("utf-8-sig", errors="ignore")
-        semua_per_sheet.append(_parse_csv_delimiter_terbaik(text))
-    elif ext in ("xlsx", "xlsm"):
-        try:
-            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
-        except Exception:
-            return None, None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
-        for nama_sheet in wb.sheetnames:
-            ws = wb[nama_sheet]
-            baris = []
-            for row in ws.iter_rows(values_only=True):
-                if any(cell not in (None, "") for cell in row):
-                    baris.append(["" if c is None else c for c in row])
-            if baris:
-                semua_per_sheet.append(baris)
-    else:
+        baris = _parse_csv_delimiter_terbaik(text)
+        for idx_baris in range(min(6, len(baris))):
+            sel = [str(c).strip().lower() for c in baris[idx_baris][:_MAX_KOLOM_LAPORAN_SHOPEE]]
+            tipe = _cek_header_shopee(sel)
+            if tipe:
+                return tipe, baris[idx_baris], baris[idx_baris + 1:], None
+        return None, None, None, (
+            "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) Shopee yang dikenali."
+        )
+
+    if ext not in ("xlsx", "xlsm"):
         return None, None, None, "Format file tidak didukung. Gunakan file CSV atau XLSX."
 
-    if not semua_per_sheet:
-        return None, None, None, "File kosong atau tidak ada baris data."
+    # Catatan: sebelumnya pakai openpyxl, tapi laporan Shopee asli sering punya "kolom hantu"
+    # (dimensi sheet ke ratusan/ribuan kolom kosong, sisa format/formula lama) yang bikin
+    # openpyxl SANGAT lambat (puluhan detik, bisa timeout) -- read_only=True openpyxl pun
+    # malah salah baca (cuma dapat 1 baris) untuk file ini. python-calamine tidak kena
+    # masalah itu (baca file yang sama dalam <2 detik, kolom yang dilaporkan pun akurat).
+    try:
+        wb = CalamineWorkbook.from_filelike(io.BytesIO(raw))
+    except Exception:
+        return None, None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
 
-    for baris in semua_per_sheet:
-        for idx_baris in range(min(6, len(baris))):
-            sel = [str(c).strip().lower() for c in baris[idx_baris]]
-            if "no. pesanan" in sel and "status pesanan" in sel:
-                return "order", baris[idx_baris], baris[idx_baris + 1:], None
-            if "no. pesanan" in sel and "lihat berdasarkan" in sel:
-                return "income", baris[idx_baris], baris[idx_baris + 1:], None
+    tipe_ditemukan = headers = baris_data = None
+    for nama_sheet in wb.sheet_names:
+        baris_sheet_penuh = wb.get_sheet_by_name(nama_sheet).to_python()
+        idx_header = None
+        for i, row in enumerate(baris_sheet_penuh[:6]):
+            sel = [str(c).strip().lower() if c is not None else "" for c in row[:_MAX_KOLOM_LAPORAN_SHOPEE]]
+            tipe = _cek_header_shopee(sel)
+            if tipe:
+                idx_header, tipe_ditemukan = i, tipe
+                headers = ["" if c is None else c for c in row]
+                break
+        if idx_header is not None:
+            baris_data = [
+                ["" if c is None else c for c in row]
+                for row in baris_sheet_penuh[idx_header + 1:]
+                if any(cell not in (None, "") for cell in row)
+            ]
+            break
 
-    return None, None, None, (
-        "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) Shopee yang dikenali. "
-        "Pastikan file yang diupload adalah hasil export asli dari Seller Center Shopee (menu Pesanan Saya "
-        "atau Saldo Penjual > Penghasilan)."
-    )
+    if tipe_ditemukan is None:
+        return None, None, None, (
+            "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) Shopee yang dikenali. "
+            "Pastikan file yang diupload adalah hasil export asli dari Seller Center Shopee (menu Pesanan Saya "
+            "atau Saldo Penjual > Penghasilan)."
+        )
+    return tipe_ditemukan, headers, baris_data, None
 
 
 def parse_order_shopee(headers, rows_data):
@@ -4009,42 +4043,57 @@ def create_app():
                     continue
 
                 nama_file_aman = secure_filename(file.filename)
+                waktu_impor = now_wib()
                 if tipe == "order":
                     item_list = parse_order_shopee(headers, rows_data)
+                    no_pesanan_set = {item["no_pesanan"] for item in item_list}
+                    peta_existing = {
+                        (p.no_pesanan, p.sku, p.nama_produk): p
+                        for p in PesananMarketplace.query.filter(
+                            PesananMarketplace.marketplace == "Shopee",
+                            PesananMarketplace.no_pesanan.in_(no_pesanan_set),
+                        ).all()
+                    } if no_pesanan_set else {}
                     for item in item_list:
-                        existing = PesananMarketplace.query.filter_by(
-                            marketplace="Shopee", no_pesanan=item["no_pesanan"],
-                            sku=item["sku"], nama_produk=item["nama_produk"],
-                        ).first()
+                        kunci = (item["no_pesanan"], item["sku"], item["nama_produk"])
+                        existing = peta_existing.get(kunci)
                         if not existing:
                             existing = PesananMarketplace(
                                 marketplace="Shopee", no_pesanan=item["no_pesanan"],
                                 sku=item["sku"], nama_produk=item["nama_produk"],
                             )
                             db.session.add(existing)
+                            peta_existing[kunci] = existing
                         existing.tanggal_pesanan = item["tanggal_pesanan"]
                         existing.status_pesanan = item["status_pesanan"]
                         existing.jumlah = item["jumlah"]
                         existing.subtotal = item["subtotal"]
                         existing.sumber_file = nama_file_aman
-                        existing.dibuat_pada = now_wib()
+                        existing.dibuat_pada = waktu_impor
                     ringkasan.append({"nama": file.filename, "ok": True, "tipe": "Laporan Order", "jumlah": len(item_list)})
                 else:
                     item_list = parse_income_shopee(headers, rows_data)
+                    no_pesanan_set = {item["no_pesanan"] for item in item_list}
+                    peta_existing = {
+                        p.no_pesanan: p
+                        for p in PendapatanPesanan.query.filter(
+                            PendapatanPesanan.marketplace == "Shopee",
+                            PendapatanPesanan.no_pesanan.in_(no_pesanan_set),
+                        ).all()
+                    } if no_pesanan_set else {}
                     for item in item_list:
-                        existing = PendapatanPesanan.query.filter_by(
-                            marketplace="Shopee", no_pesanan=item["no_pesanan"]
-                        ).first()
+                        existing = peta_existing.get(item["no_pesanan"])
                         if not existing:
                             existing = PendapatanPesanan(marketplace="Shopee", no_pesanan=item["no_pesanan"])
                             db.session.add(existing)
+                            peta_existing[item["no_pesanan"]] = existing
                         existing.tanggal_dana_dilepas = item["tanggal_dana_dilepas"]
                         existing.total_penghasilan = item["total_penghasilan"]
                         existing.biaya_admin = item["biaya_admin"]
                         existing.biaya_layanan = item["biaya_layanan"]
                         existing.biaya_lainnya = item["biaya_lainnya"]
                         existing.sumber_file = nama_file_aman
-                        existing.dibuat_pada = now_wib()
+                        existing.dibuat_pada = waktu_impor
                     ringkasan.append({"nama": file.filename, "ok": True, "tipe": "Laporan Income", "jumlah": len(item_list)})
 
             db.session.commit()

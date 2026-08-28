@@ -8,3 +8,4 @@ tzdata==2026.3
 xhtml2pdf==0.2.17
 openpyxl==3.1.5
 python-dateutil==2.9.0.post0
+python-calamine==0.8.2
