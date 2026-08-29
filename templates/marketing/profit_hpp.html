@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Data Produk & HPP{% endblock %}
+{% block content %}
+{% include "marketing/_profit_nav.html" %}
+
+<h3 class="mb-1">Data Produk &amp; HPP</h3>
+<p class="text-muted small mb-3">Lengkapi harga pokok produksi tiap produk</p>
+
+<div class="alert alert-dark small">
+  <strong>Fungsi tab ini:</strong> tempat kamu kasih tahu sistem berapa biaya produksi/beli produk tiap produk,
+  karena ini satu-satunya angka yang tidak ada di laporan Shopee manapun. Tanpa HPP, sistem tidak bisa hitung
+  profit beneran (cuma bisa hitung sampai "sales dikurangi fee Shopee" doang).
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="fw-semibold mb-1">Upload HPP dari Excel <span class="text-muted fw-normal">(opsional)</span></div>
+  <p class="text-muted small mb-2">
+    File Excel kamu harus punya 2 kolom: <strong>Nama Produk</strong> (harus sama persis dengan nama produk di
+    file Order kamu) dan <strong>HPP</strong> (angka HPP per unit). Supaya nama produknya dijamin sama persis,
+    download dulu template di samping ini, tinggal isi kolom HPP-nya lalu upload ulang di sini.
+  </p>
+  <div class="d-flex gap-2 flex-wrap mb-2">
+    <a href="{{ url_for('profit_hpp_template') }}" class="btn btn-outline-secondary">Download template Excel</a>
+    <form method="post" action="{{ url_for('profit_hpp_upload') }}" enctype="multipart/form-data" class="d-flex gap-2">
+      <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xlsm" required style="max-width: 260px;">
+      <button type="submit" class="btn btn-primary">Upload file HPP</button>
+    </form>
+  </div>
+  <div class="text-muted small">Kalau tidak mau upload, tidak masalah, kamu tetap bisa isi HPP satu per satu langsung di tabel di bawah.</div>
+</div>
+
+{% if daftar %}
+<form method="post" class="card p-3" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">{{ daftar|length }} produk ditemukan dari data Order kamu.</div>
+  <table class="table table-sm align-middle mb-3">
+    <thead>
+      <tr>
+        <th>Nama Produk</th>
+        <th class="text-end">Terjual (qty)</th>
+        <th class="text-end" style="width:180px;">HPP per Unit (Rp)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in daftar %}
+      <tr>
+        <td class="small">
+          {{ item.nama_produk }}
+          {% if not item.hpp %}<span class="badge bg-warning text-dark ms-1">belum diisi</span>{% endif %}
+        </td>
+        <td class="text-end">{{ item.terjual }}</td>
+        <td class="text-end">
+          <input type="hidden" name="nama_produk" value="{{ item.nama_produk }}">
+          <input type="number" name="hpp" class="form-control form-control-sm text-end" min="0" value="{{ item.hpp or '' }}">
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button type="submit" class="btn btn-primary">Simpan Semua HPP</button>
+</form>
+{% else %}
+<div class="card p-5 text-center text-muted">
+  <div class="fw-semibold mb-1">Belum ada produk untuk dilengkapi</div>
+  <div class="small">Upload dua file di Tab 2 dulu, daftar produk akan muncul otomatis di sini.</div>
+</div>
+{% endif %}
+{% endblock %}

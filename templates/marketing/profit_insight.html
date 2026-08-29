@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Insight & Rekomendasi{% endblock %}
+{% block content %}
+{% include "marketing/_profit_nav.html" %}
+
+<h3 class="mb-1">Insight &amp; Rekomendasi</h3>
+<p class="text-muted small mb-3">Disusun otomatis dari data profit kamu</p>
+
+<div class="alert alert-dark small">
+  <strong>Fungsi tab ini:</strong> kasih rekomendasi aksi yang bisa langsung kamu lakukan, bukan cuma angka
+  mentah. Insight per produk muncul setelah minimal satu produk punya HPP lengkap di Tab 3. Insight
+  perbandingan bulan muncul otomatis kalau kamu pakai fitur Bandingkan Antar Bulan di Tab 4.
+</div>
+
+<form method="get" class="card p-3 mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small">Periode</label>
+      <select name="bulan" class="form-select" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not bulan_filter }}>Semua Bulan</option>
+        {% for b in bulan_tersedia %}
+        <option value="{{ b }}" {{ 'selected' if bulan_filter == b }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</form>
+
+{% if not jumlah_produk_ada_hpp %}
+<div class="card p-5 text-center text-muted">
+  <div class="fw-semibold mb-1">Insight belum tersedia</div>
+  <div class="small">Lengkapi HPP minimal satu produk di Tab 3 untuk mulai lihat rekomendasi.</div>
+</div>
+{% elif not insight_list %}
+<div class="card p-5 text-center text-muted">
+  <div class="fw-semibold mb-1">Semua produk yang sudah ada HPP-nya dalam kondisi sehat</div>
+  <div class="small">Tidak ada produk yang rugi atau bermargin tipis pada periode ini. Pertahankan strategi saat ini.</div>
+</div>
+{% else %}
+<div class="row g-3">
+  {% for i in insight_list %}
+  <div class="col-md-6">
+    <div class="card p-3 h-100 border-{{ i.level }}">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <span class="fw-semibold small">{{ i.produk }}</span>
+        <span class="badge bg-{{ i.level }}">{{ "%.1f"|format(i.margin) }}% margin</span>
+      </div>
+      <div class="small">{{ i.pesan }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

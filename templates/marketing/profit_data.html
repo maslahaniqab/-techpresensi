@@ -1,9 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Order & Income{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h3 class="mb-0">Order &amp; Income</h3>
+{% include "marketing/_profit_nav.html" %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Order &amp; Income</h3>
+    <p class="text-muted small mb-0">Cek ulang data mentah Order dan Income kamu, bisa difilter</p>
+  </div>
   <a href="{{ url_for('profit_upload') }}" class="btn btn-primary">+ Upload Order / Income</a>
+</div>
+
+<div class="alert alert-dark small">
+  <strong>Fungsi tab ini:</strong> buat cek ulang data mentah pesanan kamu sebelum dianalisis, sekaligus nyaring
+  pesanan tertentu pakai filter.
 </div>
 
 <div class="row g-3 mb-4">
@@ -56,7 +66,9 @@
   </div>
 </form>
 
-<div class="card p-3" style="overflow-x:auto;">
+<div class="text-muted small text-uppercase mb-2">Pratinjau Order</div>
+<div class="text-muted small mb-2">Data mentah pesanan dari file Order kamu: produk apa yang dipesan, harga, qty, dan statusnya.</div>
+<div class="card p-3 mb-4" style="overflow-x:auto;">
   <div class="text-muted small mb-2">Menampilkan {{ item_pesanan|length }} baris terbaru (maks. 500)</div>
   <table class="table table-sm align-middle mb-0">
     <thead>
@@ -85,7 +97,39 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="text-center text-muted py-4">Belum ada data. Upload Laporan Order/Income dulu.</td></tr>
+      <tr><td colspan="7" class="text-center text-muted py-4">Upload file Order di Tab 1 dulu, seluruh data pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="text-muted small text-uppercase mb-2">Pratinjau Income</div>
+<div class="text-muted small mb-2">Rincian biaya per pesanan dari file Income kamu: Administrasi, Layanan, Komisi AMS, dan komponen biaya lainnya sampai Total Penghasilan.</div>
+<div class="card p-3" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">Menampilkan {{ item_income|length }} pesanan terbaru (maks. 500)</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>No. Pesanan</th>
+        <th>Tanggal Dana Dilepas</th>
+        <th class="text-end">Biaya Admin</th>
+        <th class="text-end">Biaya Layanan</th>
+        <th class="text-end">Biaya Lainnya</th>
+        <th class="text-end">Total Penghasilan</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inc in item_income %}
+      <tr>
+        <td class="small">{{ inc.no_pesanan }}</td>
+        <td>{{ inc.tanggal_dana_dilepas.strftime("%d/%m/%Y") if inc.tanggal_dana_dilepas else "-" }}</td>
+        <td class="text-end">{{ inc.biaya_admin | rupiah }}</td>
+        <td class="text-end">{{ inc.biaya_layanan | rupiah }}</td>
+        <td class="text-end">{{ inc.biaya_lainnya | rupiah }}</td>
+        <td class="text-end fw-semibold">{{ inc.total_penghasilan | rupiah }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">Upload file Income di Tab 1 dulu, rincian biaya per pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
       {% endfor %}
     </tbody>
   </table>

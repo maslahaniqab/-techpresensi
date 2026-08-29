@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Profit{% endblock %}
+{% block content %}
+{% include "marketing/_profit_nav.html" %}
+
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Dashboard Profit</h3>
+    <p class="text-muted small mb-0">Kesehatan Bisnis Bulan Ini</p>
+  </div>
+  <form method="get" class="d-flex gap-2 align-items-end">
+    <div>
+      <label class="form-label small mb-1">Periode</label>
+      <select name="bulan" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not bulan_filter }}>Semua Bulan</option>
+        {% for b in bulan_tersedia %}
+        <option value="{{ b }}" {{ 'selected' if bulan_filter == b }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <a href="{{ url_for('profit_dashboard_export', bulan=bulan_filter) }}" class="btn btn-primary btn-sm">&darr; Download Laporan</a>
+  </form>
+</div>
+
+{% if not produk %}
+<div class="card p-5 text-center text-muted">
+  <div class="fw-semibold mb-1">Dashboard belum punya data</div>
+  <div class="small mb-3">Upload Data di Tab 1 dan lengkapi HPP di Tab 3, dashboard ini akan terisi otomatis.</div>
+  <div><a href="{{ url_for('profit_upload') }}" class="btn btn-primary">Mulai upload data</a></div>
+</div>
+{% else %}
+
+{% if ringkasan.jumlah_produk_ada_hpp < ringkasan.jumlah_produk %}
+<div class="alert alert-warning small">
+  {{ ringkasan.jumlah_produk - ringkasan.jumlah_produk_ada_hpp }} dari {{ ringkasan.jumlah_produk }} produk belum
+  ada HPP-nya — angka profit di bawah ini <strong>belum termasuk biaya produksi</strong> untuk produk-produk itu.
+  <a href="{{ url_for('profit_hpp') }}">Lengkapi di Tab 3</a>.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Omzet</div>
+      <div class="fs-6 fw-bold">{{ ringkasan.total_omzet | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Penghasilan (Income)</div>
+      <div class="fs-6 fw-bold">{{ ringkasan.total_income | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total HPP</div>
+      <div class="fs-6 fw-bold text-danger">{{ ringkasan.total_hpp | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Profit</div>
+      <div class="fs-6 fw-bold {{ 'text-success' if ringkasan.total_profit >= 0 else 'text-danger' }}">{{ ringkasan.total_profit | rupiah }}</div>
+      <div class="small text-muted">Margin {{ "%.1f"|format(ringkasan.margin) }}%</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="text-muted small mb-2">Tren Omzet vs Profit Harian</div>
+  <canvas id="chartProfit" height="90"></canvas>
+</div>
+
+<div class="card p-3 mb-4" style="overflow-x:auto;">
+  <div class="text-muted small mb-2">Profit per Produk (diurutkan dari yang paling rugi/tipis dulu)</div>
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Produk</th>
+        <th class="text-end">Qty</th>
+        <th class="text-end">Omzet</th>
+        <th class="text-end">Income</th>
+        <th class="text-end">HPP Total</th>
+        <th class="text-end">Profit</th>
+        <th class="text-end">Margin</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in produk %}
+      <tr>
+        <td class="small">
+          {{ p.nama_produk }}
+          {% if not p.ada_hpp %}<span class="badge bg-warning text-dark ms-1">HPP belum diisi</span>{% endif %}
+        </td>
+        <td class="text-end">{{ p.qty }}</td>
+        <td class="text-end">{{ p.omzet | rupiah }}</td>
+        <td class="text-end">{{ p.income | rupiah }}</td>
+        <td class="text-end">{{ p.hpp_total | rupiah }}</td>
+        <td class="text-end fw-semibold {{ 'text-success' if p.profit >= 0 else 'text-danger' }}">{{ p.profit | rupiah }}</td>
+        <td class="text-end">{{ "%.1f"|format(p.margin) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card p-3">
+  <div class="fw-semibold mb-1">Bandingkan Antar Bulan</div>
+  <p class="text-muted small mb-3">Pilih dua bulan buat dibandingkan performa sales dan profitnya berdampingan.</p>
+  <form method="get" class="row g-3 align-items-end mb-3">
+    <input type="hidden" name="bulan" value="{{ bulan_filter }}">
+    <div class="col-md-4">
+      <label class="form-label small">Bulan A</label>
+      <select name="bulan_a" class="form-select">
+        <option value="">Pilih bulan...</option>
+        {% for b in bulan_tersedia %}
+        <option value="{{ b }}" {{ 'selected' if bulan_a == b }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label small">Bulan B</label>
+      <select name="bulan_b" class="form-select">
+        <option value="">Pilih bulan...</option>
+        {% for b in bulan_tersedia %}
+        <option value="{{ b }}" {{ 'selected' if bulan_b == b }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <button type="submit" class="btn btn-primary">Bandingkan</button>
+    </div>
+  </form>
+
+  {% if perbandingan %}
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th></th>
+        <th class="text-end">{{ perbandingan.a.label }}</th>
+        <th class="text-end">{{ perbandingan.b.label }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Total Omzet</td><td class="text-end">{{ perbandingan.a.total_omzet | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_omzet | rupiah }}</td></tr>
+      <tr><td>Total Penghasilan</td><td class="text-end">{{ perbandingan.a.total_income | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_income | rupiah }}</td></tr>
+      <tr><td>Total HPP</td><td class="text-end">{{ perbandingan.a.total_hpp | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_hpp | rupiah }}</td></tr>
+      <tr class="fw-semibold"><td>Total Profit</td><td class="text-end">{{ perbandingan.a.total_profit | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_profit | rupiah }}</td></tr>
+      <tr><td>Margin</td><td class="text-end">{{ "%.1f"|format(perbandingan.a.margin) }}%</td><td class="text-end">{{ "%.1f"|format(perbandingan.b.margin) }}%</td></tr>
+      <tr><td>Jumlah Pesanan</td><td class="text-end">{{ perbandingan.a.jumlah_pesanan }}</td><td class="text-end">{{ perbandingan.b.jumlah_pesanan }}</td></tr>
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if produk %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('chartProfit'), {
+  type: 'line',
+  data: {
+    labels: {{ tren | map(attribute='tanggal') | list | tojson }},
+    datasets: [
+      { label: 'Omzet', data: {{ tren | map(attribute='omzet') | list | tojson }}, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,.1)', tension: .3 },
+      { label: 'Profit', data: {{ tren | map(attribute='profit') | list | tojson }}, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,.1)', tension: .3 },
+    ],
+  },
+  options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+});
+</script>
+{% endif %}
+{% endblock %}

@@ -29,7 +29,7 @@ def today_wib():
 
 from io import BytesIO
 
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, Response
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, Response, send_file
 from flask_login import (
     LoginManager,
     login_user,
@@ -622,6 +622,152 @@ def parse_income_shopee(headers, rows_data):
             "biaya_lainnya": round(biaya_lainnya),
         })
     return hasil
+
+
+def hitung_profit_agregat(bulan=None):
+    """Hitung profit per produk untuk periode tertentu ('YYYY-MM' atau None = semua).
+    Profit = Total Penghasilan (Income, dialokasikan proporsional ke tiap baris produk
+    dalam pesanan yang sama berdasarkan share Subtotal) dikurangi HPP x Qty (dari menu
+    Data Produk & Harga Jual). Pesanan berstatus Batal tidak dihitung."""
+    q = PesananMarketplace.query.filter(
+        PesananMarketplace.marketplace == "Shopee", PesananMarketplace.status_pesanan != "Batal"
+    )
+    if bulan:
+        try:
+            tahun_f, bulan_f = (int(x) for x in bulan.split("-"))
+            q = q.filter(
+                db.extract("year", PesananMarketplace.tanggal_pesanan) == tahun_f,
+                db.extract("month", PesananMarketplace.tanggal_pesanan) == bulan_f,
+            )
+        except ValueError:
+            pass
+    item_list = q.all()
+
+    kosong = {
+        "produk": [], "tren": [],
+        "ringkasan": {
+            "total_omzet": 0, "total_income": 0, "total_hpp": 0, "total_profit": 0, "margin": 0,
+            "jumlah_produk": 0, "jumlah_produk_ada_hpp": 0, "jumlah_pesanan": 0,
+        },
+    }
+    if not item_list:
+        return kosong
+
+    no_pesanan_set = {it.no_pesanan for it in item_list}
+    income_map = {
+        p.no_pesanan: p
+        for p in PendapatanPesanan.query.filter(
+            PendapatanPesanan.marketplace == "Shopee", PendapatanPesanan.no_pesanan.in_(no_pesanan_set)
+        ).all()
+    }
+    nama_produk_set = {it.nama_produk for it in item_list}
+    hpp_map = {
+        p.nama_produk: (p.hpp or 0)
+        for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_set)).all()
+    }
+
+    by_order = {}
+    for it in item_list:
+        by_order.setdefault(it.no_pesanan, []).append(it)
+
+    agregat_produk = {}
+    tren_harian = {}
+
+    for no_pesanan, items in by_order.items():
+        inc = income_map.get(no_pesanan)
+        total_income_order = inc.total_penghasilan if inc else None
+        total_subtotal_order = sum(it.subtotal for it in items)
+        for it in items:
+            if total_income_order is None:
+                income_alokasi = None
+            elif total_subtotal_order:
+                income_alokasi = round(total_income_order * (it.subtotal / total_subtotal_order))
+            else:
+                income_alokasi = round(total_income_order / len(items))
+
+            hpp_satuan = hpp_map.get(it.nama_produk, 0)
+            hpp_total_item = hpp_satuan * it.jumlah
+
+            a = agregat_produk.setdefault(it.nama_produk, {
+                "nama_produk": it.nama_produk, "qty": 0, "omzet": 0, "income": 0, "hpp_total": 0,
+                "profit": 0, "hpp_satuan": hpp_satuan, "ada_hpp": hpp_satuan > 0, "ada_income": False,
+            })
+            a["qty"] += it.jumlah
+            a["omzet"] += it.subtotal
+            a["hpp_total"] += hpp_total_item
+            if income_alokasi is not None:
+                a["income"] += income_alokasi
+                a["ada_income"] = True
+                a["profit"] += income_alokasi - hpp_total_item
+
+            tgl = it.tanggal_pesanan.isoformat()
+            t = tren_harian.setdefault(tgl, {"tanggal": tgl, "omzet": 0, "income": 0, "hpp": 0, "profit": 0})
+            t["omzet"] += it.subtotal
+            t["hpp"] += hpp_total_item
+            if income_alokasi is not None:
+                t["income"] += income_alokasi
+                t["profit"] += income_alokasi - hpp_total_item
+
+    daftar_produk = list(agregat_produk.values())
+    for p in daftar_produk:
+        p["margin"] = (p["profit"] / p["income"] * 100) if p["income"] else 0
+
+    ringkasan = {
+        "total_omzet": sum(p["omzet"] for p in daftar_produk),
+        "total_income": sum(p["income"] for p in daftar_produk),
+        "total_hpp": sum(p["hpp_total"] for p in daftar_produk),
+        "total_profit": sum(p["profit"] for p in daftar_produk),
+        "jumlah_produk": len(daftar_produk),
+        "jumlah_produk_ada_hpp": sum(1 for p in daftar_produk if p["hpp_satuan"] > 0),
+        "jumlah_pesanan": len(by_order),
+    }
+    ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_income"] * 100) if ringkasan["total_income"] else 0
+
+    tren = [tren_harian[t] for t in sorted(tren_harian.keys())]
+    return {"produk": daftar_produk, "tren": tren, "ringkasan": ringkasan}
+
+
+def baca_ringkasan_summary_shopee(file_storage):
+    """Baca sheet 'Summary' laporan Income Shopee apa adanya (tidak diproses/dihitung ulang)
+    supaya user bisa cross-check ke laporan resmi Shopee sendiri."""
+    filename = file_storage.filename or ""
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        return None
+    try:
+        raw = file_storage.read()
+        wb = CalamineWorkbook.from_filelike(io.BytesIO(raw))
+    except Exception:
+        return None
+
+    nama_sheet = next((s for s in wb.sheet_names if s.strip().lower() == "summary"), None)
+    if not nama_sheet:
+        return None
+    try:
+        baris_sheet = wb.get_sheet_by_name(nama_sheet).to_python()
+    except Exception:
+        return None
+
+    hasil = []
+    kosong_berturut = 0
+    for row in baris_sheet[:80]:
+        row = list(row) + [None] * (4 - len(row))
+        label0, label1, nilai_tengah, nilai_kanan = row[:4]
+        if all(c in (None, "") for c in row[:4]):
+            kosong_berturut += 1
+            if kosong_berturut >= 8 and hasil:
+                break
+            continue
+        kosong_berturut = 0
+        if label1 not in (None, ""):
+            label, level = str(label1), 1
+            nilai = nilai_tengah if nilai_tengah not in (None, "") else nilai_kanan
+        elif label0 not in (None, ""):
+            label, level = str(label0), 0
+            nilai = nilai_kanan
+        else:
+            continue
+        hasil.append({"label": label, "nilai": nilai, "level": level})
+    return hasil or None
 
 
 def baca_file_iklan(file_storage):
@@ -4026,87 +4172,147 @@ def create_app():
         )
 
     # ---------- MARKETING: PROFITABILITAS (ORDER + INCOME + HPP) ----------
+    def _simpan_order_shopee(file_storage, headers, rows_data):
+        nama_file_aman = secure_filename(file_storage.filename)
+        waktu_impor = now_wib()
+        item_list = parse_order_shopee(headers, rows_data)
+        no_pesanan_set = {item["no_pesanan"] for item in item_list}
+        peta_existing = {
+            (p.no_pesanan, p.sku, p.nama_produk): p
+            for p in PesananMarketplace.query.filter(
+                PesananMarketplace.marketplace == "Shopee", PesananMarketplace.no_pesanan.in_(no_pesanan_set),
+            ).all()
+        } if no_pesanan_set else {}
+        for item in item_list:
+            kunci = (item["no_pesanan"], item["sku"], item["nama_produk"])
+            existing = peta_existing.get(kunci)
+            if not existing:
+                existing = PesananMarketplace(
+                    marketplace="Shopee", no_pesanan=item["no_pesanan"],
+                    sku=item["sku"], nama_produk=item["nama_produk"],
+                )
+                db.session.add(existing)
+                peta_existing[kunci] = existing
+            existing.tanggal_pesanan = item["tanggal_pesanan"]
+            existing.status_pesanan = item["status_pesanan"]
+            existing.jumlah = item["jumlah"]
+            existing.subtotal = item["subtotal"]
+            existing.sumber_file = nama_file_aman
+            existing.dibuat_pada = waktu_impor
+        return len(item_list)
+
+    def _simpan_income_shopee(file_storage, headers, rows_data):
+        nama_file_aman = secure_filename(file_storage.filename)
+        waktu_impor = now_wib()
+        item_list = parse_income_shopee(headers, rows_data)
+        no_pesanan_set = {item["no_pesanan"] for item in item_list}
+        peta_existing = {
+            p.no_pesanan: p
+            for p in PendapatanPesanan.query.filter(
+                PendapatanPesanan.marketplace == "Shopee", PendapatanPesanan.no_pesanan.in_(no_pesanan_set),
+            ).all()
+        } if no_pesanan_set else {}
+        for item in item_list:
+            existing = peta_existing.get(item["no_pesanan"])
+            if not existing:
+                existing = PendapatanPesanan(marketplace="Shopee", no_pesanan=item["no_pesanan"])
+                db.session.add(existing)
+                peta_existing[item["no_pesanan"]] = existing
+            existing.tanggal_dana_dilepas = item["tanggal_dana_dilepas"]
+            existing.total_penghasilan = item["total_penghasilan"]
+            existing.biaya_admin = item["biaya_admin"]
+            existing.biaya_layanan = item["biaya_layanan"]
+            existing.biaya_lainnya = item["biaya_lainnya"]
+            existing.sumber_file = nama_file_aman
+            existing.dibuat_pada = waktu_impor
+        return len(item_list)
+
     @app.route("/marketing/profit/upload", methods=["GET", "POST"])
     @marketing_required
     def profit_upload():
+        hasil = {"order": None, "income": None, "iklan": None, "ringkasan_resmi": None}
+
         if request.method == "POST":
-            files = [f for f in request.files.getlist("files") if f and f.filename]
-            if not files:
-                flash("Pilih minimal 1 file (Laporan Order dan/atau Income) terlebih dahulu.", "danger")
+            file_order = request.files.get("file_order")
+            file_income = request.files.get("file_income")
+            file_iklan = request.files.get("file_iklan")
+
+            if not (file_order and file_order.filename) and not (file_income and file_income.filename):
+                flash("Pilih minimal file Order atau Income terlebih dahulu.", "danger")
                 return redirect(url_for("profit_upload"))
 
-            ringkasan = []
-            for file in files:
-                tipe, headers, rows_data, error = baca_laporan_shopee(file)
-                if error or not tipe:
-                    ringkasan.append({"nama": file.filename, "ok": False, "pesan": error or "format tidak dikenali"})
-                    continue
-
-                nama_file_aman = secure_filename(file.filename)
-                waktu_impor = now_wib()
-                if tipe == "order":
-                    item_list = parse_order_shopee(headers, rows_data)
-                    no_pesanan_set = {item["no_pesanan"] for item in item_list}
-                    peta_existing = {
-                        (p.no_pesanan, p.sku, p.nama_produk): p
-                        for p in PesananMarketplace.query.filter(
-                            PesananMarketplace.marketplace == "Shopee",
-                            PesananMarketplace.no_pesanan.in_(no_pesanan_set),
-                        ).all()
-                    } if no_pesanan_set else {}
-                    for item in item_list:
-                        kunci = (item["no_pesanan"], item["sku"], item["nama_produk"])
-                        existing = peta_existing.get(kunci)
-                        if not existing:
-                            existing = PesananMarketplace(
-                                marketplace="Shopee", no_pesanan=item["no_pesanan"],
-                                sku=item["sku"], nama_produk=item["nama_produk"],
-                            )
-                            db.session.add(existing)
-                            peta_existing[kunci] = existing
-                        existing.tanggal_pesanan = item["tanggal_pesanan"]
-                        existing.status_pesanan = item["status_pesanan"]
-                        existing.jumlah = item["jumlah"]
-                        existing.subtotal = item["subtotal"]
-                        existing.sumber_file = nama_file_aman
-                        existing.dibuat_pada = waktu_impor
-                    ringkasan.append({"nama": file.filename, "ok": True, "tipe": "Laporan Order", "jumlah": len(item_list)})
+            if file_order and file_order.filename:
+                tipe, headers, rows_data, error = baca_laporan_shopee(file_order)
+                if error or tipe != "order":
+                    hasil["order"] = {"ok": False, "nama": file_order.filename, "pesan": error or (
+                        f"File ini terbaca sebagai laporan {tipe or 'tidak dikenali'}, bukan Laporan Order. "
+                        "Coba cek lagi filenya."
+                    )}
                 else:
-                    item_list = parse_income_shopee(headers, rows_data)
-                    no_pesanan_set = {item["no_pesanan"] for item in item_list}
-                    peta_existing = {
-                        p.no_pesanan: p
-                        for p in PendapatanPesanan.query.filter(
-                            PendapatanPesanan.marketplace == "Shopee",
-                            PendapatanPesanan.no_pesanan.in_(no_pesanan_set),
-                        ).all()
-                    } if no_pesanan_set else {}
-                    for item in item_list:
-                        existing = peta_existing.get(item["no_pesanan"])
-                        if not existing:
-                            existing = PendapatanPesanan(marketplace="Shopee", no_pesanan=item["no_pesanan"])
-                            db.session.add(existing)
-                            peta_existing[item["no_pesanan"]] = existing
-                        existing.tanggal_dana_dilepas = item["tanggal_dana_dilepas"]
-                        existing.total_penghasilan = item["total_penghasilan"]
-                        existing.biaya_admin = item["biaya_admin"]
-                        existing.biaya_layanan = item["biaya_layanan"]
-                        existing.biaya_lainnya = item["biaya_lainnya"]
-                        existing.sumber_file = nama_file_aman
-                        existing.dibuat_pada = waktu_impor
-                    ringkasan.append({"nama": file.filename, "ok": True, "tipe": "Laporan Income", "jumlah": len(item_list)})
+                    jumlah = _simpan_order_shopee(file_order, headers, rows_data)
+                    hasil["order"] = {
+                        "ok": True, "nama": file_order.filename, "jumlah": jumlah,
+                        "headers": headers, "preview": rows_data[:8],
+                    }
+
+            if file_income and file_income.filename:
+                tipe, headers, rows_data, error = baca_laporan_shopee(file_income)
+                if error or tipe != "income":
+                    hasil["income"] = {"ok": False, "nama": file_income.filename, "pesan": error or (
+                        f"File ini terbaca sebagai laporan {tipe or 'tidak dikenali'}, bukan Laporan Income. "
+                        "Coba cek lagi filenya."
+                    )}
+                else:
+                    jumlah = _simpan_income_shopee(file_income, headers, rows_data)
+                    hasil["income"] = {
+                        "ok": True, "nama": file_income.filename, "jumlah": jumlah,
+                        "headers": headers, "preview": rows_data[:8],
+                    }
+                    file_income.seek(0)
+                    hasil["ringkasan_resmi"] = baca_ringkasan_summary_shopee(file_income)
+
+            if file_iklan and file_iklan.filename:
+                headers_i, rows_i, _idx_header, error_i = baca_file_iklan(file_iklan)
+                if error_i:
+                    hasil["iklan"] = {"ok": False, "nama": file_iklan.filename, "pesan": error_i}
+                else:
+                    mapping_i = deteksi_otomatis_kolom_iklan(headers_i, rows_i, KOLOM_TARGET_IKLAN)
+                    if mapping_i.get("tanggal") is None or mapping_i.get("biaya") is None:
+                        hasil["iklan"] = {
+                            "ok": False, "nama": file_iklan.filename,
+                            "pesan": "Kolom Tanggal/Biaya Iklan tidak berhasil dikenali otomatis dari file ini.",
+                        }
+                    else:
+                        agregat_i, _dilewati_i, _contoh_i = proses_baris_upload(rows_i, mapping_i, butuh_produk=False)
+                        waktu_impor = now_wib()
+                        nama_file_iklan_aman = secure_filename(file_iklan.filename)
+                        for tanggal, nilai in agregat_i.items():
+                            existing = IklanMarketplace.query.filter_by(marketplace="Shopee", tanggal=tanggal).first()
+                            if not existing:
+                                existing = IklanMarketplace(marketplace="Shopee", tanggal=tanggal)
+                                db.session.add(existing)
+                            existing.biaya = round(nilai["biaya"])
+                            existing.impresi = round(nilai["impresi"])
+                            existing.klik = round(nilai["klik"])
+                            existing.pesanan = round(nilai["pesanan"])
+                            existing.omzet = round(nilai["omzet"])
+                            existing.sumber_file = nama_file_iklan_aman
+                            existing.dibuat_pada = waktu_impor
+                        hasil["iklan"] = {
+                            "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_i),
+                            "headers": headers_i, "preview": rows_i[:8],
+                        }
 
             db.session.commit()
 
-            ok_semua = all(r["ok"] for r in ringkasan)
-            teks = "; ".join(
-                f"{r['nama']}: {r['tipe']} ({r['jumlah']} baris)" if r["ok"] else f"{r['nama']}: gagal - {r['pesan']}"
-                for r in ringkasan
-            )
-            flash(teks, "success" if ok_semua else "warning")
-            return redirect(url_for("profit_order_income"))
+            if (hasil["order"] and hasil["order"]["ok"]) or (hasil["income"] and hasil["income"]["ok"]):
+                flash("Data berhasil diimpor. Lihat pratinjau di bawah, atau lanjut ke tab Order & Income.", "success")
+            else:
+                flash("Upload gagal diproses, lihat detail di bawah tiap file.", "danger")
 
-        return render_template("marketing/profit_upload.html")
+            return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil)
+
+        return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil)
 
     @app.route("/marketing/profit/data")
     @marketing_required
@@ -4144,9 +4350,25 @@ def create_app():
         jumlah_sudah_cocok = len(no_pesanan_pesanan & no_pesanan_income)
         jumlah_belum_ada_income = len(no_pesanan_pesanan - no_pesanan_income)
 
+        qi = PendapatanPesanan.query.filter_by(marketplace="Shopee")
+        if cari:
+            qi = qi.filter(PendapatanPesanan.no_pesanan.ilike(f"%{cari}%"))
+        if bulan_filter:
+            try:
+                tahun_f, bulan_f = (int(x) for x in bulan_filter.split("-"))
+                qi = qi.filter(
+                    db.extract("year", PendapatanPesanan.tanggal_dana_dilepas) == tahun_f,
+                    db.extract("month", PendapatanPesanan.tanggal_dana_dilepas) == bulan_f,
+                )
+            except ValueError:
+                pass
+        item_income = qi.order_by(PendapatanPesanan.tanggal_dana_dilepas.desc()).limit(500).all()
+
         return render_template(
             "marketing/profit_data.html",
+            aktif="data",
             item_pesanan=item_pesanan,
+            item_income=item_income,
             income_map=income_map,
             cari=cari,
             bulan_filter=bulan_filter,
@@ -4155,6 +4377,220 @@ def create_app():
             jumlah_order_unik=len(no_pesanan_pesanan),
             jumlah_sudah_cocok=jumlah_sudah_cocok,
             jumlah_belum_ada_income=jumlah_belum_ada_income,
+        )
+
+    def _daftar_produk_untuk_hpp():
+        nama_produk_list = [
+            r[0] for r in PesananMarketplace.query.with_entities(PesananMarketplace.nama_produk)
+            .filter_by(marketplace="Shopee").distinct().all()
+        ]
+        qty_map = {}
+        for it in PesananMarketplace.query.filter_by(marketplace="Shopee").all():
+            qty_map[it.nama_produk] = qty_map.get(it.nama_produk, 0) + it.jumlah
+        produk_map = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_list)).all()}
+        daftar = []
+        for nama in sorted(nama_produk_list):
+            p = produk_map.get(nama)
+            daftar.append({"nama_produk": nama, "hpp": (p.hpp if p else 0), "terjual": qty_map.get(nama, 0)})
+        daftar.sort(key=lambda x: (x["hpp"] > 0, -x["terjual"]))
+        return daftar
+
+    @app.route("/marketing/profit/hpp", methods=["GET", "POST"])
+    @marketing_required
+    def profit_hpp():
+        if request.method == "POST":
+            nama_list = request.form.getlist("nama_produk")
+            hpp_list = request.form.getlist("hpp")
+            jumlah_disimpan = 0
+            for nama, hpp_raw in zip(nama_list, hpp_list):
+                if not nama:
+                    continue
+                hpp_val = round(parse_angka_iklan(hpp_raw))
+                produk = Produk.query.filter_by(nama_produk=nama).first()
+                if not produk:
+                    produk = Produk(nama_produk=nama)
+                    db.session.add(produk)
+                produk.hpp = hpp_val
+                produk.modal = hpp_val
+                jumlah_disimpan += 1
+            db.session.commit()
+            flash(f"HPP {jumlah_disimpan} produk berhasil disimpan.", "success")
+            return redirect(url_for("profit_hpp"))
+
+        return render_template("marketing/profit_hpp.html", aktif="hpp", daftar=_daftar_produk_untuk_hpp())
+
+    @app.route("/marketing/profit/hpp/template")
+    @marketing_required
+    def profit_hpp_template():
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Template HPP"
+        ws.append(["Nama Produk", "HPP"])
+        for item in _daftar_produk_untuk_hpp():
+            ws.append([item["nama_produk"], item["hpp"] or ""])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf, as_attachment=True, download_name="template_hpp.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    @app.route("/marketing/profit/hpp/upload", methods=["POST"])
+    @marketing_required
+    def profit_hpp_upload():
+        file = request.files.get("file")
+        if not file or not file.filename:
+            flash("Pilih file template HPP yang sudah diisi terlebih dahulu.", "danger")
+            return redirect(url_for("profit_hpp"))
+
+        headers, rows, _idx_header, error = baca_file_iklan(file)
+        if error:
+            flash(error, "danger")
+            return redirect(url_for("profit_hpp"))
+
+        headers_lower = [str(h).strip().lower() for h in headers]
+        try:
+            idx_nama = headers_lower.index("nama produk")
+        except ValueError:
+            idx_nama = 0
+        idx_hpp = None
+        for i, h in enumerate(headers_lower):
+            if "hpp" in h:
+                idx_hpp = i
+                break
+        if idx_hpp is None:
+            idx_hpp = 1 if len(headers) > 1 else None
+
+        if idx_hpp is None:
+            flash("Kolom Nama Produk/HPP tidak ditemukan di file ini. Gunakan template yang sudah didownload.", "danger")
+            return redirect(url_for("profit_hpp"))
+
+        jumlah = 0
+        for row in rows:
+            nama = str(row[idx_nama]).strip() if idx_nama < len(row) and row[idx_nama] is not None else ""
+            if not nama:
+                continue
+            hpp_raw = row[idx_hpp] if idx_hpp < len(row) else None
+            if hpp_raw in (None, ""):
+                continue
+            hpp_val = round(parse_angka_iklan(hpp_raw))
+            produk = Produk.query.filter_by(nama_produk=nama).first()
+            if not produk:
+                produk = Produk(nama_produk=nama)
+                db.session.add(produk)
+            produk.hpp = hpp_val
+            produk.modal = hpp_val
+            jumlah += 1
+        db.session.commit()
+        flash(f"HPP {jumlah} produk berhasil diperbarui dari file.", "success")
+        return redirect(url_for("profit_hpp"))
+
+    @app.route("/marketing/profit/dashboard")
+    @marketing_required
+    def profit_dashboard():
+        bulan_filter = request.args.get("bulan", "")
+        data = hitung_profit_agregat(bulan_filter or None)
+        data["produk"].sort(key=lambda p: p["profit"])
+
+        bulan_tersedia = sorted({
+            r[0].strftime("%Y-%m")
+            for r in PesananMarketplace.query.with_entities(PesananMarketplace.tanggal_pesanan)
+            .filter_by(marketplace="Shopee").all()
+        }, reverse=True)
+
+        bulan_a = request.args.get("bulan_a", "")
+        bulan_b = request.args.get("bulan_b", "")
+        perbandingan = None
+        if bulan_a and bulan_b:
+            perbandingan = {
+                "a": {"label": bulan_a, **hitung_profit_agregat(bulan_a)["ringkasan"]},
+                "b": {"label": bulan_b, **hitung_profit_agregat(bulan_b)["ringkasan"]},
+            }
+
+        return render_template(
+            "marketing/profit_dashboard.html",
+            aktif="dashboard",
+            bulan_filter=bulan_filter,
+            bulan_tersedia=bulan_tersedia,
+            ringkasan=data["ringkasan"],
+            produk=data["produk"],
+            tren=data["tren"],
+            bulan_a=bulan_a,
+            bulan_b=bulan_b,
+            perbandingan=perbandingan,
+        )
+
+    @app.route("/marketing/profit/dashboard/export")
+    @marketing_required
+    def profit_dashboard_export():
+        bulan_filter = request.args.get("bulan", "")
+        data = hitung_profit_agregat(bulan_filter or None)
+        data["produk"].sort(key=lambda p: p["profit"])
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Profit per Produk"
+        ws.append(["Nama Produk", "Qty Terjual", "Omzet", "Total Penghasilan", "HPP Total", "Profit", "Margin (%)", "HPP Terisi?"])
+        for p in data["produk"]:
+            ws.append([
+                p["nama_produk"], p["qty"], p["omzet"], p["income"], p["hpp_total"], p["profit"],
+                round(p["margin"], 1), "Ya" if p["ada_hpp"] else "Belum",
+            ])
+        ws.append([])
+        r = data["ringkasan"]
+        ws.append(["TOTAL", "", r["total_omzet"], r["total_income"], r["total_hpp"], r["total_profit"], round(r["margin"], 1), ""])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        nama_file = f"laporan_profit_{bulan_filter or 'semua'}.xlsx"
+        return send_file(
+            buf, as_attachment=True, download_name=nama_file,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    @app.route("/marketing/profit/insight")
+    @marketing_required
+    def profit_insight():
+        bulan_filter = request.args.get("bulan", "")
+        data = hitung_profit_agregat(bulan_filter or None)
+
+        insight_list = []
+        for p in data["produk"]:
+            if not p["ada_hpp"] or not p["ada_income"]:
+                continue
+            if p["profit"] < 0:
+                insight_list.append({
+                    "produk": p["nama_produk"], "level": "danger", "margin": p["margin"],
+                    "pesan": f"RUGI (profit {p['profit']:,} setelah HPP) — segera evaluasi harga jual atau HPP produk ini, atau hentikan sementara promosinya.".replace(",", "."),
+                })
+            elif p["margin"] < 10:
+                insight_list.append({
+                    "produk": p["nama_produk"], "level": "warning", "margin": p["margin"],
+                    "pesan": "Margin tipis (di bawah 10%) — pertimbangkan naikkan harga jual, cari HPP lebih murah, atau kurangi diskon/voucher.",
+                })
+            elif p["margin"] > 40 and p["qty"] >= 5:
+                insight_list.append({
+                    "produk": p["nama_produk"], "level": "success", "margin": p["margin"],
+                    "pesan": "Margin sehat & laku banyak — produk ini layak ditambah budget iklan untuk digenjot lebih.",
+                })
+
+        insight_list.sort(key=lambda x: {"danger": 0, "warning": 1, "success": 2}[x["level"]])
+
+        bulan_tersedia = sorted({
+            r[0].strftime("%Y-%m")
+            for r in PesananMarketplace.query.with_entities(PesananMarketplace.tanggal_pesanan)
+            .filter_by(marketplace="Shopee").all()
+        }, reverse=True)
+
+        return render_template(
+            "marketing/profit_insight.html",
+            aktif="insight",
+            bulan_filter=bulan_filter,
+            bulan_tersedia=bulan_tersedia,
+            insight_list=insight_list,
+            jumlah_produk_ada_hpp=data["ringkasan"]["jumlah_produk_ada_hpp"],
         )
 
     @app.route("/akun", methods=["GET", "POST"])
