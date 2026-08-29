@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Order & Income{% endblock %}
 {% block content %}
-{% include "marketing/_profit_nav.html" %}
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
@@ -97,7 +96,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="text-center text-muted py-4">Upload file Order di Tab 1 dulu, seluruh data pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
+      <tr><td colspan="7" class="text-center text-muted py-4">Upload file Order di menu Upload Data dulu, seluruh data pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -129,7 +128,7 @@
         <td class="text-end fw-semibold">{{ inc.total_penghasilan | rupiah }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">Upload file Income di Tab 1 dulu, rincian biaya per pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
+      <tr><td colspan="6" class="text-center text-muted py-4">Upload file Income di menu Upload Data dulu, rincian biaya per pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
       {% endfor %}
     </tbody>
   </table>

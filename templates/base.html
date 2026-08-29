@@ -53,6 +53,8 @@
     .sidebar .nav-link:hover { background: rgba(255,255,255,.07); color: #fff; }
     .sidebar .nav-link.active { background: rgba(255,255,255,.14); color: #fff; font-weight: 600; }
     .sidebar .nav-link .badge { margin-left: auto; }
+    .sidebar .submenu-link { padding-left: 2.5rem; font-size: .85rem; }
+    .sidebar .submenu-chevron { font-size: .7rem; opacity: .7; }
     .sidebar .sidebar-bottom {
       border-top: 1px solid rgba(255,255,255,.08);
       margin-top: 1rem;
@@ -99,13 +101,20 @@
   ('laba_rugi_input', 'Input Pendapatan & HPP', '➕'),
 ] %}
 {% set menu_marketing = [
-  ('profit_dashboard', 'Profitabilitas', '📈'),
   ('marketing_iklan_dashboard', 'Analisa Iklan per Marketplace', '📣'),
   ('marketing_produk_dashboard', 'Performa Produk', '🎯'),
   ('marketing_meta_dashboard', 'Iklan Meta', '📘'),
   ('marketing_proyeksi', 'Proyeksi Budget Iklan', '🔮'),
   ('produk_list', 'Data Produk & Harga Jual', '🏷️'),
 ] %}
+{% set submenu_profit = [
+  ('profit_upload', '1. Upload Data'),
+  ('profit_order_income', '2. Order & Income'),
+  ('profit_hpp', '3. Data Produk & HPP'),
+  ('profit_dashboard', '4. Dashboard Profit'),
+  ('profit_insight', '5. Insight & Rekomendasi'),
+] %}
+{% set profit_aktif = request.endpoint in submenu_profit | map(attribute=0) | list %}
 {% set menu_pendapatan = [
   ('pendapatan_penjualan_dashboard', 'Penjualan', '🛒'),
 ] %}
@@ -133,6 +142,16 @@
   {% endfor %}
 
   <div class="nav-section-label">Marketing</div>
+  <a class="nav-link {{ 'active' if profit_aktif }}" data-bs-toggle="collapse" href="#submenuProfit" role="button"
+     aria-expanded="{{ 'true' if profit_aktif else 'false' }}">
+    📈 Profitabilitas
+    <span class="submenu-chevron ms-auto">{{ '▾' if profit_aktif else '▸' }}</span>
+  </a>
+  <div class="collapse {{ 'show' if profit_aktif }}" id="submenuProfit">
+    {% for endpoint, label in submenu_profit %}
+    <a class="nav-link submenu-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
   {% for endpoint, label, icon in menu_marketing %}
   <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
   {% endfor %}

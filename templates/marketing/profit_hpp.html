@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Data Produk & HPP{% endblock %}
 {% block content %}
-{% include "marketing/_profit_nav.html" %}
 
 <h3 class="mb-1">Data Produk &amp; HPP</h3>
 <p class="text-muted small mb-3">Lengkapi harga pokok produksi tiap produk</p>
@@ -61,7 +60,7 @@
 {% else %}
 <div class="card p-5 text-center text-muted">
   <div class="fw-semibold mb-1">Belum ada produk untuk dilengkapi</div>
-  <div class="small">Upload dua file di Tab 2 dulu, daftar produk akan muncul otomatis di sini.</div>
+  <div class="small">Upload dua file di menu Order & Income dulu, daftar produk akan muncul otomatis di sini.</div>
 </div>
 {% endif %}
 {% endblock %}
