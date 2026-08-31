@@ -2431,7 +2431,7 @@ def create_app():
             f"Untuk tanggal: {pengajuan.tanggal.strftime('%d-%m-%Y')}\n"
             f"Alasan: {pengajuan.alasan or '-'}\n"
             f"Dokumen pendukung: {'Ada, cek di portal' if pengajuan.dokumen_filename else 'Tidak ada'}\n\n"
-            "Silakan login ke MN Portal (menu Karyawan > Pengajuan Izin) untuk menyetujui atau menolak."
+            "Silakan login ke Maslaha Portal (menu Karyawan > Pengajuan Izin) untuk menyetujui atau menolak."
         )
 
         try:
@@ -2450,7 +2450,7 @@ def create_app():
         pesan = (
             f"Info: Ada pengajuan {pengajuan.jenis} baru dari {pengajuan.employee.nama} "
             f"untuk tanggal {pengajuan.tanggal.strftime('%d-%m-%Y')}. "
-            f"Alasan: {pengajuan.alasan or '-'}. Mohon dicek & disetujui di MN Portal ya."
+            f"Alasan: {pengajuan.alasan or '-'}. Mohon dicek & disetujui di Maslaha Portal ya."
         )
         return f"https://wa.me/{nomor}?text={quote(pesan)}"
 
