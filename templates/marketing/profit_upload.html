@@ -3,28 +3,33 @@
 {% block content %}
 
 <h3 class="mb-1">Upload Data</h3>
-<p class="text-muted small mb-4">Upload laporan asli dari Shopee Seller Center. Tidak perlu cocokkan kolom apa pun &mdash; sistem baca otomatis.</p>
+<p class="text-muted small mb-4">
+  Upload laporan asli dari Seller Center/Partner Center marketplace kamu. Sistem otomatis mengenali
+  marketplace &amp; jenis filenya (Order/Income) dari isi kolomnya, tidak perlu pilih manual.
+  <strong>Baru mendukung Shopee &amp; TikTok Shop</strong> &mdash; Lazada &amp; Blibli menyusul begitu contoh
+  filenya sudah tersedia.
+</p>
 
 <form method="post" enctype="multipart/form-data">
   <div class="row g-3 mb-4">
     <div class="col-md-4">
       <div class="card p-3 h-100">
         <div class="fw-semibold">1. File Order</div>
-        <div class="text-muted small mb-3">Nama biasanya diawali "Order" atau berisi sheet "orders".</div>
+        <div class="text-muted small mb-3">Laporan Pesanan/Order dari Shopee atau TikTok Shop.</div>
         <input type="file" name="file_order" class="form-control" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
     <div class="col-md-4">
       <div class="card p-3 h-100">
         <div class="fw-semibold">2. File Income</div>
-        <div class="text-muted small mb-3">Nama biasanya diawali "Income", sistem baca sheet "Penghasilan" di dalamnya.</div>
+        <div class="text-muted small mb-3">Laporan Pendapatan/Income dari Shopee atau TikTok Shop.</div>
         <input type="file" name="file_income" class="form-control" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
     <div class="col-md-4">
       <div class="card p-3 h-100">
         <div class="fw-semibold">3. File Data Iklan <span class="text-muted fw-normal">(opsional)</span></div>
-        <div class="text-muted small mb-3">Dari Shopee Ads Center. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
+        <div class="text-muted small mb-3">Dari Ads Center marketplace terkait. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
         <input type="file" name="file_iklan" class="form-control" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
@@ -37,7 +42,10 @@
     <div class="text-muted small text-uppercase mb-2">Pratinjau File Order</div>
     <div class="card p-3" style="overflow-x:auto; min-height: 160px;">
       {% if hasil.order and hasil.order.ok %}
-      <div class="small text-success mb-2">{{ hasil.order.jumlah }} baris berhasil diproses dari {{ hasil.order.nama }}.</div>
+      <div class="small text-success mb-2">
+        <span class="badge bg-secondary">{{ hasil.order.marketplace }}</span>
+        {{ hasil.order.jumlah }} baris berhasil diproses dari {{ hasil.order.nama }}.
+      </div>
       <table class="table table-sm table-bordered mb-0">
         <thead><tr>{% for h in hasil.order.headers[:6] %}<th>{{ h }}</th>{% endfor %}</tr></thead>
         <tbody>
@@ -57,7 +65,10 @@
     <div class="text-muted small text-uppercase mb-2">Pratinjau File Income</div>
     <div class="card p-3" style="overflow-x:auto; min-height: 160px;">
       {% if hasil.income and hasil.income.ok %}
-      <div class="small text-success mb-2">{{ hasil.income.jumlah }} pesanan berhasil diproses dari {{ hasil.income.nama }}.</div>
+      <div class="small text-success mb-2">
+        <span class="badge bg-secondary">{{ hasil.income.marketplace }}</span>
+        {{ hasil.income.jumlah }} pesanan berhasil diproses dari {{ hasil.income.nama }}.
+      </div>
       <table class="table table-sm table-bordered mb-0">
         <thead><tr>{% for h in hasil.income.headers[:6] %}<th>{{ h }}</th>{% endfor %}</tr></thead>
         <tbody>
@@ -98,7 +109,7 @@
 {% if hasil.ringkasan_resmi %}
 <div class="mt-4">
   <div class="text-muted small text-uppercase mb-2">Ringkasan Resmi Shopee (Sheet Summary)</div>
-  <div class="text-muted small mb-2">Ini dibaca langsung apa adanya dari sheet Summary di file Income kamu, tidak diproses/dikalkulasi ulang sama sekali &mdash; jadi ini angka paling resmi buat cross-check ke laporan Shopee kamu sendiri.</div>
+  <div class="text-muted small mb-2">Ini dibaca langsung apa adanya dari sheet Summary di file Income Shopee kamu, tidak diproses/dikalkulasi ulang sama sekali &mdash; jadi ini angka paling resmi buat cross-check ke laporan Shopee kamu sendiri. (Panel ini khusus Shopee, marketplace lain belum punya sheet ringkasan serupa.)</div>
   <div class="card p-3" style="max-width: 480px;">
     <table class="table table-sm mb-0">
       <tbody>

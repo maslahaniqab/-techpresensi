@@ -167,7 +167,7 @@ PRESET_LABA_RUGI = {
 MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
 
 KOLOM_TARGET_IKLAN = [
-    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode", "reporting starts", "reporting ends"]),
+    ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode", "reporting starts", "reporting ends", "per hari"]),
     ("biaya", "Biaya Iklan", True, [
         "biaya", "cost", "spend", "spent", "pengeluaran", "biaya iklan", "amount spent", "belanja iklan",
         "dibelanjakan",
@@ -180,7 +180,7 @@ KOLOM_TARGET_IKLAN = [
     ]),
     ("omzet", "Omzet Penjualan", False, [
         "omzet", "omset", "penjualan", "revenue", "gmv", "nilai penjualan", "sales", "conversion value",
-        "purchase value", "purchases conversion value", "nilai konversi", "nilai pembelian",
+        "purchase value", "purchases conversion value", "nilai konversi", "nilai pembelian", "penghasilan bruto",
     ]),
 ]
 
@@ -410,12 +410,25 @@ def deteksi_otomatis_kolom_iklan(headers, rows, kolom_target):
         ok = sum(1 for r in sampel if idx < len(r) and parse_tanggal_iklan(r[idx]))
         return ok / max(1, len(sampel))
 
+    def terlihat_numerik(value):
+        """Cek apakah nilai TERLIHAT seperti angka (termasuk nol yang sah), tanpa lewat
+        parse_angka_iklan yang juga mengembalikan 0 untuk teks yang gagal diparse --
+        supaya kolom yang isinya kebetulan banyak angka 0 (mis. belum ada biaya iklan
+        hari itu) tidak salah dianggap "bukan kolom angka"."""
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return True
+        s = str(value).strip()
+        if not s:
+            return False
+        s_bersih = s.replace("Rp", "").replace("rp", "").replace("%", "").strip()
+        return any(ch.isdigit() for ch in s_bersih)
+
     def rate_numerik(idx):
         total = ok = 0
         for r in sampel:
             if idx < len(r) and str(r[idx]).strip() != "":
                 total += 1
-                if parse_angka_iklan(r[idx]):
+                if terlihat_numerik(r[idx]):
                     ok += 1
         return (ok / total) if total else 0
 
@@ -492,63 +505,71 @@ KOLOM_LAIN_INCOME_SHOPEE = [
 _MAX_KOLOM_LAPORAN_SHOPEE = 80  # cukup lebar utk laporan asli (~50-53 kolom); mencegah baca kolom "hantu"
 
 
-def _cek_header_shopee(sel):
-    """sel = list header (sudah lower+strip). Kembalikan 'order'/'income'/None."""
+def _cek_header_marketplace(sel):
+    """sel = list header (sudah lower+strip). Kembalikan (marketplace, tipe) atau (None, None).
+    tipe bernilai 'order'/'income'."""
     if "no. pesanan" in sel and "status pesanan" in sel:
-        return "order"
+        return "Shopee", "order"
     if "no. pesanan" in sel and "lihat berdasarkan" in sel:
-        return "income"
-    return None
+        return "Shopee", "income"
+    if "order id" in sel and "product name" in sel and "seller sku" in sel:
+        return "TikTok Shop", "order"
+    if "id pesanan/penyesuaian" in sel and "jenis transaksi" in sel:
+        return "TikTok Shop", "income"
+    return None, None
 
 
-def baca_laporan_shopee(file_storage):
-    """Baca file xlsx/csv lalu deteksi apakah ini Laporan Pesanan (Order) atau Laporan
-    Pendapatan (Income) Shopee dari nama kolomnya -- mengembalikan (tipe, headers,
-    baris_data, error). tipe bernilai 'order'/'income'/None.
+def baca_laporan_marketplace(file_storage):
+    """Baca file xlsx/csv lalu deteksi ini Laporan Pesanan (Order) atau Laporan
+    Pendapatan (Income) marketplace mana (Shopee/TikTok Shop/dst) dari nama kolomnya --
+    mengembalikan (marketplace, tipe, headers, baris_data, error).
 
     Dibatasi _MAX_KOLOM_LAPORAN_SHOPEE kolom saat baca xlsx supaya tidak ikut membaca
     kolom "hantu" (sisa format/formula lama) yang bisa melebar sampai ratusan/ribuan
-    kolom kosong pada file laporan Shopee asli -- kalau tidak dibatasi, baca 1 file bisa
+    kolom kosong pada file laporan asli -- kalau tidak dibatasi, baca 1 file bisa
     makan waktu sangat lama dan bikin request timeout di server.
     """
     filename = file_storage.filename or ""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     raw = file_storage.read()
+    pesan_gagal = (
+        "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) yang dikenali "
+        "(baru mendukung Shopee & TikTok Shop). Pastikan file yang diupload adalah hasil export asli "
+        "dari Seller Center/Partner Center marketplace terkait."
+    )
 
     if ext == "csv":
         text = raw.decode("utf-8-sig", errors="ignore")
         baris = _parse_csv_delimiter_terbaik(text)
         for idx_baris in range(min(6, len(baris))):
             sel = [str(c).strip().lower() for c in baris[idx_baris][:_MAX_KOLOM_LAPORAN_SHOPEE]]
-            tipe = _cek_header_shopee(sel)
+            marketplace, tipe = _cek_header_marketplace(sel)
             if tipe:
-                return tipe, baris[idx_baris], baris[idx_baris + 1:], None
-        return None, None, None, (
-            "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) Shopee yang dikenali."
-        )
+                return marketplace, tipe, baris[idx_baris], baris[idx_baris + 1:], None
+        return None, None, None, None, pesan_gagal
 
     if ext not in ("xlsx", "xlsm"):
-        return None, None, None, "Format file tidak didukung. Gunakan file CSV atau XLSX."
+        return None, None, None, None, "Format file tidak didukung. Gunakan file CSV atau XLSX."
 
-    # Catatan: sebelumnya pakai openpyxl, tapi laporan Shopee asli sering punya "kolom hantu"
-    # (dimensi sheet ke ratusan/ribuan kolom kosong, sisa format/formula lama) yang bikin
-    # openpyxl SANGAT lambat (puluhan detik, bisa timeout) -- read_only=True openpyxl pun
-    # malah salah baca (cuma dapat 1 baris) untuk file ini. python-calamine tidak kena
+    # Catatan: sebelumnya pakai openpyxl, tapi laporan marketplace asli sering punya "kolom
+    # hantu" (dimensi sheet ke ratusan/ribuan kolom kosong, sisa format/formula lama) yang
+    # bikin openpyxl SANGAT lambat (puluhan detik, bisa timeout) -- read_only=True openpyxl
+    # pun malah salah baca (cuma dapat 1 baris) untuk file ini. python-calamine tidak kena
     # masalah itu (baca file yang sama dalam <2 detik, kolom yang dilaporkan pun akurat).
     try:
         wb = CalamineWorkbook.from_filelike(io.BytesIO(raw))
     except Exception:
-        return None, None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
+        return None, None, None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
 
-    tipe_ditemukan = headers = baris_data = None
+    marketplace_ditemukan = tipe_ditemukan = headers = baris_data = None
     for nama_sheet in wb.sheet_names:
         baris_sheet_penuh = wb.get_sheet_by_name(nama_sheet).to_python()
         idx_header = None
         for i, row in enumerate(baris_sheet_penuh[:6]):
             sel = [str(c).strip().lower() if c is not None else "" for c in row[:_MAX_KOLOM_LAPORAN_SHOPEE]]
-            tipe = _cek_header_shopee(sel)
+            marketplace, tipe = _cek_header_marketplace(sel)
             if tipe:
-                idx_header, tipe_ditemukan = i, tipe
+                idx_header, marketplace_ditemukan, tipe_ditemukan = i, marketplace, tipe
                 headers = ["" if c is None else c for c in row]
                 break
         if idx_header is not None:
@@ -560,12 +581,8 @@ def baca_laporan_shopee(file_storage):
             break
 
     if tipe_ditemukan is None:
-        return None, None, None, (
-            "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) Shopee yang dikenali. "
-            "Pastikan file yang diupload adalah hasil export asli dari Seller Center Shopee (menu Pesanan Saya "
-            "atau Saldo Penjual > Penghasilan)."
-        )
-    return tipe_ditemukan, headers, baris_data, None
+        return None, None, None, None, pesan_gagal
+    return marketplace_ditemukan, tipe_ditemukan, headers, baris_data, None
 
 
 def parse_order_shopee(headers, rows_data):
@@ -624,14 +641,84 @@ def parse_income_shopee(headers, rows_data):
     return hasil
 
 
+def parse_order_tiktok(headers, rows_data):
+    idx = {str(h).strip().lower(): i for i, h in enumerate(headers)}
+
+    def ambil(row, nama):
+        i = idx.get(nama.lower())
+        return row[i] if i is not None and i < len(row) else None
+
+    hasil = []
+    for row in rows_data:
+        order_id = str(ambil(row, "Order ID") or "").strip()
+        if not order_id or not order_id.isdigit():
+            continue  # lewati baris deskripsi kolom yang kadang ikut terbawa (bukan data asli)
+        tanggal = parse_tanggal_iklan(ambil(row, "Created Time"))
+        if not tanggal:
+            continue
+        nama_produk = str(ambil(row, "Product Name") or "").strip()
+        variasi = str(ambil(row, "Variation") or "").strip()
+        nama_final = f"{nama_produk} - {variasi}" if variasi and variasi != "-" else nama_produk
+        hasil.append({
+            "no_pesanan": order_id,
+            "tanggal_pesanan": tanggal,
+            "status_pesanan": str(ambil(row, "Order Status") or "").strip()[:32],
+            "nama_produk": nama_final.strip()[:256],
+            "sku": str(ambil(row, "Seller SKU") or "").strip()[:128],
+            "jumlah": round(parse_angka_iklan(ambil(row, "Quantity"))),
+            "subtotal": round(parse_angka_iklan(ambil(row, "SKU Subtotal After Discount"))),
+        })
+    return hasil
+
+
+def parse_income_tiktok(headers, rows_data):
+    idx = {str(h).strip().lower(): i for i, h in enumerate(headers)}
+
+    def ambil(row, nama):
+        i = idx.get(nama.lower())
+        return row[i] if i is not None and i < len(row) else None
+
+    hasil = []
+    for row in rows_data:
+        jenis = str(ambil(row, "Jenis transaksi") or "").strip().lower()
+        if jenis and jenis != "pesanan":
+            continue  # lewati baris penyesuaian/adjustment, pakai baris pesanan asli saja
+        order_id = str(ambil(row, "ID Pesanan/Penyesuaian") or "").strip()
+        if not order_id:
+            continue
+        biaya_admin = abs(parse_angka_iklan(ambil(row, "Biaya komisi platform")))
+        total_biaya = abs(parse_angka_iklan(ambil(row, "Total Biaya")))
+        hasil.append({
+            "no_pesanan": order_id,
+            "tanggal_dana_dilepas": parse_tanggal_iklan(ambil(row, "Waktu pembayaran pesanan")),
+            "total_penghasilan": round(parse_angka_iklan(ambil(row, "Jumlah penyelesaian pembayaran"))),
+            "biaya_admin": round(biaya_admin),
+            "biaya_layanan": 0,
+            "biaya_lainnya": round(max(total_biaya - biaya_admin, 0)),
+        })
+    return hasil
+
+
+PARSER_ORDER_MARKETPLACE = {
+    "Shopee": parse_order_shopee,
+    "TikTok Shop": parse_order_tiktok,
+}
+PARSER_INCOME_MARKETPLACE = {
+    "Shopee": parse_income_shopee,
+    "TikTok Shop": parse_income_tiktok,
+}
+
+
+STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel")
+
+
 def hitung_profit_agregat(bulan=None):
-    """Hitung profit per produk untuk periode tertentu ('YYYY-MM' atau None = semua).
-    Profit = Total Penghasilan (Income, dialokasikan proporsional ke tiap baris produk
-    dalam pesanan yang sama berdasarkan share Subtotal) dikurangi HPP x Qty (dari menu
-    Data Produk & Harga Jual). Pesanan berstatus Batal tidak dihitung."""
-    q = PesananMarketplace.query.filter(
-        PesananMarketplace.marketplace == "Shopee", PesananMarketplace.status_pesanan != "Batal"
-    )
+    """Hitung profit per produk untuk periode tertentu ('YYYY-MM' atau None = semua),
+    digabung dari SEMUA marketplace yang datanya sudah diupload. Profit = Total
+    Penghasilan (Income, dialokasikan proporsional ke tiap baris produk dalam pesanan
+    yang sama berdasarkan share Subtotal) dikurangi HPP x Qty (dari menu Data Produk &
+    Harga Jual). Pesanan berstatus batal tidak dihitung."""
+    q = PesananMarketplace.query.filter(PesananMarketplace.status_pesanan.notin_(STATUS_BATAL_MARKETPLACE))
     if bulan:
         try:
             tahun_f, bulan_f = (int(x) for x in bulan.split("-"))
@@ -653,12 +740,12 @@ def hitung_profit_agregat(bulan=None):
     if not item_list:
         return kosong
 
-    no_pesanan_set = {it.no_pesanan for it in item_list}
+    kunci_pesanan_set = {(it.marketplace, it.no_pesanan) for it in item_list}
+    marketplace_set = {it.marketplace for it in item_list}
     income_map = {
-        p.no_pesanan: p
-        for p in PendapatanPesanan.query.filter(
-            PendapatanPesanan.marketplace == "Shopee", PendapatanPesanan.no_pesanan.in_(no_pesanan_set)
-        ).all()
+        (p.marketplace, p.no_pesanan): p
+        for p in PendapatanPesanan.query.filter(PendapatanPesanan.marketplace.in_(marketplace_set)).all()
+        if (p.marketplace, p.no_pesanan) in kunci_pesanan_set
     }
     nama_produk_set = {it.nama_produk for it in item_list}
     hpp_map = {
@@ -668,13 +755,13 @@ def hitung_profit_agregat(bulan=None):
 
     by_order = {}
     for it in item_list:
-        by_order.setdefault(it.no_pesanan, []).append(it)
+        by_order.setdefault((it.marketplace, it.no_pesanan), []).append(it)
 
     agregat_produk = {}
     tren_harian = {}
 
-    for no_pesanan, items in by_order.items():
-        inc = income_map.get(no_pesanan)
+    for kunci_order, items in by_order.items():
+        inc = income_map.get(kunci_order)
         total_income_order = inc.total_penghasilan if inc else None
         total_subtotal_order = sum(it.subtotal for it in items)
         for it in items:
@@ -873,6 +960,11 @@ def parse_tanggal_iklan(value):
     formats = [
         "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
         "%m/%d/%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y.%m.%d",
+        # Varian dengan jam -- dicoba lewat strptime eksplisit dulu (bukan lewat dateutil
+        # fallback di bawah) karena dateutil's dayfirst=True ternyata bisa salah tukar
+        # bulan/hari untuk string berformat tahun-dulu seperti "2026-06-01 00:00:00".
+        "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d-%m-%Y %H:%M:%S",
+        "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M",
     ]
     for fmt in formats:
         try:
@@ -881,6 +973,12 @@ def parse_tanggal_iklan(value):
             continue
 
     try:
+        # Kalau string jelas diawali tahun 4 digit (mis. "2026-06-01 10:20:30"), pakai
+        # yearfirst=True & dayfirst=False -- dateutil ternyata bisa salah tukar bulan/hari
+        # kalau dayfirst=True tetap dipaksa walau tahun sudah jelas di depan.
+        tahun_dulu = len(s) > 4 and s[:4].isdigit() and s[4] in "-/."
+        if tahun_dulu:
+            return date_parser.parse(s, yearfirst=True, dayfirst=False, fuzzy=False).date()
         return date_parser.parse(s, dayfirst=True, fuzzy=False).date()
     except (ValueError, OverflowError, TypeError):
         return None
@@ -4172,15 +4270,15 @@ def create_app():
         )
 
     # ---------- MARKETING: PROFITABILITAS (ORDER + INCOME + HPP) ----------
-    def _simpan_order_shopee(file_storage, headers, rows_data):
+    def _simpan_order_marketplace(marketplace, file_storage, headers, rows_data):
         nama_file_aman = secure_filename(file_storage.filename)
         waktu_impor = now_wib()
-        item_list = parse_order_shopee(headers, rows_data)
+        item_list = PARSER_ORDER_MARKETPLACE[marketplace](headers, rows_data)
         no_pesanan_set = {item["no_pesanan"] for item in item_list}
         peta_existing = {
             (p.no_pesanan, p.sku, p.nama_produk): p
             for p in PesananMarketplace.query.filter(
-                PesananMarketplace.marketplace == "Shopee", PesananMarketplace.no_pesanan.in_(no_pesanan_set),
+                PesananMarketplace.marketplace == marketplace, PesananMarketplace.no_pesanan.in_(no_pesanan_set),
             ).all()
         } if no_pesanan_set else {}
         for item in item_list:
@@ -4188,7 +4286,7 @@ def create_app():
             existing = peta_existing.get(kunci)
             if not existing:
                 existing = PesananMarketplace(
-                    marketplace="Shopee", no_pesanan=item["no_pesanan"],
+                    marketplace=marketplace, no_pesanan=item["no_pesanan"],
                     sku=item["sku"], nama_produk=item["nama_produk"],
                 )
                 db.session.add(existing)
@@ -4201,21 +4299,21 @@ def create_app():
             existing.dibuat_pada = waktu_impor
         return len(item_list)
 
-    def _simpan_income_shopee(file_storage, headers, rows_data):
+    def _simpan_income_marketplace(marketplace, file_storage, headers, rows_data):
         nama_file_aman = secure_filename(file_storage.filename)
         waktu_impor = now_wib()
-        item_list = parse_income_shopee(headers, rows_data)
+        item_list = PARSER_INCOME_MARKETPLACE[marketplace](headers, rows_data)
         no_pesanan_set = {item["no_pesanan"] for item in item_list}
         peta_existing = {
             p.no_pesanan: p
             for p in PendapatanPesanan.query.filter(
-                PendapatanPesanan.marketplace == "Shopee", PendapatanPesanan.no_pesanan.in_(no_pesanan_set),
+                PendapatanPesanan.marketplace == marketplace, PendapatanPesanan.no_pesanan.in_(no_pesanan_set),
             ).all()
         } if no_pesanan_set else {}
         for item in item_list:
             existing = peta_existing.get(item["no_pesanan"])
             if not existing:
-                existing = PendapatanPesanan(marketplace="Shopee", no_pesanan=item["no_pesanan"])
+                existing = PendapatanPesanan(marketplace=marketplace, no_pesanan=item["no_pesanan"])
                 db.session.add(existing)
                 peta_existing[item["no_pesanan"]] = existing
             existing.tanggal_dana_dilepas = item["tanggal_dana_dilepas"]
@@ -4241,35 +4339,40 @@ def create_app():
                 flash("Pilih minimal file Order atau Income terlebih dahulu.", "danger")
                 return redirect(url_for("profit_upload"))
 
+            marketplace_terdeteksi = None
+
             if file_order and file_order.filename:
-                tipe, headers, rows_data, error = baca_laporan_shopee(file_order)
+                marketplace, tipe, headers, rows_data, error = baca_laporan_marketplace(file_order)
                 if error or tipe != "order":
                     hasil["order"] = {"ok": False, "nama": file_order.filename, "pesan": error or (
                         f"File ini terbaca sebagai laporan {tipe or 'tidak dikenali'}, bukan Laporan Order. "
                         "Coba cek lagi filenya."
                     )}
                 else:
-                    jumlah = _simpan_order_shopee(file_order, headers, rows_data)
+                    jumlah = _simpan_order_marketplace(marketplace, file_order, headers, rows_data)
+                    marketplace_terdeteksi = marketplace
                     hasil["order"] = {
-                        "ok": True, "nama": file_order.filename, "jumlah": jumlah,
+                        "ok": True, "nama": file_order.filename, "jumlah": jumlah, "marketplace": marketplace,
                         "headers": headers, "preview": rows_data[:8],
                     }
 
             if file_income and file_income.filename:
-                tipe, headers, rows_data, error = baca_laporan_shopee(file_income)
+                marketplace, tipe, headers, rows_data, error = baca_laporan_marketplace(file_income)
                 if error or tipe != "income":
                     hasil["income"] = {"ok": False, "nama": file_income.filename, "pesan": error or (
                         f"File ini terbaca sebagai laporan {tipe or 'tidak dikenali'}, bukan Laporan Income. "
                         "Coba cek lagi filenya."
                     )}
                 else:
-                    jumlah = _simpan_income_shopee(file_income, headers, rows_data)
+                    jumlah = _simpan_income_marketplace(marketplace, file_income, headers, rows_data)
+                    marketplace_terdeteksi = marketplace_terdeteksi or marketplace
                     hasil["income"] = {
-                        "ok": True, "nama": file_income.filename, "jumlah": jumlah,
+                        "ok": True, "nama": file_income.filename, "jumlah": jumlah, "marketplace": marketplace,
                         "headers": headers, "preview": rows_data[:8],
                     }
-                    file_income.seek(0)
-                    hasil["ringkasan_resmi"] = baca_ringkasan_summary_shopee(file_income)
+                    if marketplace == "Shopee":
+                        file_income.seek(0)
+                        hasil["ringkasan_resmi"] = baca_ringkasan_summary_shopee(file_income)
 
             if file_iklan and file_iklan.filename:
                 headers_i, rows_i, _idx_header, error_i = baca_file_iklan(file_iklan)
@@ -4283,13 +4386,14 @@ def create_app():
                             "pesan": "Kolom Tanggal/Biaya Iklan tidak berhasil dikenali otomatis dari file ini.",
                         }
                     else:
+                        marketplace_iklan = marketplace_terdeteksi or "Shopee"
                         agregat_i, _dilewati_i, _contoh_i = proses_baris_upload(rows_i, mapping_i, butuh_produk=False)
                         waktu_impor = now_wib()
                         nama_file_iklan_aman = secure_filename(file_iklan.filename)
                         for tanggal, nilai in agregat_i.items():
-                            existing = IklanMarketplace.query.filter_by(marketplace="Shopee", tanggal=tanggal).first()
+                            existing = IklanMarketplace.query.filter_by(marketplace=marketplace_iklan, tanggal=tanggal).first()
                             if not existing:
-                                existing = IklanMarketplace(marketplace="Shopee", tanggal=tanggal)
+                                existing = IklanMarketplace(marketplace=marketplace_iklan, tanggal=tanggal)
                                 db.session.add(existing)
                             existing.biaya = round(nilai["biaya"])
                             existing.impresi = round(nilai["impresi"])
@@ -4300,7 +4404,7 @@ def create_app():
                             existing.dibuat_pada = waktu_impor
                         hasil["iklan"] = {
                             "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_i),
-                            "headers": headers_i, "preview": rows_i[:8],
+                            "marketplace": marketplace_iklan, "headers": headers_i, "preview": rows_i[:8],
                         }
 
             db.session.commit()
@@ -4319,11 +4423,14 @@ def create_app():
     def profit_order_income():
         cari = request.args.get("cari", "").strip()
         bulan_filter = request.args.get("bulan", "")
+        marketplace_filter = request.args.get("marketplace", "")
 
         q = PesananMarketplace.query
         if cari:
             like = f"%{cari}%"
             q = q.filter(db.or_(PesananMarketplace.no_pesanan.ilike(like), PesananMarketplace.nama_produk.ilike(like)))
+        if marketplace_filter:
+            q = q.filter(PesananMarketplace.marketplace == marketplace_filter)
         if bulan_filter:
             try:
                 tahun_f, bulan_f = (int(x) for x in bulan_filter.split("-"))
@@ -4335,22 +4442,26 @@ def create_app():
                 pass
         item_pesanan = q.order_by(PesananMarketplace.tanggal_pesanan.desc()).limit(500).all()
 
-        no_pesanan_terlihat = {p.no_pesanan for p in item_pesanan}
+        kunci_terlihat = {(p.marketplace, p.no_pesanan) for p in item_pesanan}
         income_map = {
-            p.no_pesanan: p
+            (p.marketplace, p.no_pesanan): p
             for p in PendapatanPesanan.query.filter(
-                PendapatanPesanan.marketplace == "Shopee", PendapatanPesanan.no_pesanan.in_(no_pesanan_terlihat)
+                db.tuple_(PendapatanPesanan.marketplace, PendapatanPesanan.no_pesanan).in_(kunci_terlihat)
             ).all()
-        } if no_pesanan_terlihat else {}
+        } if kunci_terlihat else {}
 
-        total_pesanan = PesananMarketplace.query.filter_by(marketplace="Shopee").count()
-        total_income = PendapatanPesanan.query.filter_by(marketplace="Shopee").count()
-        no_pesanan_pesanan = {p.no_pesanan for p in PesananMarketplace.query.with_entities(PesananMarketplace.no_pesanan).filter_by(marketplace="Shopee").distinct()}
-        no_pesanan_income = {p.no_pesanan for p in PendapatanPesanan.query.with_entities(PendapatanPesanan.no_pesanan).filter_by(marketplace="Shopee").all()}
-        jumlah_sudah_cocok = len(no_pesanan_pesanan & no_pesanan_income)
-        jumlah_belum_ada_income = len(no_pesanan_pesanan - no_pesanan_income)
+        total_pesanan = PesananMarketplace.query.count()
+        total_income = PendapatanPesanan.query.count()
+        kunci_pesanan = {(p.marketplace, p.no_pesanan) for p in PesananMarketplace.query.with_entities(PesananMarketplace.marketplace, PesananMarketplace.no_pesanan).distinct()}
+        kunci_income = {(p.marketplace, p.no_pesanan) for p in PendapatanPesanan.query.with_entities(PendapatanPesanan.marketplace, PendapatanPesanan.no_pesanan).all()}
+        jumlah_sudah_cocok = len(kunci_pesanan & kunci_income)
+        jumlah_belum_ada_income = len(kunci_pesanan - kunci_income)
 
-        qi = PendapatanPesanan.query.filter_by(marketplace="Shopee")
+        daftar_marketplace = sorted({m for m, _ in kunci_pesanan} | {m for m, _ in kunci_income})
+
+        qi = PendapatanPesanan.query
+        if marketplace_filter:
+            qi = qi.filter(PendapatanPesanan.marketplace == marketplace_filter)
         if cari:
             qi = qi.filter(PendapatanPesanan.no_pesanan.ilike(f"%{cari}%"))
         if bulan_filter:
@@ -4372,20 +4483,21 @@ def create_app():
             income_map=income_map,
             cari=cari,
             bulan_filter=bulan_filter,
+            marketplace_filter=marketplace_filter,
+            daftar_marketplace=daftar_marketplace,
             total_pesanan=total_pesanan,
             total_income=total_income,
-            jumlah_order_unik=len(no_pesanan_pesanan),
+            jumlah_order_unik=len(kunci_pesanan),
             jumlah_sudah_cocok=jumlah_sudah_cocok,
             jumlah_belum_ada_income=jumlah_belum_ada_income,
         )
 
     def _daftar_produk_untuk_hpp():
         nama_produk_list = [
-            r[0] for r in PesananMarketplace.query.with_entities(PesananMarketplace.nama_produk)
-            .filter_by(marketplace="Shopee").distinct().all()
+            r[0] for r in PesananMarketplace.query.with_entities(PesananMarketplace.nama_produk).distinct().all()
         ]
         qty_map = {}
-        for it in PesananMarketplace.query.filter_by(marketplace="Shopee").all():
+        for it in PesananMarketplace.query.all():
             qty_map[it.nama_produk] = qty_map.get(it.nama_produk, 0) + it.jumlah
         produk_map = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_list)).all()}
         daftar = []
@@ -4495,8 +4607,7 @@ def create_app():
 
         bulan_tersedia = sorted({
             r[0].strftime("%Y-%m")
-            for r in PesananMarketplace.query.with_entities(PesananMarketplace.tanggal_pesanan)
-            .filter_by(marketplace="Shopee").all()
+            for r in PesananMarketplace.query.with_entities(PesananMarketplace.tanggal_pesanan).all()
         }, reverse=True)
 
         bulan_a = request.args.get("bulan_a", "")
@@ -4580,8 +4691,7 @@ def create_app():
 
         bulan_tersedia = sorted({
             r[0].strftime("%Y-%m")
-            for r in PesananMarketplace.query.with_entities(PesananMarketplace.tanggal_pesanan)
-            .filter_by(marketplace="Shopee").all()
+            for r in PesananMarketplace.query.with_entities(PesananMarketplace.tanggal_pesanan).all()
         }, reverse=True)
 
         return render_template(

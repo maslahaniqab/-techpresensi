@@ -45,22 +45,31 @@
 {% if jumlah_belum_ada_income %}
 <div class="alert alert-warning small">
   Ada {{ jumlah_belum_ada_income }} pesanan yang belum ketemu data Income-nya &mdash; biasanya karena dana belum
-  dilepaskan Shopee, pesanan dibatalkan, atau file Income untuk periode itu belum diupload.
+  dilepaskan platform, pesanan dibatalkan, atau file Income untuk periode itu belum diupload.
 </div>
 {% endif %}
 
 <form method="get" class="card p-3 mb-4">
   <div class="row g-3 align-items-end">
-    <div class="col-md-5">
+    <div class="col-md-4">
       <label class="form-label small">Cari No. Pesanan / Nama Produk</label>
       <input type="text" name="cari" class="form-control" value="{{ cari }}" placeholder="mis. 260601UU5HNMJJ atau Niqab Tali">
     </div>
     <div class="col-md-3">
+      <label class="form-label small">Marketplace</label>
+      <select name="marketplace" class="form-select">
+        <option value="">Semua Marketplace</option>
+        {% for m in daftar_marketplace %}
+        <option value="{{ m }}" {{ 'selected' if marketplace_filter == m }}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
       <label class="form-label small">Bulan</label>
       <input type="month" name="bulan" class="form-control" value="{{ bulan_filter }}">
     </div>
-    <div class="col-md-4">
-      <button type="submit" class="btn btn-primary">Terapkan Filter</button>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-primary w-100">Terapkan Filter</button>
     </div>
   </div>
 </form>
@@ -72,6 +81,7 @@
   <table class="table table-sm align-middle mb-0">
     <thead>
       <tr>
+        <th>Marketplace</th>
         <th>No. Pesanan</th>
         <th>Tanggal</th>
         <th>Status</th>
@@ -83,8 +93,9 @@
     </thead>
     <tbody>
       {% for p in item_pesanan %}
-      {% set inc = income_map.get(p.no_pesanan) %}
+      {% set inc = income_map.get((p.marketplace, p.no_pesanan)) %}
       <tr>
+        <td class="small">{{ p.marketplace }}</td>
         <td class="small">{{ p.no_pesanan }}</td>
         <td>{{ p.tanggal_pesanan.strftime("%d/%m/%Y") }}</td>
         <td class="small">{{ p.status_pesanan }}</td>
@@ -96,19 +107,20 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="text-center text-muted py-4">Upload file Order di menu Upload Data dulu, seluruh data pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
+      <tr><td colspan="8" class="text-center text-muted py-4">Upload file Order di menu Upload Data dulu, seluruh data pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
 <div class="text-muted small text-uppercase mb-2">Pratinjau Income</div>
-<div class="text-muted small mb-2">Rincian biaya per pesanan dari file Income kamu: Administrasi, Layanan, Komisi AMS, dan komponen biaya lainnya sampai Total Penghasilan.</div>
+<div class="text-muted small mb-2">Rincian biaya per pesanan dari file Income kamu: Administrasi, Layanan, Komisi/Ads, dan komponen biaya lainnya sampai Total Penghasilan.</div>
 <div class="card p-3" style="overflow-x:auto;">
   <div class="text-muted small mb-2">Menampilkan {{ item_income|length }} pesanan terbaru (maks. 500)</div>
   <table class="table table-sm align-middle mb-0">
     <thead>
       <tr>
+        <th>Marketplace</th>
         <th>No. Pesanan</th>
         <th>Tanggal Dana Dilepas</th>
         <th class="text-end">Biaya Admin</th>
@@ -120,6 +132,7 @@
     <tbody>
       {% for inc in item_income %}
       <tr>
+        <td class="small">{{ inc.marketplace }}</td>
         <td class="small">{{ inc.no_pesanan }}</td>
         <td>{{ inc.tanggal_dana_dilepas.strftime("%d/%m/%Y") if inc.tanggal_dana_dilepas else "-" }}</td>
         <td class="text-end">{{ inc.biaya_admin | rupiah }}</td>
@@ -128,7 +141,7 @@
         <td class="text-end fw-semibold">{{ inc.total_penghasilan | rupiah }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">Upload file Income di menu Upload Data dulu, rincian biaya per pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
+      <tr><td colspan="7" class="text-center text-muted py-4">Upload file Income di menu Upload Data dulu, rincian biaya per pesanan akan tampil di sini lengkap dengan filternya.</td></tr>
       {% endfor %}
     </tbody>
   </table>
