@@ -1910,7 +1910,19 @@ def create_app():
         att.catatan = p.alasan
 
         db.session.commit()
-        flash(f"Pengajuan {p.employee.nama} disetujui & tercatat di absensi.", "success")
+
+        diperbarui = _reconcile_payroll_draft(p.employee, p.tanggal)
+        pesan = f"Pengajuan {p.employee.nama} disetujui & tercatat di absensi."
+        kategori = "success"
+        if diperbarui is True:
+            pesan += " Slip gaji bulan ini otomatis ikut diperbarui."
+        elif diperbarui is False:
+            pesan += (
+                f" Perhatian: slip gaji {p.employee.nama} bulan ini sudah berstatus Dibayar, "
+                "jadi perubahan ini TIDAK otomatis masuk ke situ -- sesuaikan manual kalau perlu."
+            )
+            kategori = "warning"
+        flash(pesan, kategori)
         return redirect(url_for("pengajuan_izin_list"))
 
     @app.route("/pengajuan-izin/<int:pid>/tolak", methods=["POST"])
@@ -2252,7 +2264,19 @@ def create_app():
         att.lembur_menit = (att.lembur_menit or 0) + durasi_menit
 
         db.session.commit()
-        flash(f"Pengajuan lembur {p.employee.nama} disetujui & ditambahkan ke absensi.", "success")
+
+        diperbarui = _reconcile_payroll_draft(p.employee, p.tanggal)
+        pesan = f"Pengajuan lembur {p.employee.nama} disetujui & ditambahkan ke absensi."
+        kategori = "success"
+        if diperbarui is True:
+            pesan += " Slip gaji bulan ini otomatis ikut diperbarui."
+        elif diperbarui is False:
+            pesan += (
+                f" Perhatian: slip gaji {p.employee.nama} bulan ini sudah berstatus Dibayar, "
+                "jadi lembur ini TIDAK otomatis masuk ke situ -- sesuaikan manual kalau perlu."
+            )
+            kategori = "warning"
+        flash(pesan, kategori)
         return redirect(url_for("pengajuan_lembur_list"))
 
     @app.route("/pengajuan-lembur/<int:pid>/tolak", methods=["POST"])
@@ -2267,6 +2291,190 @@ def create_app():
         return redirect(url_for("pengajuan_lembur_list"))
 
     # ---------- PENGGAJIAN ----------
+    def _hitung_simpan_payroll_karyawan(emp, bulan, tahun, settings):
+        """Hitung ulang & simpan slip gaji satu karyawan Tetap/Probation untuk bulan
+        tsb dari data absensi terkini. Dipakai baik saat generate massal di menu
+        Penggajian maupun otomatis sesudah pengajuan lembur/izin disetujui, supaya
+        slip Draft yang sudah dibuat lebih dulu ikut ter-update tanpa admin harus
+        ingat klik Generate ulang. Return (payroll, diperbarui) -- diperbarui=False
+        kalau slipnya sudah berstatus Dibayar (tidak boleh ditimpa)."""
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+        absensi = Attendance.query.filter(
+            Attendance.employee_id == emp.id,
+            Attendance.tanggal >= awal,
+            Attendance.tanggal <= akhir,
+        ).all()
+
+        total_hadir = sum(1 for a in absensi if a.status == "Hadir")
+        total_sakit = sum(1 for a in absensi if a.status == "Sakit")
+        total_izin = sum(1 for a in absensi if a.status == "Izin")
+        total_cuti = sum(1 for a in absensi if a.status == "Cuti")
+        total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+        total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
+        total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
+
+        bonus_target = (
+            settings.bonus_target_tercapai or 0
+        ) if emp.target_tercapai == "Tercapai" else 0
+
+        co_host_fee = 0
+        upah_freelance = 0
+
+        total_pokok = emp.gaji_pokok + emp.tunjangan_makan + emp.tunjangan_transport
+        hari_kerja = settings.hari_kerja_per_bulan or 22
+        gaji_harian = total_pokok / hari_kerja if hari_kerja else 0
+
+        potongan_alpha = round(total_alpha * gaji_harian)
+        potongan_telat = total_telat_menit * (settings.denda_telat_per_menit or 0)
+        uang_lembur = round((total_lembur_menit / 60) * (settings.upah_lembur_per_jam or 0))
+
+        bpjs_jkk = emp.bpjs_jkk or 0
+        bpjs_jkm = emp.bpjs_jkm or 0
+        bpjs_jht = emp.bpjs_jht or 0
+
+        if emp.bpjs_kesehatan_terdaftar:
+            basis_bpjs_kesehatan = min(total_pokok, BATAS_GAJI_BPJS_KESEHATAN)
+            bpjs_kesehatan = round(basis_bpjs_kesehatan * PERSEN_BPJS_KESEHATAN_KARYAWAN)
+            bpjs_kesehatan_perusahaan = round(basis_bpjs_kesehatan * PERSEN_BPJS_KESEHATAN_PERUSAHAAN)
+        else:
+            bpjs_kesehatan = 0
+            bpjs_kesehatan_perusahaan = 0
+
+        gaji_bersih = (
+            total_pokok
+            - potongan_alpha
+            - potongan_telat
+            - bpjs_jkk - bpjs_jkm - bpjs_jht - bpjs_kesehatan
+            + uang_lembur
+            + bonus_target
+        )
+        gaji_bersih = max(gaji_bersih, 0)
+
+        payroll = Payroll.query.filter_by(
+            employee_id=emp.id, bulan=bulan, tahun=tahun
+        ).first()
+        if not payroll:
+            payroll = Payroll(employee_id=emp.id, bulan=bulan, tahun=tahun)
+            db.session.add(payroll)
+
+        if payroll.status == "Dibayar":
+            return payroll, False  # jangan timpa slip yang sudah dibayar
+
+        payroll.gaji_pokok = emp.gaji_pokok
+        payroll.tunjangan_makan = emp.tunjangan_makan
+        payroll.tunjangan_transport = emp.tunjangan_transport
+        payroll.tipe_pegawai = emp.tipe_pegawai
+        payroll.total_hadir = total_hadir
+        payroll.total_sakit = total_sakit
+        payroll.total_izin = total_izin
+        payroll.total_cuti = total_cuti
+        payroll.total_alpha = total_alpha
+        payroll.total_telat_menit = total_telat_menit
+        payroll.total_lembur_menit = total_lembur_menit
+        payroll.potongan_alpha = potongan_alpha
+        payroll.potongan_telat = potongan_telat
+        payroll.uang_lembur = uang_lembur
+        payroll.upah_freelance = upah_freelance
+        payroll.bonus_target = bonus_target
+        payroll.co_host_fee = co_host_fee
+        payroll.bpjs_jkk = bpjs_jkk
+        payroll.bpjs_jkm = bpjs_jkm
+        payroll.bpjs_jht = bpjs_jht
+        payroll.bpjs_kesehatan = bpjs_kesehatan
+        payroll.bpjs_kesehatan_perusahaan = bpjs_kesehatan_perusahaan
+        payroll.gaji_bersih = gaji_bersih
+        return payroll, True
+
+    def _hitung_simpan_payroll_freelance(emp, bulan, tahun, settings):
+        """Sama seperti _hitung_simpan_payroll_karyawan tapi pakai skema upah
+        freelance (per hari kerja + lembur freelance). Return (payroll, diperbarui)."""
+        awal = date(tahun, bulan, 1)
+        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+        absensi = Attendance.query.filter(
+            Attendance.employee_id == emp.id,
+            Attendance.tanggal >= awal,
+            Attendance.tanggal <= akhir,
+        ).all()
+        total_hadir = sum(1 for a in absensi if a.status == "Hadir")
+        hari_kerja = total_hadir
+        total_sakit = sum(1 for a in absensi if a.status == "Sakit")
+        total_izin = sum(1 for a in absensi if a.status == "Izin")
+        total_cuti = sum(1 for a in absensi if a.status == "Cuti")
+        total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+        total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
+        total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
+
+        bonus_target = (
+            settings.bonus_target_tercapai or 0
+        ) if emp.target_tercapai == "Tercapai" else 0
+
+        tarif_unit = emp.tarif_unit_freelance or settings.tarif_harian_freelance or 0
+        upah_freelance = hari_kerja * tarif_unit
+        uang_lembur = round(
+            (total_lembur_menit / 60) * (settings.upah_lembur_freelance_per_jam or 0)
+        )
+        co_host_fee = (settings.tarif_co_host or 0) if emp.co_host_bulan_ini == "Ya" else 0
+
+        gaji_bersih = max(upah_freelance + uang_lembur + bonus_target + co_host_fee, 0)
+
+        payroll = Payroll.query.filter_by(
+            employee_id=emp.id, bulan=bulan, tahun=tahun
+        ).first()
+        if not payroll:
+            payroll = Payroll(employee_id=emp.id, bulan=bulan, tahun=tahun)
+            db.session.add(payroll)
+
+        if payroll.status == "Dibayar":
+            return payroll, False  # jangan timpa slip yang sudah dibayar
+
+        payroll.gaji_pokok = 0
+        payroll.tunjangan_makan = 0
+        payroll.tunjangan_transport = 0
+        payroll.tipe_pegawai = emp.tipe_pegawai
+        payroll.total_hadir = hari_kerja
+        payroll.total_sakit = total_sakit
+        payroll.total_izin = total_izin
+        payroll.total_cuti = total_cuti
+        payroll.total_alpha = total_alpha
+        payroll.total_telat_menit = total_telat_menit
+        payroll.total_lembur_menit = total_lembur_menit
+        payroll.potongan_alpha = 0
+        payroll.potongan_telat = 0
+        payroll.uang_lembur = uang_lembur
+        payroll.upah_freelance = upah_freelance
+        payroll.bonus_target = bonus_target
+        payroll.co_host_fee = co_host_fee
+        payroll.bpjs_jkk = 0
+        payroll.bpjs_jkm = 0
+        payroll.bpjs_jht = 0
+        payroll.bpjs_kesehatan = 0
+        payroll.bpjs_kesehatan_perusahaan = 0
+        payroll.gaji_bersih = gaji_bersih
+        return payroll, True
+
+    def _reconcile_payroll_draft(employee, tanggal):
+        """Kalau slip gaji bulan berjalan utk karyawan ini SUDAH pernah dibuat
+        (Draft), langsung hitung ulang & simpan sekarang juga -- dipanggil sesudah
+        pengajuan lembur/izin disetujui supaya datanya tidak ketinggalan sampai
+        admin ingat klik Generate ulang di menu Penggajian. Return None kalau belum
+        ada slip bulan itu sama sekali (tidak perlu tindakan, biar dibuat wajar
+        saat admin generate); kalau sudah ada, return True/False (diperbarui atau
+        tidak karena sudah Dibayar)."""
+        bulan, tahun = tanggal.month, tanggal.year
+        payroll_ada = Payroll.query.filter_by(
+            employee_id=employee.id, bulan=bulan, tahun=tahun
+        ).first()
+        if not payroll_ada:
+            return None
+        settings = get_settings()
+        if employee.tipe_pegawai == "Freelance":
+            _, diperbarui = _hitung_simpan_payroll_freelance(employee, bulan, tahun, settings)
+        else:
+            _, diperbarui = _hitung_simpan_payroll_karyawan(employee, bulan, tahun, settings)
+        db.session.commit()
+        return diperbarui
+
     @app.route("/penggajian")
     @admin_required
     def penggajian_list():
@@ -2298,98 +2506,11 @@ def create_app():
         tahun = int(request.form["tahun"])
         settings = get_settings()
 
-        awal = date(tahun, bulan, 1)
-        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
-
         employees = Employee.query.filter(
             Employee.status == "Aktif", Employee.tipe_pegawai != "Freelance"
         ).all()
         for emp in employees:
-            absensi = Attendance.query.filter(
-                Attendance.employee_id == emp.id,
-                Attendance.tanggal >= awal,
-                Attendance.tanggal <= akhir,
-            ).all()
-
-            total_hadir = sum(1 for a in absensi if a.status == "Hadir")
-            total_sakit = sum(1 for a in absensi if a.status == "Sakit")
-            total_izin = sum(1 for a in absensi if a.status == "Izin")
-            total_cuti = sum(1 for a in absensi if a.status == "Cuti")
-            total_alpha = sum(1 for a in absensi if a.status == "Alpha")
-            total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
-            total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
-
-            bonus_target = (
-                settings.bonus_target_tercapai or 0
-            ) if emp.target_tercapai == "Tercapai" else 0
-
-            co_host_fee = 0
-            upah_freelance = 0
-
-            total_pokok = emp.gaji_pokok + emp.tunjangan_makan + emp.tunjangan_transport
-            hari_kerja = settings.hari_kerja_per_bulan or 22
-            gaji_harian = total_pokok / hari_kerja if hari_kerja else 0
-
-            potongan_alpha = round(total_alpha * gaji_harian)
-            potongan_telat = total_telat_menit * (settings.denda_telat_per_menit or 0)
-            uang_lembur = round((total_lembur_menit / 60) * (settings.upah_lembur_per_jam or 0))
-
-            bpjs_jkk = emp.bpjs_jkk or 0
-            bpjs_jkm = emp.bpjs_jkm or 0
-            bpjs_jht = emp.bpjs_jht or 0
-
-            if emp.bpjs_kesehatan_terdaftar:
-                basis_bpjs_kesehatan = min(total_pokok, BATAS_GAJI_BPJS_KESEHATAN)
-                bpjs_kesehatan = round(basis_bpjs_kesehatan * PERSEN_BPJS_KESEHATAN_KARYAWAN)
-                bpjs_kesehatan_perusahaan = round(basis_bpjs_kesehatan * PERSEN_BPJS_KESEHATAN_PERUSAHAAN)
-            else:
-                bpjs_kesehatan = 0
-                bpjs_kesehatan_perusahaan = 0
-
-            gaji_bersih = (
-                total_pokok
-                - potongan_alpha
-                - potongan_telat
-                - bpjs_jkk - bpjs_jkm - bpjs_jht - bpjs_kesehatan
-                + uang_lembur
-                + bonus_target
-            )
-
-            gaji_bersih = max(gaji_bersih, 0)
-
-            payroll = Payroll.query.filter_by(
-                employee_id=emp.id, bulan=bulan, tahun=tahun
-            ).first()
-            if not payroll:
-                payroll = Payroll(employee_id=emp.id, bulan=bulan, tahun=tahun)
-                db.session.add(payroll)
-
-            if payroll.status == "Dibayar":
-                continue  # jangan timpa slip yang sudah dibayar
-
-            payroll.gaji_pokok = emp.gaji_pokok
-            payroll.tunjangan_makan = emp.tunjangan_makan
-            payroll.tunjangan_transport = emp.tunjangan_transport
-            payroll.tipe_pegawai = emp.tipe_pegawai
-            payroll.total_hadir = total_hadir
-            payroll.total_sakit = total_sakit
-            payroll.total_izin = total_izin
-            payroll.total_cuti = total_cuti
-            payroll.total_alpha = total_alpha
-            payroll.total_telat_menit = total_telat_menit
-            payroll.total_lembur_menit = total_lembur_menit
-            payroll.potongan_alpha = potongan_alpha
-            payroll.potongan_telat = potongan_telat
-            payroll.uang_lembur = uang_lembur
-            payroll.upah_freelance = upah_freelance
-            payroll.bonus_target = bonus_target
-            payroll.co_host_fee = co_host_fee
-            payroll.bpjs_jkk = bpjs_jkk
-            payroll.bpjs_jkm = bpjs_jkm
-            payroll.bpjs_jht = bpjs_jht
-            payroll.bpjs_kesehatan = bpjs_kesehatan
-            payroll.bpjs_kesehatan_perusahaan = bpjs_kesehatan_perusahaan
-            payroll.gaji_bersih = gaji_bersih
+            _hitung_simpan_payroll_karyawan(emp, bulan, tahun, settings)
 
         db.session.commit()
         flash(f"Slip gaji Karyawan Tetap/Probation {BULAN_NAMA[bulan]} {tahun} berhasil dibuat/diperbarui.", "success")
@@ -2438,71 +2559,9 @@ def create_app():
         tahun = int(request.form["tahun"])
         settings = get_settings()
 
-        awal = date(tahun, bulan, 1)
-        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
-
         employees = Employee.query.filter_by(status="Aktif", tipe_pegawai="Freelance").all()
         for emp in employees:
-            absensi = Attendance.query.filter(
-                Attendance.employee_id == emp.id,
-                Attendance.tanggal >= awal,
-                Attendance.tanggal <= akhir,
-            ).all()
-            total_hadir = sum(1 for a in absensi if a.status == "Hadir")
-            hari_kerja = total_hadir
-            total_sakit = sum(1 for a in absensi if a.status == "Sakit")
-            total_izin = sum(1 for a in absensi if a.status == "Izin")
-            total_cuti = sum(1 for a in absensi if a.status == "Cuti")
-            total_alpha = sum(1 for a in absensi if a.status == "Alpha")
-            total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
-            total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
-
-            bonus_target = (
-                settings.bonus_target_tercapai or 0
-            ) if emp.target_tercapai == "Tercapai" else 0
-
-            tarif_unit = emp.tarif_unit_freelance or settings.tarif_harian_freelance or 0
-            upah_freelance = hari_kerja * tarif_unit
-            uang_lembur = round(
-                (total_lembur_menit / 60) * (settings.upah_lembur_freelance_per_jam or 0)
-            )
-            co_host_fee = (settings.tarif_co_host or 0) if emp.co_host_bulan_ini == "Ya" else 0
-
-            gaji_bersih = max(upah_freelance + uang_lembur + bonus_target + co_host_fee, 0)
-
-            payroll = Payroll.query.filter_by(
-                employee_id=emp.id, bulan=bulan, tahun=tahun
-            ).first()
-            if not payroll:
-                payroll = Payroll(employee_id=emp.id, bulan=bulan, tahun=tahun)
-                db.session.add(payroll)
-
-            if payroll.status == "Dibayar":
-                continue  # jangan timpa slip yang sudah dibayar
-
-            payroll.gaji_pokok = 0
-            payroll.tunjangan_makan = 0
-            payroll.tunjangan_transport = 0
-            payroll.tipe_pegawai = emp.tipe_pegawai
-            payroll.total_hadir = hari_kerja
-            payroll.total_sakit = total_sakit
-            payroll.total_izin = total_izin
-            payroll.total_cuti = total_cuti
-            payroll.total_alpha = total_alpha
-            payroll.total_telat_menit = total_telat_menit
-            payroll.total_lembur_menit = total_lembur_menit
-            payroll.potongan_alpha = 0
-            payroll.potongan_telat = 0
-            payroll.uang_lembur = uang_lembur
-            payroll.upah_freelance = upah_freelance
-            payroll.bonus_target = bonus_target
-            payroll.co_host_fee = co_host_fee
-            payroll.bpjs_jkk = 0
-            payroll.bpjs_jkm = 0
-            payroll.bpjs_jht = 0
-            payroll.bpjs_kesehatan = 0
-            payroll.bpjs_kesehatan_perusahaan = 0
-            payroll.gaji_bersih = gaji_bersih
+            _hitung_simpan_payroll_freelance(emp, bulan, tahun, settings)
 
         db.session.commit()
         flash(f"Slip gaji Freelance {BULAN_NAMA[bulan]} {tahun} berhasil dibuat/diperbarui.", "success")
