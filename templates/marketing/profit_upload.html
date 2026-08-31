@@ -126,4 +126,69 @@
   </div>
 </div>
 {% endif %}
+
+{% if hasil.ringkasan_gabungan %}
+{% set g = hasil.ringkasan_gabungan %}
+<div class="mt-4">
+  <div class="text-muted small text-uppercase mb-2">Ringkasan Setelah Digabung</div>
+
+  <div class="alert alert-info small">
+    Kalau angka di sini beda dengan sheet Summary resmi di file Income kamu, itu wajar, bukan salah hitung.
+    File <strong>Order</strong> pakai basis <strong>tanggal pesanan selesai</strong>, sedangkan laporan resmi
+    marketplace biasanya pakai basis <strong>tanggal dana dicairkan</strong>. Bisa saja ada pesanan akhir
+    periode yang sudah selesai tapi dananya belum cair (masuk hitungan Order tapi belum di Income), atau
+    sebaliknya pesanan periode sebelumnya yang baru cair sekarang (masuk Income tapi tidak ada di file Order
+    yang kamu upload). Ringkasan di bawah ini pakai basis pesanan selesai dari file Order, karena paling
+    mencerminkan penjualan riil periode ini.
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-4">
+      <div class="card p-3 h-100">
+        <div class="text-muted small text-uppercase">Pesanan</div>
+        <div class="fs-5 fw-bold">{{ g.jumlah_pesanan }}</div>
+        <div class="text-muted small">file Order &middot; basis pesanan selesai</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card p-3 h-100">
+        <div class="text-muted small text-uppercase">Produk Unik</div>
+        <div class="fs-5 fw-bold">{{ g.jumlah_produk_unik }}</div>
+        <div class="text-muted small">dari file Order</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card p-3 h-100">
+        <div class="text-muted small text-uppercase">Total Sales (Sebelum Diskon)</div>
+        <div class="fs-5 fw-bold">{{ g.total_sebelum_diskon | rupiah }}</div>
+        <div class="text-muted small">Harga Awal &times; Jumlah, file Order</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card p-3 h-100">
+        <div class="text-muted small text-uppercase">Total Sales (Setelah Diskon)</div>
+        <div class="fs-5 fw-bold">{{ g.total_setelah_diskon | rupiah }}</div>
+        <div class="text-muted small">kolom Subtotal Pesanan, file Order</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card p-3 h-100">
+        <div class="text-muted small text-uppercase">Total Pengeluaran / Fee</div>
+        <div class="fs-5 fw-bold text-danger">{{ g.total_fee | rupiah }}</div>
+        <div class="text-muted small">jumlah kolom biaya, file Income</div>
+      </div>
+    </div>
+  </div>
+
+  {% if g.baris_order_tanpa_income %}
+  <div class="alert alert-warning small mb-0">
+    &#9888; {{ g.baris_order_tanpa_income }} baris produk di file Order belum ketemu pasangannya di file Income
+    (biasanya karena dana pesanan itu belum dilepas {{ g.marketplace }}). Total Pengeluaran/Fee di atas tetap
+    akurat sesuai laporan Income, tapi breakdown per produk di Dashboard Profit baru mencakup
+    {{ g.fee_teralokasi | rupiah }} dari total itu
+    {% if g.fee_belum_teralokasi %}(selisih {{ g.fee_belum_teralokasi | rupiah }} belum teralokasikan ke produk manapun karena pesanannya tidak ada di file Order yang kamu upload){% endif %}.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

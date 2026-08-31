@@ -592,6 +592,15 @@ def parse_order_shopee(headers, rows_data):
         i = idx.get(nama.lower())
         return row[i] if i is not None and i < len(row) else None
 
+    def ambil_pertama(row, *nama_list):
+        """Beberapa varian export Order Shopee pakai nama kolom berbeda untuk konsep yang
+        sama (mis. 'Subtotal Pesanan' di satu versi, 'Dibayar Pembeli' di versi lain) --
+        coba tiap nama sampai ketemu kolom yang ada."""
+        for nama in nama_list:
+            if nama.lower() in idx:
+                return ambil(row, nama)
+        return None
+
     hasil = []
     for row in rows_data:
         no_pesanan = str(ambil(row, "No. Pesanan") or "").strip()
@@ -610,7 +619,10 @@ def parse_order_shopee(headers, rows_data):
             "nama_produk": nama_final.strip()[:256],
             "sku": str(ambil(row, "Nomor Referensi SKU") or "").strip()[:128],
             "jumlah": round(parse_angka_iklan(ambil(row, "Jumlah"))),
-            "subtotal": round(parse_angka_iklan(ambil(row, "Subtotal Pesanan"))),
+            "subtotal": round(parse_angka_iklan(ambil_pertama(row, "Subtotal Pesanan", "Dibayar Pembeli"))),
+            "subtotal_kotor": round(
+                parse_angka_iklan(ambil(row, "Harga Awal")) * parse_angka_iklan(ambil(row, "Jumlah"))
+            ),
         })
     return hasil
 
@@ -667,6 +679,7 @@ def parse_order_tiktok(headers, rows_data):
             "sku": str(ambil(row, "Seller SKU") or "").strip()[:128],
             "jumlah": round(parse_angka_iklan(ambil(row, "Quantity"))),
             "subtotal": round(parse_angka_iklan(ambil(row, "SKU Subtotal After Discount"))),
+            "subtotal_kotor": round(parse_angka_iklan(ambil(row, "SKU Subtotal Before Discount"))),
         })
     return hasil
 
@@ -812,6 +825,41 @@ def hitung_profit_agregat(bulan=None):
 
     tren = [tren_harian[t] for t in sorted(tren_harian.keys())]
     return {"produk": daftar_produk, "tren": tren, "ringkasan": ringkasan}
+
+
+def hitung_ringkasan_gabungan(order_item_list, income_item_list):
+    """Ringkasan reconciliation Order+Income tepat setelah upload: dipakai buat halaman
+    Upload Data supaya user langsung lihat apakah datanya nyambung dengan baik, sebelum
+    lanjut ke tab Order & Income / HPP. Basis tanggal yang dipakai di sini SELALU tanggal
+    pesanan selesai dari file Order -- beda dengan sheet Summary resmi Shopee yang basisnya
+    tanggal dana dicairkan, jadi wajar kalau angkanya tidak identik."""
+    pesanan_unik = {item["no_pesanan"] for item in order_item_list}
+    produk_unik = {item["nama_produk"] for item in order_item_list}
+    total_sebelum_diskon = sum(item.get("subtotal_kotor", item["subtotal"]) for item in order_item_list)
+    total_setelah_diskon = sum(item["subtotal"] for item in order_item_list)
+
+    fee_per_pesanan = {}
+    for item in income_item_list:
+        fee_per_pesanan[item["no_pesanan"]] = fee_per_pesanan.get(item["no_pesanan"], 0) + (
+            item["biaya_admin"] + item["biaya_layanan"] + item["biaya_lainnya"]
+        )
+    total_fee = sum(fee_per_pesanan.values())
+
+    income_no_set = set(fee_per_pesanan.keys())
+    baris_order_tanpa_income = sum(1 for item in order_item_list if item["no_pesanan"] not in income_no_set)
+    fee_teralokasi = sum(v for no, v in fee_per_pesanan.items() if no in pesanan_unik)
+    fee_belum_teralokasi = total_fee - fee_teralokasi
+
+    return {
+        "jumlah_pesanan": len(pesanan_unik),
+        "jumlah_produk_unik": len(produk_unik),
+        "total_sebelum_diskon": total_sebelum_diskon,
+        "total_setelah_diskon": total_setelah_diskon,
+        "total_fee": total_fee,
+        "baris_order_tanpa_income": baris_order_tanpa_income,
+        "fee_teralokasi": fee_teralokasi,
+        "fee_belum_teralokasi": fee_belum_teralokasi,
+    }
 
 
 def hitung_pendapatan_gross_marketplace(bulan, tahun):
@@ -4333,7 +4381,7 @@ def create_app():
             existing.subtotal = item["subtotal"]
             existing.sumber_file = nama_file_aman
             existing.dibuat_pada = waktu_impor
-        return len(item_list)
+        return item_list
 
     def _simpan_income_marketplace(marketplace, file_storage, headers, rows_data):
         nama_file_aman = secure_filename(file_storage.filename)
@@ -4359,12 +4407,12 @@ def create_app():
             existing.biaya_lainnya = item["biaya_lainnya"]
             existing.sumber_file = nama_file_aman
             existing.dibuat_pada = waktu_impor
-        return len(item_list)
+        return item_list
 
     @app.route("/marketing/profit/upload", methods=["GET", "POST"])
     @marketing_required
     def profit_upload():
-        hasil = {"order": None, "income": None, "iklan": None, "ringkasan_resmi": None}
+        hasil = {"order": None, "income": None, "iklan": None, "ringkasan_resmi": None, "ringkasan_gabungan": None}
 
         if request.method == "POST":
             file_order = request.files.get("file_order")
@@ -4376,6 +4424,8 @@ def create_app():
                 return redirect(url_for("profit_upload"))
 
             marketplace_terdeteksi = None
+            order_item_list = None
+            income_item_list = None
 
             if file_order and file_order.filename:
                 marketplace, tipe, headers, rows_data, error = baca_laporan_marketplace(file_order)
@@ -4385,10 +4435,10 @@ def create_app():
                         "Coba cek lagi filenya."
                     )}
                 else:
-                    jumlah = _simpan_order_marketplace(marketplace, file_order, headers, rows_data)
+                    order_item_list = _simpan_order_marketplace(marketplace, file_order, headers, rows_data)
                     marketplace_terdeteksi = marketplace
                     hasil["order"] = {
-                        "ok": True, "nama": file_order.filename, "jumlah": jumlah, "marketplace": marketplace,
+                        "ok": True, "nama": file_order.filename, "jumlah": len(order_item_list), "marketplace": marketplace,
                         "headers": headers, "preview": rows_data[:8],
                     }
 
@@ -4400,15 +4450,24 @@ def create_app():
                         "Coba cek lagi filenya."
                     )}
                 else:
-                    jumlah = _simpan_income_marketplace(marketplace, file_income, headers, rows_data)
+                    income_item_list = _simpan_income_marketplace(marketplace, file_income, headers, rows_data)
                     marketplace_terdeteksi = marketplace_terdeteksi or marketplace
                     hasil["income"] = {
-                        "ok": True, "nama": file_income.filename, "jumlah": jumlah, "marketplace": marketplace,
+                        "ok": True, "nama": file_income.filename, "jumlah": len(income_item_list), "marketplace": marketplace,
                         "headers": headers, "preview": rows_data[:8],
                     }
                     if marketplace == "Shopee":
                         file_income.seek(0)
                         hasil["ringkasan_resmi"] = baca_ringkasan_summary_shopee(file_income)
+
+            if (
+                order_item_list is not None and income_item_list is not None
+                and hasil["order"]["marketplace"] == hasil["income"]["marketplace"]
+            ):
+                hasil["ringkasan_gabungan"] = {
+                    "marketplace": hasil["order"]["marketplace"],
+                    **hitung_ringkasan_gabungan(order_item_list, income_item_list),
+                }
 
             if file_iklan and file_iklan.filename:
                 headers_i, rows_i, _idx_header, error_i = baca_file_iklan(file_iklan)
