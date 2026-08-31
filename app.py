@@ -814,6 +814,52 @@ def hitung_profit_agregat(bulan=None):
     return {"produk": daftar_produk, "tren": tren, "ringkasan": ringkasan}
 
 
+def hitung_pendapatan_gross_marketplace(bulan, tahun):
+    """Omzet kotor (Subtotal Pesanan, sebelum potongan biaya platform) per marketplace
+    untuk 1 bulan -- SATU sumber data yang dipakai bareng oleh menu Penjualan dan
+    Laporan Laba/Rugi. Prioritas data dari Profitabilitas (Order & Income); kalau
+    suatu marketplace belum ada datanya di Profitabilitas untuk bulan itu, fallback ke
+    data Penjualan lama (PenjualanMarketplace) supaya laporan bulan-bulan lama sebelum
+    ada Profitabilitas tidak mendadak jadi kosong."""
+    awal = date(tahun, bulan, 1)
+    akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
+
+    omzet_profit = {}
+    pesanan_unik_profit = {}
+    for r in PesananMarketplace.query.filter(
+        PesananMarketplace.tanggal_pesanan >= awal, PesananMarketplace.tanggal_pesanan <= akhir,
+        PesananMarketplace.status_pesanan.notin_(STATUS_BATAL_MARKETPLACE),
+    ).all():
+        omzet_profit[r.marketplace] = omzet_profit.get(r.marketplace, 0) + (r.subtotal or 0)
+        pesanan_unik_profit.setdefault(r.marketplace, set()).add(r.no_pesanan)
+
+    legacy_by_mp = {}
+    for r in PenjualanMarketplace.query.filter(
+        PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
+    ).all():
+        agg = legacy_by_mp.setdefault(r.marketplace, {"total_penjualan": 0, "total_diskon": 0, "jumlah_pesanan": 0})
+        agg["total_penjualan"] += r.total_penjualan or 0
+        agg["total_diskon"] += r.total_diskon or 0
+        agg["jumlah_pesanan"] += r.jumlah_pesanan or 0
+
+    hasil = {}
+    for mp in set(omzet_profit) | set(legacy_by_mp):
+        if mp in omzet_profit:
+            hasil[mp] = {
+                "pendapatan": omzet_profit[mp],
+                "jumlah_pesanan": len(pesanan_unik_profit.get(mp, ())),
+                "sumber": "profitabilitas",
+            }
+        else:
+            leg = legacy_by_mp[mp]
+            hasil[mp] = {
+                "pendapatan": leg["total_penjualan"] - leg["total_diskon"],
+                "jumlah_pesanan": leg["jumlah_pesanan"],
+                "sumber": "legacy",
+            }
+    return hasil
+
+
 def baca_ringkasan_summary_shopee(file_storage):
     """Baca sheet 'Summary' laporan Income Shopee apa adanya (tidak diproses/dihitung ulang)
     supaya user bisa cross-check ke laporan resmi Shopee sendiri."""
@@ -2766,18 +2812,10 @@ def create_app():
             .order_by(ItemLabaRugi.id).all()
         ]
 
-        penjualan_by_mp = {}
-        for r in PenjualanMarketplace.query.filter(
-            PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
-        ).all():
-            agg = penjualan_by_mp.setdefault(r.marketplace, {"total_penjualan": 0, "total_diskon": 0})
-            agg["total_penjualan"] += r.total_penjualan or 0
-            agg["total_diskon"] += r.total_diskon or 0
-        for mp, agg in penjualan_by_mp.items():
-            if agg["total_penjualan"]:
-                pendapatan_items.append((f"Penjualan {mp}", agg["total_penjualan"]))
-            if agg["total_diskon"]:
-                pendapatan_items.append((f"Total Diskon {mp}", -agg["total_diskon"]))
+        pendapatan_marketplace = hitung_pendapatan_gross_marketplace(bulan, tahun)
+        for mp, agg in pendapatan_marketplace.items():
+            if agg["pendapatan"]:
+                pendapatan_items.append((f"Penjualan {mp}", agg["pendapatan"]))
 
         total_pendapatan = sum(v for _, v in pendapatan_items)
         total_hpp = sum(v for _, v in hpp_items)
@@ -3052,32 +3090,16 @@ def create_app():
         return agregat, dilewati, contoh_gagal_tanggal, dilewati_angka_tidak_wajar, contoh_angka_tidak_wajar
 
     def hitung_ringkasan_penjualan(bulan, tahun):
-        awal = date(tahun, bulan, 1)
-        akhir = date(tahun, bulan, calendar.monthrange(tahun, bulan)[1])
-        semua_data = PenjualanMarketplace.query.filter(
-            PenjualanMarketplace.tanggal >= awal, PenjualanMarketplace.tanggal <= akhir
-        ).order_by(PenjualanMarketplace.tanggal).all()
-
-        def totalkan(items):
-            return {
-                "jumlah_pesanan": sum(d.jumlah_pesanan or 0 for d in items),
-                "total_penjualan": sum(d.total_penjualan or 0 for d in items),
-                "total_diskon": sum(d.total_diskon or 0 for d in items),
-            }
-
-        def lengkapi(t):
-            pendapatan_bersih = t["total_penjualan"] - t["total_diskon"]
-            return {**t, "pendapatan_bersih": pendapatan_bersih}
-
-        total = lengkapi(totalkan(semua_data))
-        breakdown = []
-        for mp in MARKETPLACE_LIST:
-            item_mp = [d for d in semua_data if d.marketplace == mp]
-            if not item_mp:
-                continue
-            breakdown.append({"marketplace": mp, **lengkapi(totalkan(item_mp))})
-
-        return total, breakdown, semua_data
+        pendapatan_marketplace = hitung_pendapatan_gross_marketplace(bulan, tahun)
+        total = {
+            "jumlah_pesanan": sum(a["jumlah_pesanan"] for a in pendapatan_marketplace.values()),
+            "pendapatan": sum(a["pendapatan"] for a in pendapatan_marketplace.values()),
+        }
+        breakdown = [
+            {"marketplace": mp, **pendapatan_marketplace[mp]}
+            for mp in MARKETPLACE_LIST if mp in pendapatan_marketplace
+        ]
+        return total, breakdown
 
     @app.route("/pendapatan/penjualan")
     @admin_required
@@ -3085,10 +3107,10 @@ def create_app():
         bulan = int(request.args.get("bulan", today_wib().month))
         tahun = int(request.args.get("tahun", today_wib().year))
 
-        total, breakdown, semua_data = hitung_ringkasan_penjualan(bulan, tahun)
+        total, breakdown = hitung_ringkasan_penjualan(bulan, tahun)
         labarugi = hitung_labarugi_periode(bulan, tahun)
 
-        laba_bersih_operasional = total["pendapatan_bersih"] - labarugi["total_beban_operasional"]
+        laba_bersih_operasional = total["pendapatan"] - labarugi["total_beban_operasional"]
 
         return render_template(
             "pendapatan/penjualan_dashboard.html",
@@ -3097,13 +3119,11 @@ def create_app():
             tahun=tahun,
             total=total,
             breakdown=breakdown,
-            data_list=list(reversed(semua_data)),
             iklan_by_mp=labarugi["iklan_by_mp"],
             gaji_total=labarugi["gaji_total"],
             opex_by_kategori=labarugi["opex_by_kategori"],
             total_beban_operasional=labarugi["total_beban_operasional"],
             laba_bersih_operasional=laba_bersih_operasional,
-            tanggal_default=today_wib().isoformat(),
         )
 
     def _finalisasi_import_penjualan(data_tmp, mapping):
