@@ -4439,7 +4439,7 @@ def create_app():
                     marketplace_terdeteksi = marketplace
                     hasil["order"] = {
                         "ok": True, "nama": file_order.filename, "jumlah": len(order_item_list), "marketplace": marketplace,
-                        "headers": headers, "preview": rows_data[:8],
+                        "preview_items": order_item_list[:8],
                     }
 
             if file_income and file_income.filename:
@@ -4454,7 +4454,7 @@ def create_app():
                     marketplace_terdeteksi = marketplace_terdeteksi or marketplace
                     hasil["income"] = {
                         "ok": True, "nama": file_income.filename, "jumlah": len(income_item_list), "marketplace": marketplace,
-                        "headers": headers, "preview": rows_data[:8],
+                        "preview_items": income_item_list[:8],
                     }
                     if marketplace == "Shopee":
                         file_income.seek(0)
@@ -4497,21 +4497,31 @@ def create_app():
                             existing.omzet = round(nilai["omzet"])
                             existing.sumber_file = nama_file_iklan_aman
                             existing.dibuat_pada = waktu_impor
+                        iklan_preview_items = sorted(
+                            ({"tanggal": t, **v} for t, v in agregat_i.items()),
+                            key=lambda x: x["tanggal"], reverse=True,
+                        )[:8]
                         hasil["iklan"] = {
                             "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_i),
-                            "marketplace": marketplace_iklan, "headers": headers_i, "preview": rows_i[:8],
+                            "marketplace": marketplace_iklan, "preview_items": iklan_preview_items,
                         }
 
             db.session.commit()
 
-            if (hasil["order"] and hasil["order"]["ok"]) or (hasil["income"] and hasil["income"]["ok"]):
-                flash("Data berhasil diimpor. Lihat pratinjau di bawah, atau lanjut ke tab Order & Income.", "success")
+            upload_sukses = (hasil["order"] and hasil["order"]["ok"]) or (hasil["income"] and hasil["income"]["ok"])
+            jumlah_produk_belum_hpp = None
+            if upload_sukses:
+                jumlah_produk_belum_hpp = sum(1 for p in _daftar_produk_untuk_hpp() if not p["hpp"])
+                flash("Data berhasil diimpor. Lihat pratinjau di bawah, atau lanjut ke langkah berikutnya.", "success")
             else:
                 flash("Upload gagal diproses, lihat detail di bawah tiap file.", "danger")
 
-            return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil)
+            return render_template(
+                "marketing/profit_upload.html", aktif="upload", hasil=hasil,
+                jumlah_produk_belum_hpp=jumlah_produk_belum_hpp,
+            )
 
-        return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil)
+        return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil, jumlah_produk_belum_hpp=None)
 
     @app.route("/marketing/profit/data")
     @marketing_required

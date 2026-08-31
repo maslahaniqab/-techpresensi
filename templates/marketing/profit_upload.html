@@ -2,6 +2,8 @@
 {% block title %}Upload Data Profit{% endblock %}
 {% block content %}
 
+{% set mp_badge = {'Shopee':'bg-warning text-dark','TikTok Shop':'bg-dark','Lazada':'bg-primary','Blibli':'bg-info text-dark','Tokopedia':'bg-success','Meta Ads':'bg-primary'} %}
+
 <h3 class="mb-1">Upload Data</h3>
 <p class="text-muted small mb-4">
   Upload laporan asli dari Seller Center/Partner Center marketplace kamu. Sistem otomatis mengenali
@@ -14,21 +16,21 @@
   <div class="row g-3 mb-4">
     <div class="col-md-4">
       <div class="card p-3 h-100">
-        <div class="fw-semibold">1. File Order</div>
+        <div class="fw-semibold">📋 1. File Order</div>
         <div class="text-muted small mb-3">Laporan Pesanan/Order dari Shopee atau TikTok Shop.</div>
         <input type="file" name="file_order" class="form-control" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
     <div class="col-md-4">
       <div class="card p-3 h-100">
-        <div class="fw-semibold">2. File Income</div>
+        <div class="fw-semibold">💰 2. File Income</div>
         <div class="text-muted small mb-3">Laporan Pendapatan/Income dari Shopee atau TikTok Shop.</div>
         <input type="file" name="file_income" class="form-control" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
     <div class="col-md-4">
       <div class="card p-3 h-100">
-        <div class="fw-semibold">3. File Data Iklan <span class="text-muted fw-normal">(opsional)</span></div>
+        <div class="fw-semibold">📣 3. File Data Iklan <span class="text-muted fw-normal">(opsional)</span></div>
         <div class="text-muted small mb-3">Dari Ads Center marketplace terkait. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
         <input type="file" name="file_iklan" class="form-control" accept=".csv,.xlsx,.xlsm">
       </div>
@@ -37,74 +39,143 @@
   <button type="submit" class="btn btn-primary mb-4">Upload &amp; Proses</button>
 </form>
 
-<div class="row g-3">
-  <div class="col-md-4">
-    <div class="text-muted small text-uppercase mb-2">Pratinjau File Order</div>
-    <div class="card p-3" style="overflow-x:auto; min-height: 160px;">
-      {% if hasil.order and hasil.order.ok %}
-      <div class="small text-success mb-2">
-        <span class="badge bg-secondary">{{ hasil.order.marketplace }}</span>
-        {{ hasil.order.jumlah }} baris berhasil diproses dari {{ hasil.order.nama }}.
-      </div>
-      <table class="table table-sm table-bordered mb-0">
-        <thead><tr>{% for h in hasil.order.headers[:6] %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in hasil.order.preview %}
-          <tr>{% for cell in row[:6] %}<td class="small">{{ cell }}</td>{% endfor %}</tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% elif hasil.order and not hasil.order.ok %}
-      <div class="small text-danger">{{ hasil.order.nama }}: {{ hasil.order.pesan }}</div>
-      {% else %}
-      <div class="text-center text-muted small py-4">Upload file Order di atas, beberapa baris pertama akan tampil di sini apa adanya.</div>
-      {% endif %}
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="text-muted small text-uppercase mb-2">Pratinjau File Income</div>
-    <div class="card p-3" style="overflow-x:auto; min-height: 160px;">
-      {% if hasil.income and hasil.income.ok %}
-      <div class="small text-success mb-2">
-        <span class="badge bg-secondary">{{ hasil.income.marketplace }}</span>
-        {{ hasil.income.jumlah }} pesanan berhasil diproses dari {{ hasil.income.nama }}.
-      </div>
-      <table class="table table-sm table-bordered mb-0">
-        <thead><tr>{% for h in hasil.income.headers[:6] %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in hasil.income.preview %}
-          <tr>{% for cell in row[:6] %}<td class="small">{{ cell }}</td>{% endfor %}</tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% elif hasil.income and not hasil.income.ok %}
-      <div class="small text-danger">{{ hasil.income.nama }}: {{ hasil.income.pesan }}</div>
-      {% else %}
-      <div class="text-center text-muted small py-4">Upload file Income di atas, beberapa baris pertama sheet Income akan tampil di sini apa adanya.</div>
-      {% endif %}
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="text-muted small text-uppercase mb-2">Pratinjau File Data Iklan <span class="text-muted">(opsional)</span></div>
-    <div class="card p-3" style="overflow-x:auto; min-height: 160px;">
-      {% if hasil.iklan and hasil.iklan.ok %}
-      <div class="small text-success mb-2">{{ hasil.iklan.jumlah }} hari data iklan berhasil diproses dari {{ hasil.iklan.nama }}.</div>
-      <table class="table table-sm table-bordered mb-0">
-        <thead><tr>{% for h in hasil.iklan.headers[:6] %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in hasil.iklan.preview %}
-          <tr>{% for cell in row[:6] %}<td class="small">{{ cell }}</td>{% endfor %}</tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% elif hasil.iklan and not hasil.iklan.ok %}
-      <div class="small text-danger">{{ hasil.iklan.nama }}: {{ hasil.iklan.pesan }}</div>
-      {% else %}
-      <div class="text-center text-muted small py-4">Belum ada data iklan diupload. Kalau kamu pasang Shopee Ads, upload file Data Iklan di atas buat lihat berapa besar dampaknya ke profit. Kalau tidak, lewati saja bagian ini, tool tetap jalan normal tanpa data iklan.</div>
-      {% endif %}
-    </div>
-  </div>
+{% if not hasil.order and not hasil.income and not hasil.iklan %}
+<div class="card p-4 text-center text-muted small">
+  Belum ada file yang diupload. Pilih file Order dan/atau Income di atas, hasilnya akan langsung tampil rapi di sini.
 </div>
+{% endif %}
+
+{# ---------- Hasil Order ---------- #}
+{% if hasil.order %}
+<div class="mb-4">
+  {% if hasil.order.ok %}
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <span class="fs-5">✅</span>
+    <span class="fw-semibold">File Order berhasil diproses</span>
+    <span class="badge {{ mp_badge.get(hasil.order.marketplace, 'bg-secondary') }}">{{ hasil.order.marketplace }}</span>
+    <span class="text-muted small">{{ hasil.order.jumlah }} baris &middot; {{ hasil.order.nama }}</span>
+  </div>
+  <div class="card p-3" style="overflow-x:auto;">
+    <div class="text-muted small mb-2">Pratinjau {{ hasil.order.preview_items|length }} baris pertama (sudah dibaca &amp; dirapikan, bukan tampilan mentah file):</div>
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>No. Pesanan</th>
+          <th>Tanggal</th>
+          <th>Status</th>
+          <th>Produk</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in hasil.order.preview_items %}
+        <tr>
+          <td class="small">{{ it.no_pesanan }}</td>
+          <td class="small">{{ it.tanggal_pesanan.strftime("%d/%m/%Y") if it.tanggal_pesanan else "-" }}</td>
+          <td>
+            {% if it.status_pesanan in ('Selesai','Selesai Pesanan') %}<span class="badge bg-success-subtle text-success-emphasis">{{ it.status_pesanan }}</span>
+            {% elif it.status_pesanan in ('Batal','Dibatalkan','Cancelled','Cancel') %}<span class="badge bg-danger-subtle text-danger-emphasis">{{ it.status_pesanan }}</span>
+            {% else %}<span class="badge bg-secondary-subtle text-secondary-emphasis">{{ it.status_pesanan }}</span>{% endif %}
+          </td>
+          <td class="small">{{ it.nama_produk }}</td>
+          <td class="text-end">{{ it.jumlah }}</td>
+          <td class="text-end">{{ it.subtotal | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.order.nama }}:</strong> {{ hasil.order.pesan }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------- Hasil Income ---------- #}
+{% if hasil.income %}
+<div class="mb-4">
+  {% if hasil.income.ok %}
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <span class="fs-5">✅</span>
+    <span class="fw-semibold">File Income berhasil diproses</span>
+    <span class="badge {{ mp_badge.get(hasil.income.marketplace, 'bg-secondary') }}">{{ hasil.income.marketplace }}</span>
+    <span class="text-muted small">{{ hasil.income.jumlah }} pesanan &middot; {{ hasil.income.nama }}</span>
+  </div>
+  <div class="card p-3" style="overflow-x:auto;">
+    <div class="text-muted small mb-2">Pratinjau {{ hasil.income.preview_items|length }} pesanan pertama (sudah dibaca &amp; dirapikan):</div>
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>No. Pesanan</th>
+          <th>Tanggal Dana Dilepas</th>
+          <th class="text-end">Biaya Admin</th>
+          <th class="text-end">Biaya Layanan</th>
+          <th class="text-end">Biaya Lainnya</th>
+          <th class="text-end">Total Penghasilan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in hasil.income.preview_items %}
+        <tr>
+          <td class="small">{{ it.no_pesanan }}</td>
+          <td class="small">{{ it.tanggal_dana_dilepas.strftime("%d/%m/%Y") if it.tanggal_dana_dilepas else "-" }}</td>
+          <td class="text-end">{{ it.biaya_admin | rupiah }}</td>
+          <td class="text-end">{{ it.biaya_layanan | rupiah }}</td>
+          <td class="text-end">{{ it.biaya_lainnya | rupiah }}</td>
+          <td class="text-end fw-semibold">{{ it.total_penghasilan | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.income.nama }}:</strong> {{ hasil.income.pesan }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------- Hasil Iklan ---------- #}
+{% if hasil.iklan %}
+<div class="mb-4">
+  {% if hasil.iklan.ok %}
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <span class="fs-5">✅</span>
+    <span class="fw-semibold">File Data Iklan berhasil diproses</span>
+    <span class="badge {{ mp_badge.get(hasil.iklan.marketplace, 'bg-secondary') }}">{{ hasil.iklan.marketplace }}</span>
+    <span class="text-muted small">{{ hasil.iklan.jumlah }} hari &middot; {{ hasil.iklan.nama }}</span>
+  </div>
+  <div class="card p-3" style="overflow-x:auto;">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Tanggal</th>
+          <th class="text-end">Biaya Iklan</th>
+          <th class="text-end">Impresi</th>
+          <th class="text-end">Klik</th>
+          <th class="text-end">Pesanan</th>
+          <th class="text-end">Omzet</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in hasil.iklan.preview_items %}
+        <tr>
+          <td class="small">{{ it.tanggal.strftime("%d/%m/%Y") if it.tanggal else "-" }}</td>
+          <td class="text-end">{{ it.biaya | rupiah }}</td>
+          <td class="text-end">{{ "{:,}".format(it.impresi|int).replace(",", ".") }}</td>
+          <td class="text-end">{{ it.klik }}</td>
+          <td class="text-end">{{ it.pesanan }}</td>
+          <td class="text-end">{{ it.omzet | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.iklan.nama }}:</strong> {{ hasil.iklan.pesan }}</div>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if hasil.ringkasan_resmi %}
 <div class="mt-4">
@@ -191,4 +262,36 @@
   {% endif %}
 </div>
 {% endif %}
+
+{# ---------- Langkah Selanjutnya ---------- #}
+{% if jumlah_produk_belum_hpp is not none %}
+<div class="card p-4 mt-4" style="background: linear-gradient(135deg, #eef6ff 0%, #f7f0df 100%); border: none;">
+  <div class="text-muted small text-uppercase mb-1">Langkah Selanjutnya</div>
+  <div class="fw-semibold mb-3">Data sudah masuk. Ini urutan yang disarankan biar profitnya kelihatan:</div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('profit_order_income') }}" class="btn btn-outline-secondary">
+      📋 Cek Order &amp; Income
+    </a>
+    {% if jumlah_produk_belum_hpp > 0 %}
+    <a href="{{ url_for('profit_hpp') }}" class="btn btn-primary">
+      🧮 Isi HPP &mdash; {{ jumlah_produk_belum_hpp }} produk belum diisi
+    </a>
+    {% else %}
+    <a href="{{ url_for('profit_dashboard') }}" class="btn btn-primary">
+      📈 Lihat Dashboard Profit
+    </a>
+    {% endif %}
+    <a href="{{ url_for('profit_insight') }}" class="btn btn-outline-success">
+      💡 Cek Insight &amp; Rekomendasi
+    </a>
+  </div>
+  {% if jumlah_produk_belum_hpp > 0 %}
+  <div class="text-muted small mt-2">
+    Semua produk perlu diisi HPP-nya dulu supaya Dashboard Profit &amp; Insight bisa menghitung untung/rugi yang akurat.
+    Setelah HPP lengkap, tombol ini otomatis berubah jadi langsung ke Dashboard Profit.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 {% endblock %}
