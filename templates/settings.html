@@ -107,10 +107,12 @@
       <div class="col-md-6 mb-3">
         <label class="form-label">Denda Telat / menit (Rp)</label>
         <input type="number" name="denda_telat_per_menit" class="form-control" min="0" value="{{ settings.denda_telat_per_menit }}">
+        <div class="form-text">Sementara tidak dipakai -- pemotongan gaji akibat telat dinonaktifkan, laporan keterlambatan tetap tampil di slip.</div>
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label">Upah Lembur / jam (Rp)</label>
         <input type="number" name="upah_lembur_per_jam" class="form-control" min="0" value="{{ settings.upah_lembur_per_jam }}">
+        <div class="form-text">Sudah tidak dipakai -- lembur sekarang dihitung harian & diisi manual (jumlah hari x tarif) langsung di tiap slip gaji.</div>
       </div>
     </div>
     <div class="row">
@@ -122,13 +124,14 @@
       <div class="col-md-6 mb-3">
         <label class="form-label">Bonus Pencapaian Target (Rp)</label>
         <input type="number" name="bonus_target_tercapai" class="form-control" min="0" value="{{ settings.bonus_target_tercapai }}">
-        <div class="form-text">Ditambahkan otomatis jika karyawan ditandai "Tercapai".</div>
+        <div class="form-text">Sudah tidak dipakai -- bonus sekarang diisi manual langsung di tiap slip gaji.</div>
       </div>
     </div>
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Upah Lembur Freelance / jam (Rp)</label>
         <input type="number" name="upah_lembur_freelance_per_jam" class="form-control" min="0" value="{{ settings.upah_lembur_freelance_per_jam }}">
+        <div class="form-text">Sudah tidak dipakai -- lembur sekarang dihitung harian & diisi manual langsung di tiap slip gaji.</div>
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label">Fee Co-Host (Rp)</label>

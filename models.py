@@ -142,7 +142,9 @@ class Payroll(db.Model):
 
     potongan_alpha = db.Column(db.Integer, default=0)
     potongan_telat = db.Column(db.Integer, default=0)
-    uang_lembur = db.Column(db.Integer, default=0)
+    jumlah_lembur = db.Column(db.Integer, default=0)  # dihitung harian (hari), diisi manual oleh admin
+    tarif_lembur = db.Column(db.Integer, default=0)  # Rp per hari lembur, diisi manual oleh admin
+    uang_lembur = db.Column(db.Integer, default=0)  # = jumlah_lembur x tarif_lembur
     upah_freelance = db.Column(db.Integer, default=0)
     bonus_target = db.Column(db.Integer, default=0)
     co_host_fee = db.Column(db.Integer, default=0)

@@ -10,6 +10,41 @@
   </div>
 </div>
 
+<div class="card p-3 mb-3 no-print" style="max-width: 700px;">
+  <div class="fw-semibold mb-1">Input Lembur &amp; Bonus (Manual)</div>
+  <p class="text-muted small mb-3">
+    Lembur dihitung harian, bukan per menit. Isi berapa hari karyawan ini lembur bulan ini dan
+    berapa uang lembur per harinya, plus bonus kalau ada -- semuanya otomatis masuk ke gaji bersih di bawah.
+  </p>
+  {% if p.status == 'Dibayar' %}
+  <div class="alert alert-secondary small mb-0">
+    Slip ini sudah Dibayar, lembur &amp; bonus tidak bisa diubah lagi.
+  </div>
+  {% else %}
+  <form method="post" action="{{ url_for('penggajian_simpan_lembur', payroll_id=p.id) }}" class="row g-2 align-items-end">
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Jumlah Lembur (hari)</label>
+      <input type="number" min="0" step="1" name="jumlah_lembur" class="form-control" value="{{ p.jumlah_lembur or 0 }}">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Uang Lembur per Hari (Rp)</label>
+      <input type="number" min="0" step="1000" name="tarif_lembur" class="form-control" value="{{ p.tarif_lembur or 0 }}">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Bonus (Rp)</label>
+      <input type="number" min="0" step="1000" name="bonus_target" class="form-control" value="{{ p.bonus_target or 0 }}">
+    </div>
+    <div class="col-md-3 col-6">
+      <button type="submit" class="btn btn-primary w-100">Simpan</button>
+    </div>
+  </form>
+  <div class="text-muted small mt-2">
+    Lembur saat ini: {{ p.jumlah_lembur or 0 }} hari &times; {{ (p.tarif_lembur or 0) | rupiah }} = {{ p.uang_lembur | rupiah }}
+    &middot; Bonus saat ini: {{ p.bonus_target | rupiah }}
+  </div>
+  {% endif %}
+</div>
+
 <div class="card p-4" style="max-width: 700px;">
   <div class="text-center mb-3">
     {% if settings.logo_filename %}
@@ -41,7 +76,7 @@
     <tr><td>Cuti</td><td class="text-end">{{ p.total_cuti }} hari</td></tr>
     <tr><td>Alpha (tanpa keterangan)</td><td class="text-end">{{ p.total_alpha }} hari</td></tr>
     <tr><td>Total Keterlambatan</td><td class="text-end">{{ p.total_telat_menit }} menit</td></tr>
-    <tr><td>Total Lembur</td><td class="text-end">{{ p.total_lembur_menit }} menit</td></tr>
+    <tr><td>Lembur</td><td class="text-end">{{ p.jumlah_lembur or 0 }} hari</td></tr>
   </table>
 
   <div class="table-responsive">
@@ -56,7 +91,7 @@
           <td class="text-end">{{ p.upah_freelance | rupiah }}</td>
         </tr>
         <tr>
-          <td>Lembur / Over Time</td>
+          <td>Lembur / Over Time ({{ p.jumlah_lembur or 0 }} hari &times; {{ (p.tarif_lembur or 0) | rupiah }})</td>
           <td class="text-end">{{ p.uang_lembur | rupiah }}</td>
         </tr>
         <tr>
@@ -77,7 +112,7 @@
           <td class="text-end">{{ (p.tunjangan_makan + p.tunjangan_transport) | rupiah }}</td>
         </tr>
         <tr>
-          <td>Lembur Harian</td>
+          <td>Lembur Harian ({{ p.jumlah_lembur or 0 }} hari &times; {{ (p.tarif_lembur or 0) | rupiah }})</td>
           <td class="text-end">{{ p.uang_lembur | rupiah }}</td>
         </tr>
         <tr>

@@ -68,7 +68,7 @@
             <th>Cuti</th>
             <th>Alpha</th>
             <th>Telat (mnt)</th>
-            <th>Lembur (mnt)</th>
+            <th>Lembur (hari)</th>
             <th>Bonus Target</th>
             <th>Gaji Bersih</th>
             <th>Status</th>
@@ -95,7 +95,7 @@
             <td>{{ p.total_cuti }}</td>
             <td>{{ p.total_alpha }}</td>
             <td>{{ p.total_telat_menit }}</td>
-            <td>{{ p.total_lembur_menit }}</td>
+            <td>{{ p.jumlah_lembur or 0 }}</td>
             <td>{{ p.bonus_target | rupiah }}</td>
             <td class="fw-semibold">{{ p.gaji_bersih | rupiah }}</td>
             <td>
