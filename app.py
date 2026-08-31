@@ -2326,7 +2326,10 @@ def create_app():
         gaji_harian = total_pokok / hari_kerja if hari_kerja else 0
 
         potongan_alpha = round(total_alpha * gaji_harian)
-        potongan_telat = total_telat_menit * (settings.denda_telat_per_menit or 0)
+        # Pemotongan gaji akibat keterlambatan dinonaktifkan sementara atas permintaan
+        # -- total_telat_menit tetap dihitung & disimpan supaya laporan keterlambatan
+        # per karyawan tetap tampil, hanya saja tidak lagi mengurangi gaji_bersih.
+        potongan_telat = 0
         uang_lembur = round((total_lembur_menit / 60) * (settings.upah_lembur_per_jam or 0))
 
         bpjs_jkk = emp.bpjs_jkk or 0
