@@ -23,6 +23,57 @@
   </form>
 </div>
 
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card p-3 h-100">
+      <div class="text-muted small">Pengeluaran Manual</div>
+      <div class="fs-5 fw-bold">{{ total | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3 h-100">
+      <div class="text-muted small">Biaya Iklan (otomatis)</div>
+      <div class="fs-5 fw-bold">{{ total_iklan | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-6">
+    <div class="card p-3 h-100">
+      <div class="text-muted small">Total Keseluruhan Beban Operasional</div>
+      <div class="fs-5 fw-bold text-danger">{{ total_keseluruhan | rupiah }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <h6 class="mb-1">Biaya Iklan — {{ bulan_nama_list[bulan] }} {{ tahun }}</h6>
+  <p class="text-muted small mb-3">
+    Diambil otomatis dari menu Marketing (Analisa Iklan per Marketplace &amp; Iklan Meta), bukan input manual.
+    Untuk mengoreksi angkanya, upload/edit datanya langsung di menu Marketing masing-masing.
+  </p>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <tbody>
+        {% for item in iklan_marketplace_list %}
+        <tr>
+          <td>Iklan {{ item.marketplace }}</td>
+          <td class="text-end">{{ item.biaya | rupiah }}</td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td>Iklan Meta Ads</td>
+          <td class="text-end">{{ iklan_meta_biaya | rupiah }}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold">
+          <td>Total Biaya Iklan</td>
+          <td class="text-end">{{ total_iklan | rupiah }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
 <div class="card p-4 mb-3">
   <h6 class="mb-3">Catat Pengeluaran</h6>
   <form method="post" class="row g-2">
@@ -58,6 +109,7 @@
 </div>
 
 <div class="card p-3">
+  <h6 class="mb-3">Pengeluaran Manual Tersimpan</h6>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>

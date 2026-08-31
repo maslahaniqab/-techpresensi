@@ -2761,6 +2761,18 @@ def create_app():
             .all()
         )
         total = sum(p.jumlah for p in pengeluaran)
+
+        # Biaya iklan (otomatis dari menu Marketing, bukan input manual) -- ditampilkan di sini
+        # supaya Laporan Pengeluaran mencerminkan SEMUA beban operasional dalam satu tempat,
+        # sinkron dengan Laporan Laba/Rugi.
+        labarugi = hitung_labarugi_periode(bulan, tahun)
+        iklan_marketplace_list = [
+            {"marketplace": mp, "biaya": labarugi["iklan_by_mp"].get(mp, 0)} for mp in MARKETPLACE_LIST
+        ]
+        total_iklan_marketplace = sum(x["biaya"] for x in iklan_marketplace_list)
+        total_iklan = total_iklan_marketplace + labarugi["meta_biaya_kotor"]
+        total_keseluruhan = total + total_iklan
+
         return render_template(
             "pengeluaran_list.html",
             pengeluaran=pengeluaran,
@@ -2769,6 +2781,10 @@ def create_app():
             total=total,
             kategori_rutin=KATEGORI_PENGELUARAN_RUTIN,
             tanggal_default=today_wib().isoformat(),
+            iklan_marketplace_list=iklan_marketplace_list,
+            iklan_meta_biaya=labarugi["meta_biaya_kotor"],
+            total_iklan=total_iklan,
+            total_keseluruhan=total_keseluruhan,
         )
 
     @app.route("/keuangan/pengeluaran/<int:pid>/hapus", methods=["POST"])
