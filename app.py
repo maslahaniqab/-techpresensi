@@ -1891,11 +1891,24 @@ def create_app():
         sudah_ada = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
         if sudah_ada:
             sudah_ada.jumlah_yard = jumlah_yard
-            flash(f"Kebutuhan {bahan.nama_bahan} untuk {produk.nama_produk} diperbarui.", "success")
+            pesan = f"Kebutuhan {bahan.nama_bahan} untuk {produk.nama_produk} diperbarui."
         else:
             db.session.add(BahanBakuKebutuhan(bahan_baku_id=bahan.id, produk_id=produk.id, jumlah_yard=jumlah_yard))
-            flash(f"{produk.nama_produk} butuh {jumlah_yard} {bahan.satuan} {bahan.nama_bahan} berhasil dicatat.", "success")
+            pesan = f"{produk.nama_produk} butuh {jumlah_yard} {bahan.satuan} {bahan.nama_bahan} berhasil dicatat."
+
+        # Begitu Kebutuhan-nya diisi/diubah, langsung hitung otomatis Produk Jadi
+        # untuk transaksi Keluar yang cocok tapi masih kosong (misalnya transaksi
+        # lama yang dicatat sebelum Kebutuhan per produk ini pernah diisi).
+        transaksi_kosong = BahanBakuTransaksi.query.filter_by(
+            bahan_baku_id=bahan.id, produk_id=produk.id, jenis="Keluar", produk_jadi_pcs=None,
+        ).all()
+        for t in transaksi_kosong:
+            t.produk_jadi_pcs = round(t.jumlah_yard / jumlah_yard)
+        if transaksi_kosong:
+            pesan += f" {len(transaksi_kosong)} transaksi Keluar lama otomatis terisi Produk Jadi-nya."
+
         db.session.commit()
+        flash(pesan, "success")
         return redirect(tujuan)
 
     @app.route("/inventory/bahan-baku/kebutuhan/<int:kebutuhan_id>/hapus", methods=["POST"])
