@@ -166,10 +166,11 @@
 
 <div class="text-muted small text-uppercase mb-2">Pratinjau Order</div>
 <div class="text-muted small mb-2">Data mentah pesanan dari file Order kamu: produk apa yang dipesan, harga, qty, dan statusnya.</div>
-<div class="card p-3 mb-4" style="overflow-x:auto;">
+<div class="card p-3 mb-4">
   <div class="text-muted small mb-2">Menampilkan {{ item_pesanan|length }} baris terbaru (maks. 500)</div>
+  <div style="overflow:auto; max-height: 420px;">
   <table class="table table-sm align-middle mb-0">
-    <thead>
+    <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
       <tr>
         <th>Marketplace</th>
         <th>No. Pesanan</th>
@@ -205,14 +206,16 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <div class="text-muted small text-uppercase mb-2">Pratinjau Income</div>
-<div class="text-muted small mb-2">Rincian biaya per pesanan dari file Income kamu: Administrasi, Layanan, Komisi/Ads, dan komponen biaya lainnya sampai Total Penghasilan.</div>
-<div class="card p-3" style="overflow-x:auto;">
+<div class="text-muted small mb-2">Rincian biaya per pesanan dari file Income kamu: Administrasi, Layanan, Komisi/AMS, dan komponen biaya lainnya sampai Total Penghasilan.</div>
+<div class="card p-3">
   <div class="text-muted small mb-2">Menampilkan {{ item_income|length }} pesanan terbaru (maks. 500)</div>
+  <div style="overflow:auto; max-height: 420px;">
   <table class="table table-sm align-middle mb-0">
-    <thead>
+    <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
       <tr>
         <th>Marketplace</th>
         <th>No. Pesanan</th>
@@ -239,5 +242,6 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}
