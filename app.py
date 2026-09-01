@@ -715,6 +715,11 @@ def parse_income_tiktok(headers, rows_data):
 PARSER_ORDER_MARKETPLACE = {
     "Shopee": parse_order_shopee,
     "TikTok Shop": parse_order_tiktok,
+    # Order Manual pakai format kolom yang sama persis dengan export Order Shopee
+    # (No. Pesanan, Waktu Pesanan Dibuat, Status Pesanan, dst) -- untuk pesanan
+    # langsung/di luar marketplace (WA, COD, dsb) yang diinput manual oleh admin
+    # lewat template, jadi parsernya bisa dipakai bareng.
+    "Manual": parse_order_shopee,
 }
 PARSER_INCOME_MARKETPLACE = {
     "Shopee": parse_income_shopee,
@@ -4534,18 +4539,71 @@ def create_app():
             existing.dibuat_pada = waktu_impor
         return item_list
 
+    def _buat_income_otomatis_manual(order_item_list, nama_file_aman):
+        """Pesanan Manual (WA/COD/langsung, di luar marketplace) tidak punya file Income
+        terpisah karena memang tidak ada potongan biaya admin/layanan platform -- jadi
+        begitu Order Manual diupload, data Income-nya langsung dibuat otomatis di sini
+        (total_penghasilan = subtotal, semua biaya 0) supaya Order & Income dan Dashboard
+        Profit langsung nyambung tanpa perlu upload apa pun lagi. Pesanan yang statusnya
+        Batal/Dibatalkan dilewati, sama seperti pesanan marketplace lain yang batal
+        memang tidak pernah ada dana yang cair."""
+        waktu_impor = now_wib()
+        subtotal_per_pesanan = {}
+        tanggal_per_pesanan = {}
+        for item in order_item_list:
+            if item["status_pesanan"] in STATUS_BATAL_MARKETPLACE:
+                continue
+            no = item["no_pesanan"]
+            subtotal_per_pesanan[no] = subtotal_per_pesanan.get(no, 0) + item["subtotal"]
+            tanggal_per_pesanan.setdefault(no, item["tanggal_pesanan"])
+
+        income_item_list = []
+        if subtotal_per_pesanan:
+            peta_existing = {
+                p.no_pesanan: p
+                for p in PendapatanPesanan.query.filter(
+                    PendapatanPesanan.marketplace == "Manual",
+                    PendapatanPesanan.no_pesanan.in_(subtotal_per_pesanan.keys()),
+                ).all()
+            }
+            for no, total in subtotal_per_pesanan.items():
+                existing = peta_existing.get(no)
+                if not existing:
+                    existing = PendapatanPesanan(marketplace="Manual", no_pesanan=no)
+                    db.session.add(existing)
+                    peta_existing[no] = existing
+                existing.tanggal_dana_dilepas = tanggal_per_pesanan[no]
+                existing.total_penghasilan = total
+                existing.biaya_admin = 0
+                existing.biaya_layanan = 0
+                existing.biaya_lainnya = 0
+                existing.sumber_file = nama_file_aman
+                existing.dibuat_pada = waktu_impor
+                income_item_list.append({
+                    "no_pesanan": no, "tanggal_dana_dilepas": tanggal_per_pesanan[no],
+                    "total_penghasilan": total, "biaya_admin": 0, "biaya_layanan": 0, "biaya_lainnya": 0,
+                })
+        return income_item_list
+
     @app.route("/marketing/profit/upload", methods=["GET", "POST"])
     @marketing_required
     def profit_upload():
-        hasil = {"order": None, "income": None, "iklan": None, "ringkasan_resmi": None, "ringkasan_gabungan": None}
+        hasil = {
+            "order": None, "income": None, "iklan": None, "order_manual": None,
+            "ringkasan_resmi": None, "ringkasan_gabungan": None,
+        }
 
         if request.method == "POST":
             file_order = request.files.get("file_order")
             file_income = request.files.get("file_income")
             file_iklan = request.files.get("file_iklan")
+            file_order_manual = request.files.get("file_order_manual")
 
-            if not (file_order and file_order.filename) and not (file_income and file_income.filename):
-                flash("Pilih minimal file Order atau Income terlebih dahulu.", "danger")
+            if (
+                not (file_order and file_order.filename) and not (file_income and file_income.filename)
+                and not (file_order_manual and file_order_manual.filename)
+            ):
+                flash("Pilih minimal satu file terlebih dahulu.", "danger")
                 return redirect(url_for("profit_upload"))
 
             marketplace_terdeteksi = None
@@ -4594,6 +4652,27 @@ def create_app():
                     **hitung_ringkasan_gabungan(order_item_list, income_item_list),
                 }
 
+            if file_order_manual and file_order_manual.filename:
+                headers_m, rows_m, _idx_header_m, error_m = baca_file_iklan(file_order_manual)
+                if error_m:
+                    hasil["order_manual"] = {"ok": False, "nama": file_order_manual.filename, "pesan": error_m}
+                else:
+                    order_manual_item_list = _simpan_order_marketplace("Manual", file_order_manual, headers_m, rows_m)
+                    if not order_manual_item_list:
+                        hasil["order_manual"] = {
+                            "ok": False, "nama": file_order_manual.filename,
+                            "pesan": "Tidak ada baris pesanan yang terbaca dari file ini. Pastikan kolom 'No. Pesanan' "
+                                     "dan 'Waktu Pesanan Dibuat' terisi, sesuai template.",
+                        }
+                    else:
+                        nama_file_manual_aman = secure_filename(file_order_manual.filename)
+                        income_manual_item_list = _buat_income_otomatis_manual(order_manual_item_list, nama_file_manual_aman)
+                        hasil["order_manual"] = {
+                            "ok": True, "nama": file_order_manual.filename, "jumlah": len(order_manual_item_list),
+                            "jumlah_income_otomatis": len(income_manual_item_list),
+                            "preview_items": order_manual_item_list[:8],
+                        }
+
             if file_iklan and file_iklan.filename:
                 headers_i, rows_i, _idx_header, error_i = baca_file_iklan(file_iklan)
                 if error_i:
@@ -4633,7 +4712,11 @@ def create_app():
 
             db.session.commit()
 
-            upload_sukses = (hasil["order"] and hasil["order"]["ok"]) or (hasil["income"] and hasil["income"]["ok"])
+            upload_sukses = (
+                (hasil["order"] and hasil["order"]["ok"])
+                or (hasil["income"] and hasil["income"]["ok"])
+                or (hasil["order_manual"] and hasil["order_manual"]["ok"])
+            )
             jumlah_produk_belum_hpp = None
             if upload_sukses:
                 jumlah_produk_belum_hpp = sum(1 for p in _daftar_produk_untuk_hpp() if not p["hpp"])
@@ -4647,6 +4730,36 @@ def create_app():
             )
 
         return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil, jumlah_produk_belum_hpp=None)
+
+    @app.route("/marketing/profit/order-manual/template")
+    @marketing_required
+    def profit_order_manual_template():
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Order Manual"
+        header = [
+            "No. Pesanan", "Status Pesanan", "No. Resi", "Opsi Pengiriman", "Antar ke counter/ pick-up",
+            "Waktu Pengiriman Diatur", "Waktu Pesanan Dibuat", "Waktu Pembayaran Dilakukan", "Metode Pembayaran",
+            "SKU Induk", "Nama Produk", "Nomor Referensi SKU", "Nama Variasi", "Harga Awal",
+            "Harga Setelah Diskon", "Jumlah", "Subtotal Pesanan", "Total Diskon", "Diskon Dari Penjual",
+            "Berat Produk", "Jumlah Produk di Pesan", "Total Berat", "Total Pembayaran", "Perkiraan Ongkos Kirim",
+            "Username (Pembeli)", "Nama Penerima", "No. Telepon", "Alamat Pengiriman", "Kota/Kabupaten",
+            "Provinsi", "Waktu Pesanan Selesai",
+        ]
+        ws.append(header)
+        contoh = [
+            "WA-01-08-2026", "Selesai", "", "COD/Diantar Langsung", "", "", "2026-08-01 10:00", "", "Transfer",
+            "", "Nama Produk Contoh", "SKU-001", "Warna/Ukuran", 100000, 90000, 1, 90000, 10000, 10000,
+            "", "1", "", 90000, "", "", "Nama Pembeli", "", "", "", "", "2026-08-01 10:00",
+        ]
+        ws.append(contoh)
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf, as_attachment=True, download_name="template_order_manual.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     @app.route("/marketing/profit/data")
     @marketing_required

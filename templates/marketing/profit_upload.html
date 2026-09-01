@@ -2,7 +2,7 @@
 {% block title %}Upload Data Profit{% endblock %}
 {% block content %}
 
-{% set mp_badge = {'Shopee':'bg-warning text-dark','TikTok Shop':'bg-dark','Lazada':'bg-primary','Blibli':'bg-info text-dark','Tokopedia':'bg-success','Meta Ads':'bg-primary'} %}
+{% set mp_badge = {'Shopee':'bg-warning text-dark','TikTok Shop':'bg-dark','Lazada':'bg-primary','Blibli':'bg-info text-dark','Tokopedia':'bg-success','Meta Ads':'bg-primary','Manual':'bg-primary-subtle text-primary-emphasis'} %}
 
 <h3 class="mb-1">Upload Data</h3>
 <p class="text-muted small mb-4">
@@ -14,25 +14,36 @@
 
 <form method="post" enctype="multipart/form-data" id="form-upload-profit">
   <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-6 col-lg-3">
       <div class="card p-3 h-100">
         <div class="fw-semibold">📋 1. File Order</div>
         <div class="text-muted small mb-3">Laporan Pesanan/Order dari Shopee atau TikTok Shop.</div>
         <input type="file" name="file_order" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6 col-lg-3">
       <div class="card p-3 h-100">
         <div class="fw-semibold">💰 2. File Income</div>
         <div class="text-muted small mb-3">Laporan Pendapatan/Income dari Shopee atau TikTok Shop.</div>
         <input type="file" name="file_income" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6 col-lg-3">
       <div class="card p-3 h-100">
         <div class="fw-semibold">📣 3. File Data Iklan <span class="text-muted fw-normal">(opsional)</span></div>
         <div class="text-muted small mb-3">Dari Ads Center marketplace terkait. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
         <input type="file" name="file_iklan" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="card p-3 h-100">
+        <div class="fw-semibold">✍️ 4. Order Manual <span class="text-muted fw-normal">(opsional)</span></div>
+        <div class="text-muted small mb-2">
+          Pesanan di luar marketplace (WA, COD, langsung) &mdash; tidak ada potongan biaya platform, jadi data
+          Income-nya otomatis dibuatkan sistem, tidak perlu upload apa pun lagi.
+        </div>
+        <a href="{{ url_for('profit_order_manual_template') }}" class="small d-inline-block mb-2">&#8681; Download Template</a>
+        <input type="file" name="file_order_manual" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
   </div>
@@ -79,7 +90,7 @@
 })();
 </script>
 
-{% if not hasil.order and not hasil.income and not hasil.iklan %}
+{% if not hasil.order and not hasil.income and not hasil.iklan and not hasil.order_manual %}
 <div class="card p-4 text-center text-muted small">
   Belum ada file yang diupload. Pilih file Order dan/atau Income di atas, hasilnya akan langsung tampil rapi di sini.
 </div>
@@ -213,6 +224,57 @@
   </div>
   {% else %}
   <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.iklan.nama }}:</strong> {{ hasil.iklan.pesan }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------- Hasil Order Manual ---------- #}
+{% if hasil.order_manual %}
+<div class="mb-4">
+  {% if hasil.order_manual.ok %}
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <span class="fs-5">✅</span>
+    <span class="fw-semibold">File Order Manual berhasil diproses</span>
+    <span class="badge {{ mp_badge.get('Manual', 'bg-secondary') }}">Manual</span>
+    <span class="text-muted small">{{ hasil.order_manual.jumlah }} baris &middot; {{ hasil.order_manual.nama }}</span>
+  </div>
+  <div class="alert alert-info small">
+    Data Income buat {{ hasil.order_manual.jumlah_income_otomatis }} pesanan (di luar yang Batal) sudah otomatis
+    dibuatkan sistem &mdash; tidak ada potongan biaya platform, jadi Total Penghasilan = Subtotal Pesanan.
+  </div>
+  <div class="card p-3" style="overflow-x:auto;">
+    <div class="text-muted small mb-2">Pratinjau {{ hasil.order_manual.preview_items|length }} baris pertama:</div>
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>No. Pesanan</th>
+          <th>Tanggal</th>
+          <th>Status</th>
+          <th>Produk</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in hasil.order_manual.preview_items %}
+        <tr>
+          <td class="small">{{ it.no_pesanan }}</td>
+          <td class="small">{{ it.tanggal_pesanan.strftime("%d/%m/%Y") if it.tanggal_pesanan else "-" }}</td>
+          <td>
+            {% if it.status_pesanan in ('Selesai','Selesai Pesanan') %}<span class="badge bg-success-subtle text-success-emphasis">{{ it.status_pesanan }}</span>
+            {% elif it.status_pesanan in ('Batal','Dibatalkan','Cancelled','Cancel') %}<span class="badge bg-danger-subtle text-danger-emphasis">{{ it.status_pesanan }}</span>
+            {% else %}<span class="badge bg-secondary-subtle text-secondary-emphasis">{{ it.status_pesanan }}</span>{% endif %}
+          </td>
+          <td class="small">{{ it.nama_produk }}</td>
+          <td class="text-end">{{ it.jumlah }}</td>
+          <td class="text-end">{{ it.subtotal | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.order_manual.nama }}:</strong> {{ hasil.order_manual.pesan }}</div>
   {% endif %}
 </div>
 {% endif %}
