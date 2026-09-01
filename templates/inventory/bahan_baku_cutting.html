@@ -97,6 +97,68 @@
 </form>
 {% endif %}
 
+{% if bahan_list %}
+<div class="card p-3 mb-4">
+  <div class="fw-semibold small mb-2">Kelola Kebutuhan Yard per Produk</div>
+  <p class="text-muted small mb-3">
+    Isi berapa yard bahan ini dibutuhkan untuk 1 pcs produk tertentu -- ini yang dipakai buat otomatis
+    menghitung Estimasi Produk Jadi di form Cutting di atas. Kalau kombinasi bahan+produk belum ada di sini,
+    Produk Jadi tidak akan kehitung otomatis.
+  </p>
+  <form method="post" id="form-tambah-kebutuhan" action="{{ url_for('bahan_baku_kebutuhan_tambah', bahan_id=0) }}" class="row g-2 align-items-end">
+    <input type="hidden" name="next" value="{{ url_for('bahan_baku_cutting') }}">
+    <div class="col-md-4 col-6">
+      <label class="form-label small">Jenis Bahan</label>
+      <select id="kebutuhan_bahan_id" class="form-select form-select-sm" required>
+        <option value="">Pilih bahan&hellip;</option>
+        {% for b in bahan_list %}
+        <option value="{{ b.id }}">{{ b.nama_bahan }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-6">
+      <label class="form-label small">Produk</label>
+      <select name="produk_id" class="form-select form-select-sm" required>
+        <option value="">Pilih produk&hellip;</option>
+        {% for p in produk_list %}
+        <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 col-8">
+      <label class="form-label small">Yard per Pcs</label>
+      <input type="number" min="0" step="0.01" name="jumlah_yard" class="form-control form-control-sm" placeholder="Contoh: 2.5" required>
+    </div>
+    <div class="col-md-1 col-4">
+      <button type="submit" class="btn btn-sm btn-primary w-100">+</button>
+    </div>
+  </form>
+
+  {% if daftar_kebutuhan %}
+  <div class="table-responsive mt-3">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Jenis Bahan</th><th>Produk</th><th class="text-end">Yard / Pcs</th><th></th></tr></thead>
+      <tbody>
+        {% for k in daftar_kebutuhan %}
+        <tr>
+          <td class="small">{{ k.bahan_baku.nama_bahan }}</td>
+          <td class="small">{{ k.produk.nama_produk }}</td>
+          <td class="text-end small">{{ "%.2f"|format(k.jumlah_yard) }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('bahan_baku_kebutuhan_hapus', kebutuhan_id=k.id) }}" onsubmit="return confirm('Hapus kebutuhan ini?');">
+              <input type="hidden" name="next" value="{{ url_for('bahan_baku_cutting') }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="card p-3 mb-4">
   <div class="fw-semibold small mb-2">Kelola Spek Ukuran per Produk</div>
   <p class="text-muted small mb-3">Isi acuan ukuran badan (cm) untuk 1 pcs produk, supaya tampil otomatis pas produk itu dipilih di form Cutting di atas.</p>
@@ -195,7 +257,16 @@
         <td class="text-end small">{{ "%.2f"|format(t.jumlah_yard) }} Yard</td>
         <td class="small">{{ t.produk.nama_produk if t.produk else "-" }}</td>
         <td class="small">{{ t.vendor or "-" }}</td>
-        <td class="text-end small">{{ (t.produk_jadi_pcs ~ " Pcs") if t.produk_jadi_pcs else "-" }}</td>
+        <td class="text-end small">
+          {% if t.produk_jadi_pcs %}
+          {{ t.produk_jadi_pcs }} Pcs
+          {% else %}
+          <form method="post" action="{{ url_for('bahan_baku_transaksi_isi_produk_jadi', transaksi_id=t.id) }}" class="d-flex gap-1 justify-content-end">
+            <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control form-control-sm" style="width:70px;" placeholder="isi">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Simpan</button>
+          </form>
+          {% endif %}
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="6" class="text-center text-muted py-4">Belum ada riwayat cutting/produksi.</td></tr>
@@ -259,6 +330,15 @@
     formSpek.addEventListener('submit', function (e) {
       if (!selSpekProduk.value) return; // biarkan validasi HTML jalan
       formSpek.action = formSpek.action.replace(/\/0\/tambah$/, '/' + selSpekProduk.value + '/tambah');
+    });
+  }
+
+  var formKebutuhan = document.getElementById('form-tambah-kebutuhan');
+  var selKebutuhanBahan = document.getElementById('kebutuhan_bahan_id');
+  if (formKebutuhan && selKebutuhanBahan) {
+    formKebutuhan.addEventListener('submit', function (e) {
+      if (!selKebutuhanBahan.value) return; // biarkan validasi HTML jalan
+      formKebutuhan.action = formKebutuhan.action.replace(/\/0\/kebutuhan\/tambah$/, '/' + selKebutuhanBahan.value + '/kebutuhan/tambah');
     });
   }
 

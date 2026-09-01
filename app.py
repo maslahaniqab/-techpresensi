@@ -1879,12 +1879,15 @@ def create_app():
     @admin_required
     def bahan_baku_kebutuhan_tambah(bahan_id):
         bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
+        # Formnya juga dipakai dari halaman Cutting & Produksi (bukan cuma detail Bahan
+        # Baku), jadi redirect-nya ikutin field "next" kalau dikirim.
+        tujuan = request.form.get("next") or url_for("bahan_baku_detail", bahan_id=bahan.id)
         produk_id = request.form.get("produk_id", type=int)
         jumlah_yard = parse_angka_iklan(request.form.get("jumlah_yard"))
         produk = db.session.get(Produk, produk_id) if produk_id else None
         if not produk or jumlah_yard <= 0:
             flash("Pilih produk dan isi jumlah yard per produk (harus lebih dari 0).", "danger")
-            return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+            return redirect(tujuan)
         sudah_ada = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
         if sudah_ada:
             sudah_ada.jumlah_yard = jumlah_yard
@@ -1893,17 +1896,18 @@ def create_app():
             db.session.add(BahanBakuKebutuhan(bahan_baku_id=bahan.id, produk_id=produk.id, jumlah_yard=jumlah_yard))
             flash(f"{produk.nama_produk} butuh {jumlah_yard} {bahan.satuan} {bahan.nama_bahan} berhasil dicatat.", "success")
         db.session.commit()
-        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+        return redirect(tujuan)
 
     @app.route("/inventory/bahan-baku/kebutuhan/<int:kebutuhan_id>/hapus", methods=["POST"])
     @admin_required
     def bahan_baku_kebutuhan_hapus(kebutuhan_id):
         k = db.session.get(BahanBakuKebutuhan, kebutuhan_id) or abort_404()
         bahan_id = k.bahan_baku_id
+        tujuan = request.form.get("next") or url_for("bahan_baku_detail", bahan_id=bahan_id)
         db.session.delete(k)
         db.session.commit()
         flash("Kebutuhan bahan baku untuk produk itu dihapus.", "info")
-        return redirect(url_for("bahan_baku_detail", bahan_id=bahan_id))
+        return redirect(tujuan)
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/transaksi/tambah", methods=["POST"])
     @admin_required
@@ -1965,6 +1969,22 @@ def create_app():
         db.session.commit()
         flash("Transaksi dihapus, stok disesuaikan kembali.", "info")
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+    @app.route("/inventory/cutting/transaksi/<int:transaksi_id>/produk-jadi", methods=["POST"])
+    @admin_required
+    def bahan_baku_transaksi_isi_produk_jadi(transaksi_id):
+        """Isi/koreksi Produk Jadi (pcs) langsung dari baris Riwayat Cutting di halaman
+        Cutting & Produksi -- dipakai buat backfill transaksi lama yang belum kehitung
+        otomatis (mis. sebelum Kebutuhan per Produk diisi)."""
+        t = db.session.get(BahanBakuTransaksi, transaksi_id) or abort_404()
+        pcs = request.form.get("produk_jadi_pcs", type=int)
+        if pcs is None or pcs < 0:
+            flash("Isi jumlah Produk Jadi dengan angka yang valid.", "danger")
+            return redirect(url_for("bahan_baku_cutting"))
+        t.produk_jadi_pcs = pcs
+        db.session.commit()
+        flash(f"Produk Jadi {t.bahan_baku.nama_bahan} diperbarui jadi {pcs} pcs.", "success")
+        return redirect(url_for("bahan_baku_cutting"))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required
@@ -2078,9 +2098,10 @@ def create_app():
         # "bahanId_produkId" -> yard dibutuhkan per 1 pcs (dari menu Bahan Baku > Kebutuhan
         # per Produk) -- dipakai JS di halaman ini utk otomatis hitung Estimasi Produk Jadi
         # begitu Jenis Bahan + Peruntukan Produk + Panjang Bahan sudah diisi.
+        daftar_kebutuhan = BahanBakuKebutuhan.query.join(BahanBaku).order_by(BahanBaku.nama_bahan).all()
         kebutuhan_map = {
             f"{k.bahan_baku_id}_{k.produk_id}": k.jumlah_yard
-            for k in BahanBakuKebutuhan.query.all()
+            for k in daftar_kebutuhan
         }
         riwayat = (
             BahanBakuTransaksi.query.filter_by(jenis="Keluar")
@@ -2091,6 +2112,7 @@ def create_app():
         return render_template(
             "inventory/bahan_baku_cutting.html",
             bahan_list=bahan_list, produk_list=produk_list, riwayat=riwayat,
+            daftar_kebutuhan=daftar_kebutuhan,
             spek_per_produk_json=spek_per_produk, kebutuhan_map_json=kebutuhan_map,
             tanggal_hari_ini=today_wib().isoformat(),
         )
