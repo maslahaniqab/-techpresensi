@@ -511,7 +511,11 @@ def _cek_header_marketplace(sel):
     tipe bernilai 'order'/'income'."""
     if "no. pesanan" in sel and "status pesanan" in sel:
         return "Shopee", "order"
-    if "no. pesanan" in sel and "lihat berdasarkan" in sel:
+    if "no. pesanan" in sel and ("total penghasilan" in sel or "lihat berdasarkan" in sel):
+        # "total penghasilan" = varian file Income terbaru (1 baris/pesanan, sheet "Income").
+        # "lihat berdasarkan" = varian lama yg baris Order & Sku dicampur dalam 1 sheet --
+        # dicek belakangan karena kolom itu JUGA muncul di sheet lain yg bukan Income asli
+        # (mis. "Order Processing Fee"), jadi jangan sampai sheet itu kepilih duluan.
         return "Shopee", "income"
     if "order id" in sel and "product name" in sel and "seller sku" in sel:
         return "TikTok Shop", "order"
@@ -635,9 +639,16 @@ def parse_income_shopee(headers, rows_data):
         i = idx.get(nama.lower())
         return row[i] if i is not None and i < len(row) else None
 
+    # Varian file Income yang punya kolom "Lihat berdasarkan" mencampur baris ringkasan
+    # per Order dengan baris rincian per Sku dalam 1 sheet, jadi perlu difilter cuma
+    # ambil yang "Order". Varian lain (sheet "Income" versi lebih baru) sudah 1 baris
+    # = 1 pesanan tanpa kolom ini sama sekali -- jangan difilter, nanti malah baris
+    # kebuang semua & Total Penghasilan keitung 0 padahal ada datanya.
+    ada_kolom_lihat_berdasarkan = "lihat berdasarkan" in idx
+
     hasil = []
     for row in rows_data:
-        if str(ambil(row, "Lihat berdasarkan") or "").strip().lower() != "order":
+        if ada_kolom_lihat_berdasarkan and str(ambil(row, "Lihat berdasarkan") or "").strip().lower() != "order":
             continue  # lewati baris rincian 'Sku', pakai baris ringkasan 'Order' saja
         no_pesanan = str(ambil(row, "No. Pesanan") or "").strip()
         if not no_pesanan:
@@ -737,6 +748,7 @@ def hitung_profit_agregat(bulan=None):
     Penghasilan (Income, dialokasikan proporsional ke tiap baris produk dalam pesanan
     yang sama berdasarkan share Subtotal) dikurangi HPP x Qty (dari menu Data Produk &
     Harga Jual). Pesanan berstatus batal tidak dihitung."""
+    tahun_f = bulan_f = None
     q = PesananMarketplace.query.filter(PesananMarketplace.status_pesanan.notin_(STATUS_BATAL_MARKETPLACE))
     if bulan:
         try:
@@ -746,7 +758,7 @@ def hitung_profit_agregat(bulan=None):
                 db.extract("month", PesananMarketplace.tanggal_pesanan) == bulan_f,
             )
         except ValueError:
-            pass
+            tahun_f = bulan_f = None
     item_list = q.all()
 
     kosong = {
@@ -754,6 +766,8 @@ def hitung_profit_agregat(bulan=None):
         "ringkasan": {
             "total_omzet": 0, "total_income": 0, "total_hpp": 0, "total_profit": 0, "margin": 0,
             "jumlah_produk": 0, "jumlah_produk_ada_hpp": 0, "jumlah_pesanan": 0,
+            "total_qty": 0, "total_potongan": 0, "total_biaya_admin": 0, "total_biaya_layanan": 0,
+            "total_biaya_lainnya": 0, "total_biaya_iklan": 0, "total_profit_real": 0, "margin_real": 0,
         },
     }
     if not item_list:
@@ -818,6 +832,28 @@ def hitung_profit_agregat(bulan=None):
     for p in daftar_produk:
         p["margin"] = (p["profit"] / p["income"] * 100) if p["income"] else 0
 
+    # Rincian biaya per ORDER (bukan per baris produk, biar tidak dobel-hitung kalau
+    # 1 pesanan berisi beberapa produk) -- dipakai buat breakdown "Profit Kamu Bocor
+    # di Sini" di Dashboard Profit.
+    total_biaya_admin = total_biaya_layanan = total_biaya_lainnya = 0
+    for kunci_order in by_order:
+        inc = income_map.get(kunci_order)
+        if inc:
+            total_biaya_admin += inc.biaya_admin or 0
+            total_biaya_layanan += inc.biaya_layanan or 0
+            total_biaya_lainnya += inc.biaya_lainnya or 0
+
+    # Biaya iklan dari periode & marketplace yang sama (data dari Upload Data > File
+    # Data Iklan, tabel IklanMarketplace) -- supaya Dashboard Profit ikut menghitung
+    # potongan biaya iklan, bukan cuma HPP & fee marketplace.
+    q_iklan = IklanMarketplace.query.filter(IklanMarketplace.marketplace.in_(marketplace_set))
+    if tahun_f and bulan_f:
+        q_iklan = q_iklan.filter(
+            db.extract("year", IklanMarketplace.tanggal) == tahun_f,
+            db.extract("month", IklanMarketplace.tanggal) == bulan_f,
+        )
+    total_biaya_iklan = sum(r.biaya or 0 for r in q_iklan.all())
+
     ringkasan = {
         "total_omzet": sum(p["omzet"] for p in daftar_produk),
         "total_income": sum(p["income"] for p in daftar_produk),
@@ -826,8 +862,18 @@ def hitung_profit_agregat(bulan=None):
         "jumlah_produk": len(daftar_produk),
         "jumlah_produk_ada_hpp": sum(1 for p in daftar_produk if p["hpp_satuan"] > 0),
         "jumlah_pesanan": len(by_order),
+        "total_qty": sum(p["qty"] for p in daftar_produk),
+        "total_biaya_admin": total_biaya_admin,
+        "total_biaya_layanan": total_biaya_layanan,
+        "total_biaya_lainnya": total_biaya_lainnya,
+        "total_biaya_iklan": total_biaya_iklan,
     }
     ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_income"] * 100) if ringkasan["total_income"] else 0
+    ringkasan["total_potongan"] = ringkasan["total_omzet"] - ringkasan["total_income"]
+    ringkasan["total_profit_real"] = ringkasan["total_income"] - ringkasan["total_hpp"] - total_biaya_iklan
+    ringkasan["margin_real"] = (
+        ringkasan["total_profit_real"] / ringkasan["total_omzet"] * 100
+    ) if ringkasan["total_omzet"] else 0
 
     tren = [tren_harian[t] for t in sorted(tren_harian.keys())]
     return {"produk": daftar_produk, "tren": tren, "ringkasan": ringkasan}
@@ -5175,6 +5221,66 @@ def create_app():
                 "b": {"label": bulan_b, **hitung_profit_agregat(bulan_b)["ringkasan"]},
             }
 
+        # ---- Health Score, Diagnosa Singkat, Sorotan Produk (buat panel ringkasan
+        # "sekali lihat langsung ngerti" di atas halaman) ----
+        r = data["ringkasan"]
+        hpp_lengkap = r["jumlah_produk"] > 0 and r["jumlah_produk_ada_hpp"] == r["jumlah_produk"]
+        ad_ratio = (r["total_biaya_iklan"] / r["total_omzet"] * 100) if r["total_omzet"] else 0
+
+        health_score = None
+        status_profit = None
+        if hpp_lengkap:
+            margin_score = max(0, min(100, r["margin_real"] / 40 * 100))
+            ad_penalty = max(0, min(30, ad_ratio))
+            health_score = round(max(0, min(100, margin_score - ad_penalty)))
+            if r["total_profit_real"] < 0:
+                status_profit = "rugi"
+            elif r["margin_real"] < 10:
+                status_profit = "tipis"
+            else:
+                status_profit = "sehat"
+
+        diagnosa = []
+        if ad_ratio > 10:
+            diagnosa.append({"level": "danger", "pesan": f"Rasio biaya iklan {ad_ratio:.0f}% terlalu tinggi terhadap omzet"})
+        if not hpp_lengkap and r["jumlah_produk"] > 0:
+            kurang = r["jumlah_produk"] - r["jumlah_produk_ada_hpp"]
+            diagnosa.append({"level": "warning", "pesan": f"{kurang} produk belum ada HPP — profitnya belum ikut terhitung"})
+        if hpp_lengkap and status_profit == "rugi":
+            diagnosa.append({"level": "danger", "pesan": "Profit real minus bulan ini — segera evaluasi harga jual & biaya"})
+        elif hpp_lengkap and status_profit == "tipis":
+            diagnosa.append({"level": "warning", "pesan": f"Margin real cuma {r['margin_real']:.1f}% dari sales — tergolong tipis"})
+        if not diagnosa and r["jumlah_produk"] > 0:
+            diagnosa.append({"level": "success", "pesan": "Tidak ada masalah besar terdeteksi pada periode ini"})
+
+        produk_ada_income = [p for p in data["produk"] if p["ada_income"]]
+        produk_ada_hpp = [p for p in produk_ada_income if p["ada_hpp"]]
+        terlaris = max(produk_ada_income, key=lambda p: p["qty"]) if produk_ada_income else None
+        paling_profit = max(produk_ada_hpp, key=lambda p: p["profit"]) if produk_ada_hpp else None
+        paling_rugi = min(produk_ada_hpp, key=lambda p: p["profit"]) if produk_ada_hpp else None
+        if paling_rugi and paling_profit and paling_rugi["nama_produk"] == paling_profit["nama_produk"]:
+            paling_rugi = None
+        sorotan_produk = [
+            {"label": "Produk Paling Profit", "item": paling_profit, "badge": "Paling Untung", "badge_class": "success"},
+            {"label": "Produk Paling Rugi", "item": paling_rugi, "badge": "Perlu Dicek", "badge_class": "danger"},
+            {"label": "Produk Terlaris", "item": terlaris, "badge": "Terlaris", "badge_class": "primary"},
+        ]
+
+        # Breakdown "Profit Kamu Bocor di Sini": porsi tiap komponen biaya terhadap
+        # Total Sales, sisanya (sebelum HPP) dihitung sebagai residual supaya batangnya
+        # selalu pas 100% biarpun ada pembulatan/selisih kecil antar kategori.
+        omzet_basis = r["total_omzet"] or 1
+        komponen_biaya = [
+            {"label": "Biaya Iklan", "nilai": r["total_biaya_iklan"], "warna": "#ec4899"},
+            {"label": "Administrasi", "nilai": r["total_biaya_admin"], "warna": "#3b82f6"},
+            {"label": "Biaya Lainnya", "nilai": r["total_biaya_lainnya"], "warna": "#14b8a6"},
+            {"label": "Biaya Layanan", "nilai": r["total_biaya_layanan"], "warna": "#8b5cf6"},
+        ]
+        for k in komponen_biaya:
+            k["persen"] = k["nilai"] / omzet_basis * 100
+        sisa_sebelum_hpp = r["total_omzet"] - sum(k["nilai"] for k in komponen_biaya)
+        persen_sisa = max(sisa_sebelum_hpp, 0) / omzet_basis * 100
+
         return render_template(
             "marketing/profit_dashboard.html",
             aktif="dashboard",
@@ -5186,6 +5292,15 @@ def create_app():
             bulan_a=bulan_a,
             bulan_b=bulan_b,
             perbandingan=perbandingan,
+            hpp_lengkap=hpp_lengkap,
+            ad_ratio=ad_ratio,
+            health_score=health_score,
+            status_profit=status_profit,
+            diagnosa=diagnosa,
+            sorotan_produk=sorotan_produk,
+            komponen_biaya=komponen_biaya,
+            sisa_sebelum_hpp=sisa_sebelum_hpp,
+            persen_sisa=persen_sisa,
         )
 
     @app.route("/marketing/profit/dashboard/export")

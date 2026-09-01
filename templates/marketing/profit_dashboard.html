@@ -2,10 +2,32 @@
 {% block title %}Dashboard Profit{% endblock %}
 {% block content %}
 
+<style>
+  .health-gauge {
+    width: 116px; height: 116px; border-radius: 50%;
+    background: conic-gradient(
+      {{ '#22c55e' if status_profit == 'sehat' else ('#f59e0b' if status_profit == 'tipis' else '#ef4444') }}
+      calc({{ health_score or 0 }} * 1%), rgba(255,255,255,.15) 0
+    );
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .health-gauge-inner {
+    width: 92px; height: 92px; border-radius: 50%; background: #0f1c3f;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff;
+  }
+  .profit-real-card { background: #0f1c3f; color: #fff; border-radius: .75rem; }
+  .leak-bar { display: flex; height: 28px; border-radius: .4rem; overflow: hidden; background: #eef1f6; }
+  .leak-bar span { height: 100%; }
+  .sorotan-badge-num {
+    width: 26px; height: 26px; border-radius: 50%; background: #eef1f6; color: #6c757d;
+    display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; flex-shrink: 0;
+  }
+</style>
+
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
     <h3 class="mb-1">Dashboard Profit</h3>
-    <p class="text-muted small mb-0">Kesehatan Bisnis Bulan Ini</p>
+    <p class="text-muted small mb-0">Kesehatan Bisnis {{ 'Bulan ' + bulan_filter if bulan_filter else 'Semua Periode' }}</p>
   </div>
   <form method="get" class="d-flex gap-2 align-items-end">
     <div>
@@ -29,38 +51,160 @@
 </div>
 {% else %}
 
-{% if ringkasan.jumlah_produk_ada_hpp < ringkasan.jumlah_produk %}
-<div class="alert alert-warning small">
-  {{ ringkasan.jumlah_produk - ringkasan.jumlah_produk_ada_hpp }} dari {{ ringkasan.jumlah_produk }} produk belum
-  ada HPP-nya — angka profit di bawah ini <strong>belum termasuk biaya produksi</strong> untuk produk-produk itu.
-  <a href="{{ url_for('profit_hpp') }}">Lengkapi di menu Data Produk & HPP</a>.
+<div class="row g-3 mb-3">
+  <div class="col-lg-5">
+    <div class="profit-real-card p-4 h-100">
+      <div class="text-uppercase small text-white-50 mb-3">Profit Real</div>
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="health-gauge">
+          <div class="health-gauge-inner">
+            <div class="fs-4 fw-bold">{{ health_score if health_score is not none else '-' }}</div>
+            <div class="small text-white-50">/100</div>
+          </div>
+        </div>
+        <div>
+          <span class="badge {{ 'bg-secondary' if health_score is none else ('bg-success' if status_profit == 'sehat' else ('bg-warning text-dark' if status_profit == 'tipis' else 'bg-danger')) }} mb-2">
+            {{ 'Belum Lengkap' if health_score is none else ('Sehat' if status_profit == 'sehat' else ('Margin Tipis' if status_profit == 'tipis' else 'Rugi')) }}
+          </span>
+          <div class="small text-white-50">Health Score</div>
+        </div>
+      </div>
+
+      <span class="badge bg-light text-dark mb-2">&darr; Margin {{ ('%.1f'|format(ringkasan.margin_real) + '%') if hpp_lengkap else '-' }}</span>
+
+      {% if not hpp_lengkap %}
+      <div class="fw-semibold mb-1">Profit belum bisa dihitung.</div>
+      <p class="small text-white-50 mb-3">
+        HPP produk belum diisi, jadi dashboard baru bisa menghitung sampai potongan {{ ringkasan.total_biaya_iklan and 'marketplace & iklan' or 'marketplace' }}.
+      </p>
+      <a href="{{ url_for('profit_hpp') }}" class="btn btn-danger btn-sm">Lihat Penyebabnya &rarr;</a>
+      {% else %}
+      <div class="fw-semibold mb-1">{{ ringkasan.total_profit_real | rupiah }}</div>
+      <p class="small text-white-50 mb-3">
+        {% if status_profit == 'sehat' %}Profit real sudah dipotong HPP, fee marketplace, dan biaya iklan.
+        {% elif status_profit == 'tipis' %}Masih untung, tapi marginnya tipis -- perlu dievaluasi.
+        {% else %}Rugi setelah dipotong HPP, fee marketplace, dan biaya iklan.{% endif %}
+      </p>
+      <a href="{{ url_for('profit_insight') }}" class="btn btn-outline-light btn-sm">Lihat Insight &amp; Rekomendasi &rarr;</a>
+      {% endif %}
+
+      {% if diagnosa %}
+      <div class="bg-white bg-opacity-10 rounded p-3 mt-3">
+        <div class="text-uppercase small text-white-50 mb-2">Diagnosa Singkat</div>
+        {% for d in diagnosa %}
+        <div class="d-flex align-items-start gap-2 {{ 'mb-2' if not loop.last }}">
+          <span class="badge rounded-circle {{ 'bg-danger' if d.level == 'danger' else ('bg-warning text-dark' if d.level == 'warning' else 'bg-success') }}" style="width:22px;height:22px;">{{ loop.index }}</span>
+          <div class="small">{{ d.pesan }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-7 d-flex flex-column gap-3">
+    <div class="row g-3">
+      <div class="col-md-6 col-6">
+        <div class="card p-3 h-100">
+          <div class="text-muted small text-uppercase">Total Penjualan</div>
+          <div class="fs-4 fw-bold">{{ ringkasan.total_qty }} pcs</div>
+          <span class="badge bg-light text-dark">{{ ringkasan.jumlah_pesanan }} pesanan</span>
+        </div>
+      </div>
+      <div class="col-md-6 col-6">
+        <div class="card p-3 h-100">
+          <div class="text-muted small text-uppercase">Total Sales</div>
+          <div class="fs-4 fw-bold">{{ ringkasan.total_omzet | rupiah }}</div>
+          <span class="badge bg-light text-dark">Subtotal Pesanan</span>
+        </div>
+      </div>
+      <div class="col-md-6 col-6">
+        <div class="card p-3 h-100">
+          <div class="text-muted small text-uppercase">Total Potongan</div>
+          <div class="fs-4 fw-bold text-danger">{{ ringkasan.total_potongan | rupiah }}</div>
+          <span class="badge bg-danger-subtle text-danger-emphasis">{{ '%.1f'|format((ringkasan.total_potongan / ringkasan.total_omzet * 100) if ringkasan.total_omzet else 0) }}% dari sales</span>
+        </div>
+      </div>
+      <div class="col-md-6 col-6">
+        <div class="card p-3 h-100">
+          <div class="text-muted small text-uppercase">Total Penghasilan</div>
+          <div class="fs-4 fw-bold text-success">{{ ringkasan.total_income | rupiah }}</div>
+          <span class="badge bg-success-subtle text-success-emphasis">Final dari Marketplace</span>
+        </div>
+      </div>
+      <div class="col-md-6 col-6">
+        <div class="card p-3 h-100">
+          <div class="text-muted small text-uppercase">Biaya Iklan</div>
+          <div class="fs-4 fw-bold">{{ ringkasan.total_biaya_iklan | rupiah }}</div>
+          <span class="badge bg-light text-dark">{{ '%.1f'|format(ad_ratio) }}% dari sales</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0 overflow-hidden flex-grow-1">
+      <div class="row g-0 h-100 text-center">
+        <div class="col-6 p-3 bg-secondary bg-opacity-10 d-flex flex-column justify-content-center">
+          <div class="text-muted small text-uppercase">Profit Real</div>
+          <div class="fs-5 fw-bold">{{ (ringkasan.total_profit_real | rupiah) if hpp_lengkap else '-' }}</div>
+        </div>
+        <div class="col-6 p-3 d-flex flex-column justify-content-center">
+          <div class="text-muted small text-uppercase">Margin</div>
+          <div class="fs-5 fw-bold">{{ ('%.1f'|format(ringkasan.margin_real) + '%') if hpp_lengkap else '-' }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-{% endif %}
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3 col-6">
-    <div class="card p-3">
-      <div class="text-muted small">Total Omzet</div>
-      <div class="fs-6 fw-bold">{{ ringkasan.total_omzet | rupiah }}</div>
+  <div class="col-lg-5">
+    <div class="card p-4 h-100">
+      <div class="fw-semibold mb-1">Profit Kamu Bocor di Sini</div>
+      <p class="text-muted small mb-3">Porsi tiap biaya terhadap Total Sales</p>
+      <div class="leak-bar mb-3">
+        {% for k in komponen_biaya %}
+        <span style="width: {{ k.persen }}%; background: {{ k.warna }};" title="{{ k.label }}"></span>
+        {% endfor %}
+        <span style="width: {{ persen_sisa }}%; background: #dfe3ea;" title="Sisa Sebelum HPP"></span>
+      </div>
+      <div class="row row-cols-2 g-2 small">
+        {% for k in komponen_biaya %}
+        <div class="col">
+          <span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:{{ k.warna }};"></span>{{ k.label }}<br>
+          <span class="fw-semibold">{{ '%.1f'|format(k.persen) }}%</span>
+          <span class="text-muted">{{ k.nilai | rupiah }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <hr class="my-2">
+      <div class="small text-muted">
+        <span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#dfe3ea;"></span>Sisa Sebelum HPP<br>
+        <span class="fw-semibold text-dark">{{ '%.1f'|format(persen_sisa) }}%</span>
+        <span>{{ sisa_sebelum_hpp | rupiah }}</span>
+      </div>
     </div>
   </div>
-  <div class="col-md-3 col-6">
-    <div class="card p-3">
-      <div class="text-muted small">Total Penghasilan (Income)</div>
-      <div class="fs-6 fw-bold">{{ ringkasan.total_income | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card p-3">
-      <div class="text-muted small">Total HPP</div>
-      <div class="fs-6 fw-bold text-danger">{{ ringkasan.total_hpp | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card p-3">
-      <div class="text-muted small">Total Profit</div>
-      <div class="fs-6 fw-bold {{ 'text-success' if ringkasan.total_profit >= 0 else 'text-danger' }}">{{ ringkasan.total_profit | rupiah }}</div>
-      <div class="small text-muted">Margin {{ "%.1f"|format(ringkasan.margin) }}%</div>
+
+  <div class="col-lg-7">
+    <div class="card p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="fw-semibold">Sorotan Produk</div>
+        <a href="#tabel-produk" class="small text-decoration-none">Lihat Semua &rarr;</a>
+      </div>
+      {% for s in sorotan_produk %}
+      <div class="d-flex align-items-center gap-2 py-2 {{ 'border-bottom' if not loop.last }}">
+        <span class="sorotan-badge-num">{{ loop.index }}</span>
+        {% if s.item %}
+        <div class="flex-grow-1">
+          <div class="small">{{ s.item.nama_produk }}</div>
+          <div class="text-muted small">{{ s.item.qty }} pcs terjual</div>
+        </div>
+        <span class="badge bg-{{ s.badge_class }}{{ '' if s.badge_class == 'danger' else '' }} {{ 'text-dark' if s.badge_class == 'warning' else '' }}">{{ s.badge }}</span>
+        {% else %}
+        <div class="text-muted small">{{ s.label }}: Belum ada data</div>
+        {% endif %}
+      </div>
+      {% endfor %}
     </div>
   </div>
 </div>
@@ -70,7 +214,7 @@
   <canvas id="chartProfit" height="90"></canvas>
 </div>
 
-<div class="card p-3 mb-4" style="overflow-x:auto;">
+<div class="card p-3 mb-4" style="overflow-x:auto;" id="tabel-produk">
   <div class="text-muted small mb-2">Profit per Produk (diurutkan dari yang paling rugi/tipis dulu)</div>
   <table class="table table-sm align-middle mb-0">
     <thead>
@@ -142,11 +286,12 @@
       </tr>
     </thead>
     <tbody>
-      <tr><td>Total Omzet</td><td class="text-end">{{ perbandingan.a.total_omzet | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_omzet | rupiah }}</td></tr>
+      <tr><td>Total Sales</td><td class="text-end">{{ perbandingan.a.total_omzet | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_omzet | rupiah }}</td></tr>
       <tr><td>Total Penghasilan</td><td class="text-end">{{ perbandingan.a.total_income | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_income | rupiah }}</td></tr>
       <tr><td>Total HPP</td><td class="text-end">{{ perbandingan.a.total_hpp | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_hpp | rupiah }}</td></tr>
-      <tr class="fw-semibold"><td>Total Profit</td><td class="text-end">{{ perbandingan.a.total_profit | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_profit | rupiah }}</td></tr>
-      <tr><td>Margin</td><td class="text-end">{{ "%.1f"|format(perbandingan.a.margin) }}%</td><td class="text-end">{{ "%.1f"|format(perbandingan.b.margin) }}%</td></tr>
+      <tr><td>Biaya Iklan</td><td class="text-end">{{ perbandingan.a.total_biaya_iklan | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_biaya_iklan | rupiah }}</td></tr>
+      <tr class="fw-semibold"><td>Profit Real</td><td class="text-end">{{ perbandingan.a.total_profit_real | rupiah }}</td><td class="text-end">{{ perbandingan.b.total_profit_real | rupiah }}</td></tr>
+      <tr><td>Margin</td><td class="text-end">{{ "%.1f"|format(perbandingan.a.margin_real) }}%</td><td class="text-end">{{ "%.1f"|format(perbandingan.b.margin_real) }}%</td></tr>
       <tr><td>Jumlah Pesanan</td><td class="text-end">{{ perbandingan.a.jumlah_pesanan }}</td><td class="text-end">{{ perbandingan.b.jumlah_pesanan }}</td></tr>
     </tbody>
   </table>
