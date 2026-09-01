@@ -44,7 +44,7 @@ from models import (
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
-    BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi,
+    BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1416,6 +1416,20 @@ def create_app():
         if "tarif_lembur" not in kolom_payroll:
             db.session.execute(db.text("ALTER TABLE payroll ADD COLUMN tarif_lembur INTEGER DEFAULT 0"))
             db.session.commit()
+        kolom_bahan_baku = {c["name"] for c in db.inspect(db.engine).get_columns("bahan_baku")}
+        for kolom, tipe in [("warna", "VARCHAR(64)"), ("tinggi_meter", "FLOAT"), ("suplier", "VARCHAR(128)")]:
+            if kolom not in kolom_bahan_baku:
+                db.session.execute(db.text(f"ALTER TABLE bahan_baku ADD COLUMN {kolom} {tipe}"))
+                db.session.commit()
+        kolom_bb_transaksi = {c["name"] for c in db.inspect(db.engine).get_columns("bahan_baku_transaksi")}
+        for kolom, tipe in [
+            ("warna", "VARCHAR(64)"), ("suplier", "VARCHAR(128)"), ("tinggi_meter", "FLOAT"),
+            ("harga_per_yard", "INTEGER"), ("total_dibayar", "INTEGER"), ("vendor", "VARCHAR(128)"),
+            ("lebar_kain", "FLOAT"), ("produk_jadi_pcs", "INTEGER"),
+        ]:
+            if kolom not in kolom_bb_transaksi:
+                db.session.execute(db.text(f"ALTER TABLE bahan_baku_transaksi ADD COLUMN {kolom} {tipe}"))
+                db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -1951,6 +1965,153 @@ def create_app():
         db.session.commit()
         flash("Transaksi dihapus, stok disesuaikan kembali.", "info")
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+    @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
+    @admin_required
+    def bahan_baku_input():
+        if request.method == "POST":
+            jenis_bahan = request.form.get("jenis_bahan", "").strip()
+            warna = request.form.get("warna", "").strip()
+            panjang_yard = parse_angka_iklan(request.form.get("panjang_yard"))
+            tinggi_meter = parse_angka_iklan(request.form.get("tinggi_meter")) or None
+            suplier = request.form.get("suplier", "").strip()
+            try:
+                tanggal_datang = datetime.strptime(request.form.get("tanggal_datang", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal_datang = today_wib()
+            produk_id = request.form.get("produk_id", type=int)
+            harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+
+            if not jenis_bahan or panjang_yard <= 0:
+                flash("Jenis Bahan dan Panjang Bahan (yard) wajib diisi.", "danger")
+                return redirect(url_for("bahan_baku_input"))
+
+            # Digabung jadi 1 nama_bahan per kombinasi jenis+warna, biar stok per warna
+            # ketahuan terpisah walau suplier-nya beda-beda tiap kali beli.
+            nama_gabungan = f"{jenis_bahan} - {warna}" if warna else jenis_bahan
+            bahan = BahanBaku.query.filter_by(nama_bahan=nama_gabungan).first()
+            if not bahan:
+                bahan = BahanBaku(nama_bahan=nama_gabungan, satuan="Yard", stok_saat_ini=0)
+                db.session.add(bahan)
+            bahan.warna = warna or bahan.warna
+            bahan.tinggi_meter = tinggi_meter or bahan.tinggi_meter
+            bahan.suplier = suplier or bahan.suplier
+            if harga_per_yard:
+                bahan.harga_per_yard = harga_per_yard
+            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) + panjang_yard
+            db.session.flush()
+
+            db.session.add(BahanBakuTransaksi(
+                bahan_baku_id=bahan.id, tanggal=tanggal_datang, jenis="Masuk", jumlah_yard=panjang_yard,
+                produk_id=produk_id or None, warna=warna, suplier=suplier, tinggi_meter=tinggi_meter,
+                harga_per_yard=harga_per_yard, total_dibayar=round(panjang_yard * harga_per_yard),
+            ))
+            db.session.commit()
+            flash(f"{panjang_yard:g} Yard {jenis_bahan} berhasil dicatat masuk.", "success")
+            return redirect(url_for("bahan_baku_input"))
+
+        produk_list = Produk.query.order_by(Produk.nama_produk).all()
+        riwayat = (
+            BahanBakuTransaksi.query.filter_by(jenis="Masuk")
+            .join(BahanBaku)
+            .order_by(BahanBakuTransaksi.tanggal.desc(), BahanBakuTransaksi.id.desc())
+            .limit(50).all()
+        )
+        total_yard = sum(b.stok_saat_ini or 0 for b in BahanBaku.query.all())
+        total_dibayar_semua = sum(
+            t.total_dibayar or 0 for t in BahanBakuTransaksi.query.filter_by(jenis="Masuk").all()
+        )
+        return render_template(
+            "inventory/bahan_baku_input.html",
+            produk_list=produk_list, riwayat=riwayat, total_yard=total_yard,
+            total_dibayar_semua=total_dibayar_semua, tanggal_hari_ini=today_wib().isoformat(),
+        )
+
+    @app.route("/inventory/cutting", methods=["GET", "POST"])
+    @admin_required
+    def bahan_baku_cutting():
+        if request.method == "POST":
+            bahan_id = request.form.get("bahan_baku_id", type=int)
+            bahan = db.session.get(BahanBaku, bahan_id) if bahan_id else None
+            panjang_yard = parse_angka_iklan(request.form.get("panjang_yard"))
+            lebar_kain = parse_angka_iklan(request.form.get("lebar_kain")) or None
+            produk_id = request.form.get("produk_id", type=int)
+            try:
+                tanggal_ambil = datetime.strptime(request.form.get("tanggal_ambil", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal_ambil = today_wib()
+            vendor = request.form.get("vendor", "").strip()
+            produk_jadi_pcs = request.form.get("produk_jadi_pcs", type=int)
+
+            if not bahan or panjang_yard <= 0:
+                flash("Pilih bahan baku dan isi panjang bahan yang diambil (yard).", "danger")
+                return redirect(url_for("bahan_baku_cutting"))
+
+            db.session.add(BahanBakuTransaksi(
+                bahan_baku_id=bahan.id, tanggal=tanggal_ambil, jenis="Keluar", jumlah_yard=panjang_yard,
+                produk_id=produk_id or None, warna=bahan.warna, vendor=vendor, lebar_kain=lebar_kain,
+                produk_jadi_pcs=produk_jadi_pcs,
+            ))
+            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - panjang_yard
+            db.session.commit()
+
+            pesan = f"{panjang_yard:g} Yard {bahan.nama_bahan} berhasil dicatat keluar utk cutting."
+            kategori = "success"
+            if bahan.stok_saat_ini < 0:
+                pesan += " Perhatian: stok sekarang minus, cek lagi catatan stok masuknya."
+                kategori = "warning"
+            flash(pesan, kategori)
+            return redirect(url_for("bahan_baku_cutting"))
+
+        bahan_list = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
+        produk_list = Produk.query.order_by(Produk.nama_produk).all()
+        spek_per_produk = {
+            p.id: [
+                {
+                    "id": s.id, "size": s.size, "lingkar_dada": s.lingkar_dada, "panjang_atas": s.panjang_atas,
+                    "lingkar_pinggang": s.lingkar_pinggang, "ld_lengan": s.ld_lengan, "pergelangan": s.pergelangan,
+                }
+                for s in p.spek_ukuran_list
+            ]
+            for p in produk_list
+        }
+        riwayat = (
+            BahanBakuTransaksi.query.filter_by(jenis="Keluar")
+            .join(BahanBaku)
+            .order_by(BahanBakuTransaksi.tanggal.desc(), BahanBakuTransaksi.id.desc())
+            .limit(50).all()
+        )
+        return render_template(
+            "inventory/bahan_baku_cutting.html",
+            bahan_list=bahan_list, produk_list=produk_list, riwayat=riwayat,
+            spek_per_produk_json=spek_per_produk, tanggal_hari_ini=today_wib().isoformat(),
+        )
+
+    @app.route("/inventory/spek-ukuran/<int:produk_id>/tambah", methods=["POST"])
+    @admin_required
+    def produk_spek_ukuran_tambah(produk_id):
+        produk = db.session.get(Produk, produk_id) or abort_404()
+        size = request.form.get("size", "").strip() or "All Size"
+        db.session.add(ProdukSpekUkuran(
+            produk_id=produk.id, size=size,
+            lingkar_dada=parse_angka_iklan(request.form.get("lingkar_dada")) or None,
+            panjang_atas=parse_angka_iklan(request.form.get("panjang_atas")) or None,
+            lingkar_pinggang=parse_angka_iklan(request.form.get("lingkar_pinggang")) or None,
+            ld_lengan=parse_angka_iklan(request.form.get("ld_lengan")) or None,
+            pergelangan=parse_angka_iklan(request.form.get("pergelangan")) or None,
+        ))
+        db.session.commit()
+        flash(f"Spek ukuran {size} untuk {produk.nama_produk} disimpan.", "success")
+        return redirect(url_for("bahan_baku_cutting"))
+
+    @app.route("/inventory/spek-ukuran/<int:spek_id>/hapus", methods=["POST"])
+    @admin_required
+    def produk_spek_ukuran_hapus(spek_id):
+        s = db.session.get(ProdukSpekUkuran, spek_id) or abort_404()
+        db.session.delete(s)
+        db.session.commit()
+        flash("Baris spek ukuran dihapus.", "info")
+        return redirect(url_for("bahan_baku_cutting"))
 
     # ---------- ABSENSI ----------
     @app.route("/absensi")

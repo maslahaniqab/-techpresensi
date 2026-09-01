@@ -215,7 +215,10 @@ class BahanBaku(db.Model):
     nama_bahan = db.Column(db.String(128), nullable=False)
     satuan = db.Column(db.String(16), nullable=False, default="Yard")
     stok_saat_ini = db.Column(db.Float, nullable=False, default=0)
-    harga_per_yard = db.Column(db.Integer, default=0)  # Rp, opsional -- buat estimasi biaya
+    harga_per_yard = db.Column(db.Integer, default=0)  # Rp, dari input Masuk terakhir
+    warna = db.Column(db.String(64))  # dari input Masuk terakhir
+    tinggi_meter = db.Column(db.Float)  # lebar/tinggi kain (meter), dari input Masuk terakhir
+    suplier = db.Column(db.String(128))  # suplier langganan/terakhir
     catatan = db.Column(db.String(256))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
     diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
@@ -245,17 +248,44 @@ class BahanBakuKebutuhan(db.Model):
 
 
 class BahanBakuTransaksi(db.Model):
-    """Kartu stok: pencatatan bahan baku masuk (pembelian) & keluar (terpakai produksi)."""
+    """Kartu stok: pencatatan bahan baku masuk (pembelian) & keluar (terpakai produksi/cutting)."""
     id = db.Column(db.Integer, primary_key=True)
     bahan_baku_id = db.Column(db.Integer, db.ForeignKey("bahan_baku.id"), nullable=False)
     tanggal = db.Column(db.Date, nullable=False)
     jenis = db.Column(db.String(8), nullable=False)  # Masuk / Keluar
     jumlah_yard = db.Column(db.Float, nullable=False)
-    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"))  # dipakai utk produk apa (kalau Keluar)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"))  # tujuan/peruntukan produk
     keterangan = db.Column(db.String(256))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
+    # -- khusus Masuk (halaman Input Barang) --
+    warna = db.Column(db.String(64))
+    suplier = db.Column(db.String(128))
+    tinggi_meter = db.Column(db.Float)  # lebar/tinggi kain (meter)
+    harga_per_yard = db.Column(db.Integer)
+    total_dibayar = db.Column(db.Integer)  # jumlah_yard x harga_per_yard batch ini
+
+    # -- khusus Keluar (halaman Cutting & Produksi) --
+    vendor = db.Column(db.String(128))  # vendor/penjahit yg mengerjakan cutting
+    lebar_kain = db.Column(db.Float)  # lebar kain dalam meter yg dipakai batch ini
+    produk_jadi_pcs = db.Column(db.Integer)  # realisasi/estimasi jumlah produk jadi
+
     produk = db.relationship("Produk")
+
+
+class ProdukSpekUkuran(db.Model):
+    """Spek ukuran badan per size utk 1 pcs produk -- ditampilkan sbg acuan cutting
+    di halaman Barang Cutting & Produksi saat produk tsb dipilih."""
+    id = db.Column(db.Integer, primary_key=True)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    size = db.Column(db.String(32), nullable=False, default="All Size")
+    lingkar_dada = db.Column(db.Float)
+    panjang_atas = db.Column(db.Float)
+    lingkar_pinggang = db.Column(db.Float)
+    ld_lengan = db.Column(db.Float)
+    pergelangan = db.Column(db.Float)
+
+    produk = db.relationship("Produk", backref=db.backref("spek_ukuran_list", cascade="all, delete-orphan"))
 
 
 class IklanMarketplace(db.Model):

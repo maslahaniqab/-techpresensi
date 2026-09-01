@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block title %}Barang Cutting & Produksi{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Barang Cutting &amp; Produksi</h3>
+    <p class="text-muted small mb-0">Catat bahan baku yang diambil dari stok untuk dipotong/diproduksi jadi produk.</p>
+  </div>
+  <a href="{{ url_for('bahan_baku_list') }}" class="btn btn-outline-secondary btn-sm">Lihat Stok per Bahan &rarr;</a>
+</div>
+
+{% if not bahan_list %}
+<div class="card p-4 text-center text-muted small mb-4">
+  Belum ada bahan baku sama sekali. <a href="{{ url_for('bahan_baku_input') }}">Input Barang</a> dulu sebelum bisa cutting.
+</div>
+{% else %}
+<form method="post" class="card p-4 mb-4">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Jenis Bahan</label>
+      <select name="bahan_baku_id" id="bahan_baku_id" class="form-select" required>
+        <option value="">Pilih bahan&hellip;</option>
+        {% for b in bahan_list %}
+        <option value="{{ b.id }}" data-warna="{{ b.warna or '' }}" data-stok="{{ '%.2f'|format(b.stok_saat_ini) }}">
+          {{ b.nama_bahan }} &mdash; stok {{ '%.2f'|format(b.stok_saat_ini) }} {{ b.satuan }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Peruntukan Produk</label>
+      <select name="produk_id" id="peruntukan_produk" class="form-select">
+        <option value="">- Belum tentu -</option>
+        {% for p in produk_list %}
+        <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Panjang Bahan (Yard)</label>
+      <input type="number" min="0" step="0.01" name="panjang_yard" class="form-control" placeholder="Contoh: 35" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Lebar Kain (Meter) <span class="text-muted small">(opsional)</span></label>
+      <input type="number" min="0" step="0.01" name="lebar_kain" id="lebar_kain" class="form-control" placeholder="Dalam Meter">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Tanggal Ambil</label>
+      <input type="date" name="tanggal_ambil" class="form-control" value="{{ tanggal_hari_ini }}">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Warna Bahan</label>
+      <input type="text" id="warna_bahan_display" class="form-control" readonly placeholder="Otomatis dari Jenis Bahan yang dipilih">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Vendor <span class="text-muted small">(opsional)</span></label>
+      <input type="text" name="vendor" class="form-control" placeholder="Contoh: Yuli Cigondewah">
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <div class="fw-semibold small mb-2" id="spec-title">
+      Jika admin memilih Peruntukan Produk, tampil hitungan untuk 1 pcs produk jadi adalah:
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0" style="max-width: 640px;">
+        <thead class="table-light">
+          <tr>
+            <th>Size</th>
+            <th>Lingkar Dada (LD)</th>
+            <th>Panjang Atas (PA)</th>
+            <th>Lingkar Pinggang</th>
+            <th>LD Lengan</th>
+            <th>Pergelangan</th>
+          </tr>
+        </thead>
+        <tbody id="spec-body">
+          <tr id="spec-empty"><td colspan="6" class="text-center text-muted small py-3">Pilih Peruntukan Produk dulu.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-md-4">
+      <label class="form-label">Estimasi Produk Jadi</label>
+      <div class="input-group">
+        <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control" placeholder="Contoh: 17">
+        <span class="input-group-text">Pcs</span>
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary mt-4">Simpan</button>
+</form>
+{% endif %}
+
+<div class="card p-3 mb-4">
+  <div class="fw-semibold small mb-2">Kelola Spek Ukuran per Produk</div>
+  <p class="text-muted small mb-3">Isi acuan ukuran badan (cm) untuk 1 pcs produk, supaya tampil otomatis pas produk itu dipilih di form Cutting di atas.</p>
+  <form method="post" id="form-tambah-spek" action="{{ url_for('produk_spek_ukuran_tambah', produk_id=0) }}" class="row g-2 align-items-end">
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Produk</label>
+      <select id="spek_produk_id" class="form-select form-select-sm" required>
+        <option value="">Pilih produk&hellip;</option>
+        {% for p in produk_list %}
+        <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2 col-6">
+      <label class="form-label small">Size</label>
+      <input type="text" name="size" class="form-control form-control-sm" value="All Size">
+    </div>
+    <div class="col-md-1 col-4">
+      <label class="form-label small">LD</label>
+      <input type="number" step="0.1" name="lingkar_dada" class="form-control form-control-sm">
+    </div>
+    <div class="col-md-1 col-4">
+      <label class="form-label small">PA</label>
+      <input type="number" step="0.1" name="panjang_atas" class="form-control form-control-sm">
+    </div>
+    <div class="col-md-2 col-4">
+      <label class="form-label small">Ling. Pinggang</label>
+      <input type="number" step="0.1" name="lingkar_pinggang" class="form-control form-control-sm">
+    </div>
+    <div class="col-md-1 col-6">
+      <label class="form-label small">LD Lengan</label>
+      <input type="number" step="0.1" name="ld_lengan" class="form-control form-control-sm">
+    </div>
+    <div class="col-md-1 col-6">
+      <label class="form-label small">Pergelangan</label>
+      <input type="number" step="0.1" name="pergelangan" class="form-control form-control-sm">
+    </div>
+    <div class="col-md-1 col-12">
+      <button type="submit" class="btn btn-sm btn-primary w-100">+</button>
+    </div>
+  </form>
+
+  {% set semua_spek = produk_list | selectattr('spek_ukuran_list') | list %}
+  {% if semua_spek %}
+  <div class="table-responsive mt-3">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Produk</th><th>Size</th><th>LD</th><th>PA</th><th>Ling. Pinggang</th><th>LD Lengan</th><th>Pergelangan</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in semua_spek %}
+        {% for s in p.spek_ukuran_list %}
+        <tr>
+          <td class="small">{{ p.nama_produk }}</td>
+          <td class="small">{{ s.size }}</td>
+          <td class="small">{{ s.lingkar_dada or "-" }}</td>
+          <td class="small">{{ s.panjang_atas or "-" }}</td>
+          <td class="small">{{ s.lingkar_pinggang or "-" }}</td>
+          <td class="small">{{ s.ld_lengan or "-" }}</td>
+          <td class="small">{{ s.pergelangan or "-" }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="text-muted small text-uppercase mb-2">Riwayat Cutting &amp; Produksi</div>
+<div class="card p-3" style="overflow-x:auto;">
+  <div style="overflow:auto; max-height: 420px;">
+  <table class="table table-sm align-middle mb-0">
+    <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
+      <tr>
+        <th>Tanggal</th>
+        <th>Jenis Bahan</th>
+        <th class="text-end">Panjang Dipakai</th>
+        <th>Produk</th>
+        <th>Vendor</th>
+        <th class="text-end">Produk Jadi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in riwayat %}
+      <tr>
+        <td class="small">{{ t.tanggal.strftime("%d/%m/%Y") }}</td>
+        <td class="small">{{ t.bahan_baku.nama_bahan }}</td>
+        <td class="text-end small">{{ "%.2f"|format(t.jumlah_yard) }} Yard</td>
+        <td class="small">{{ t.produk.nama_produk if t.produk else "-" }}</td>
+        <td class="small">{{ t.vendor or "-" }}</td>
+        <td class="text-end small">{{ (t.produk_jadi_pcs ~ " Pcs") if t.produk_jadi_pcs else "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">Belum ada riwayat cutting/produksi.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var SPEK_DATA = {{ spek_per_produk_json | tojson }};
+
+  var selBahan = document.getElementById('bahan_baku_id');
+  var warnaDisplay = document.getElementById('warna_bahan_display');
+  if (selBahan) {
+    selBahan.addEventListener('change', function () {
+      var opt = selBahan.options[selBahan.selectedIndex];
+      warnaDisplay.value = opt ? (opt.getAttribute('data-warna') || '') : '';
+    });
+  }
+
+  var selProduk = document.getElementById('peruntukan_produk');
+  var specBody = document.getElementById('spec-body');
+  var specTitle = document.getElementById('spec-title');
+
+  function renderSpec() {
+    var produkId = selProduk.value;
+    var namaProduk = produkId ? selProduk.options[selProduk.selectedIndex].text : '';
+    specBody.innerHTML = '';
+    if (!produkId) {
+      specTitle.textContent = 'Jika admin memilih Peruntukan Produk, tampil hitungan untuk 1 pcs produk jadi adalah:';
+      specBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted small py-3">Pilih Peruntukan Produk dulu.</td></tr>';
+      return;
+    }
+    specTitle.textContent = 'Hitungan untuk 1 pcs ' + namaProduk + ' jadi adalah:';
+    var rows = SPEK_DATA[produkId] || [];
+    if (!rows.length) {
+      specBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted small py-3">Belum ada spek ukuran utk produk ini. Isi di "Kelola Spek Ukuran per Produk" di bawah.</td></tr>';
+      return;
+    }
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + r.size + '</td>' +
+        '<td>' + (r.lingkar_dada != null ? r.lingkar_dada + ' cm' : '-') + '</td>' +
+        '<td>' + (r.panjang_atas != null ? r.panjang_atas + ' cm' : '-') + '</td>' +
+        '<td>' + (r.lingkar_pinggang != null ? r.lingkar_pinggang + ' cm' : '-') + '</td>' +
+        '<td>' + (r.ld_lengan != null ? r.ld_lengan + ' cm' : '-') + '</td>' +
+        '<td>' + (r.pergelangan != null ? r.pergelangan + ' cm' : '-') + '</td>';
+      specBody.appendChild(tr);
+    });
+  }
+  if (selProduk) {
+    selProduk.addEventListener('change', renderSpec);
+  }
+
+  var formSpek = document.getElementById('form-tambah-spek');
+  var selSpekProduk = document.getElementById('spek_produk_id');
+  if (formSpek && selSpekProduk) {
+    formSpek.addEventListener('submit', function (e) {
+      if (!selSpekProduk.value) return; // biarkan validasi HTML jalan
+      formSpek.action = formSpek.action.replace(/\/0\/tambah$/, '/' + selSpekProduk.value + '/tambah');
+    });
+  }
+})();
+</script>
+
+{% endblock %}
