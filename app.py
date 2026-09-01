@@ -2075,6 +2075,13 @@ def create_app():
             ]
             for p in produk_list
         }
+        # "bahanId_produkId" -> yard dibutuhkan per 1 pcs (dari menu Bahan Baku > Kebutuhan
+        # per Produk) -- dipakai JS di halaman ini utk otomatis hitung Estimasi Produk Jadi
+        # begitu Jenis Bahan + Peruntukan Produk + Panjang Bahan sudah diisi.
+        kebutuhan_map = {
+            f"{k.bahan_baku_id}_{k.produk_id}": k.jumlah_yard
+            for k in BahanBakuKebutuhan.query.all()
+        }
         riwayat = (
             BahanBakuTransaksi.query.filter_by(jenis="Keluar")
             .join(BahanBaku)
@@ -2084,7 +2091,8 @@ def create_app():
         return render_template(
             "inventory/bahan_baku_cutting.html",
             bahan_list=bahan_list, produk_list=produk_list, riwayat=riwayat,
-            spek_per_produk_json=spek_per_produk, tanggal_hari_ini=today_wib().isoformat(),
+            spek_per_produk_json=spek_per_produk, kebutuhan_map_json=kebutuhan_map,
+            tanggal_hari_ini=today_wib().isoformat(),
         )
 
     @app.route("/inventory/spek-ukuran/<int:produk_id>/tambah", methods=["POST"])

@@ -39,7 +39,7 @@
     </div>
     <div class="col-md-4">
       <label class="form-label">Panjang Bahan (Yard)</label>
-      <input type="number" min="0" step="0.01" name="panjang_yard" class="form-control" placeholder="Contoh: 35" required>
+      <input type="number" min="0" step="0.01" name="panjang_yard" id="panjang_yard" class="form-control" placeholder="Contoh: 35" required>
     </div>
     <div class="col-md-4">
       <label class="form-label">Lebar Kain (Meter) <span class="text-muted small">(opsional)</span></label>
@@ -86,9 +86,10 @@
     <div class="col-md-4">
       <label class="form-label">Estimasi Produk Jadi</label>
       <div class="input-group">
-        <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control" placeholder="Contoh: 17">
+        <input type="number" min="0" step="1" name="produk_jadi_pcs" id="produk_jadi_pcs" class="form-control" placeholder="Contoh: 17">
         <span class="input-group-text">Pcs</span>
       </div>
+      <div class="form-text" id="estimasi-hint">Pilih Jenis Bahan, Peruntukan Produk, dan isi Panjang Bahan supaya kehitung otomatis.</div>
     </div>
   </div>
 
@@ -260,6 +261,47 @@
       formSpek.action = formSpek.action.replace(/\/0\/tambah$/, '/' + selSpekProduk.value + '/tambah');
     });
   }
+
+  // Estimasi Produk Jadi otomatis = Panjang Bahan (yard) / kebutuhan yard per pcs
+  // (dari menu Bahan Baku > Kebutuhan per Produk, utk kombinasi Jenis Bahan +
+  // Peruntukan Produk yang dipilih). Tetap bisa ditimpa manual kalau admin ngetik
+  // sendiri di kolomnya (mis. karena ada sisa potongan/waste beda dari estimasi).
+  var KEBUTUHAN_DATA = {{ kebutuhan_map_json | tojson }};
+  var inputPanjang = document.getElementById('panjang_yard');
+  var inputEstimasi = document.getElementById('produk_jadi_pcs');
+  var estimasiHint = document.getElementById('estimasi-hint');
+  var estimasiManual = false;
+  if (inputEstimasi) {
+    inputEstimasi.addEventListener('input', function () { estimasiManual = true; });
+  }
+
+  function hitungEstimasi() {
+    if (!inputEstimasi || !estimasiHint) return;
+    var bahanId = selBahan ? selBahan.value : '';
+    var produkId = selProduk ? selProduk.value : '';
+    var panjang = parseFloat(inputPanjang ? inputPanjang.value : '');
+    if (!bahanId || !produkId) {
+      estimasiHint.textContent = 'Pilih Jenis Bahan, Peruntukan Produk, dan isi Panjang Bahan supaya kehitung otomatis.';
+      return;
+    }
+    var kebutuhan = KEBUTUHAN_DATA[bahanId + '_' + produkId];
+    if (!kebutuhan) {
+      estimasiHint.innerHTML = 'Belum ada data "yard/pcs" utk kombinasi bahan &amp; produk ini -- isi dulu di halaman detail bahan (Kebutuhan per Produk), atau isi manual di kolom ini.';
+      return;
+    }
+    if (!panjang || panjang <= 0) {
+      estimasiHint.textContent = 'Kebutuhan bahan ini: ' + kebutuhan + ' yard/pcs. Isi Panjang Bahan supaya estimasinya kehitung.';
+      return;
+    }
+    var estimasi = Math.floor(panjang / kebutuhan);
+    estimasiHint.textContent = 'Estimasi otomatis: ' + estimasi + ' pcs (dari ' + panjang + ' yard ÷ ' + kebutuhan + ' yard/pcs).';
+    if (!estimasiManual) {
+      inputEstimasi.value = estimasi;
+    }
+  }
+  if (selBahan) selBahan.addEventListener('change', hitungEstimasi);
+  if (selProduk) selProduk.addEventListener('change', hitungEstimasi);
+  if (inputPanjang) inputPanjang.addEventListener('input', hitungEstimasi);
 })();
 </script>
 
