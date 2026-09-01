@@ -4761,6 +4761,7 @@ def create_app():
 
             if (
                 not (file_order and file_order.filename) and not (file_income and file_income.filename)
+                and not (file_iklan and file_iklan.filename)
                 and not (file_order_manual and file_order_manual.filename)
             ):
                 flash("Pilih minimal satu file terlebih dahulu.", "danger")
@@ -4875,6 +4876,7 @@ def create_app():
             upload_sukses = (
                 (hasil["order"] and hasil["order"]["ok"])
                 or (hasil["income"] and hasil["income"]["ok"])
+                or (hasil["iklan"] and hasil["iklan"]["ok"])
                 or (hasil["order_manual"] and hasil["order_manual"]["ok"])
             )
             jumlah_produk_belum_hpp = None
