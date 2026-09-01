@@ -99,6 +99,9 @@
   ('laba_rugi', 'Laporan Laba/Rugi', '📊'),
   ('laba_rugi_input', 'Input Pendapatan & HPP', '➕'),
 ] %}
+{% set menu_inventory = [
+  ('bahan_baku_list', 'Bahan Baku', '🧵'),
+] %}
 {% set menu_marketing = [
   ('marketing_iklan_dashboard', 'Analisa Iklan per Marketplace', '📣'),
   ('marketing_produk_dashboard', 'Performa Produk', '🎯'),
@@ -142,6 +145,11 @@
   <div class="nav-section-label">Profitabilitas</div>
   {% for endpoint, label, icon in menu_profit %}
   <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
+  {% endfor %}
+
+  <div class="nav-section-label">Inventory</div>
+  {% for endpoint, label, icon in menu_inventory %}
+  <a class="nav-link {{ 'active' if request.endpoint == endpoint or request.endpoint == 'bahan_baku_detail' }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
   {% endfor %}
 
   <div class="nav-section-label">Marketing</div>

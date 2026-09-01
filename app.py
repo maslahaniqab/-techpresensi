@@ -44,6 +44,7 @@ from models import (
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
+    BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1745,6 +1746,165 @@ def create_app():
             "success",
         )
         return redirect(url_for("produk_list"))
+
+    # ---------- INVENTORY: BAHAN BAKU ----------
+    @app.route("/inventory/bahan-baku", methods=["GET", "POST"])
+    @admin_required
+    def bahan_baku_list():
+        if request.method == "POST":
+            nama_bahan = request.form.get("nama_bahan", "").strip()
+            satuan = request.form.get("satuan", "Yard").strip() or "Yard"
+            stok_awal = parse_angka_iklan(request.form.get("stok_awal"))
+            harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+            if not nama_bahan:
+                flash("Nama bahan baku wajib diisi.", "danger")
+                return redirect(url_for("bahan_baku_list"))
+            bahan = BahanBaku(
+                nama_bahan=nama_bahan, satuan=satuan, stok_saat_ini=stok_awal, harga_per_yard=harga_per_yard,
+            )
+            db.session.add(bahan)
+            db.session.flush()
+            if stok_awal:
+                db.session.add(BahanBakuTransaksi(
+                    bahan_baku_id=bahan.id, tanggal=today_wib(), jenis="Masuk",
+                    jumlah_yard=stok_awal, keterangan="Stok awal",
+                ))
+            db.session.commit()
+            flash(f"Bahan baku {bahan.nama_bahan} berhasil ditambahkan.", "success")
+            return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+        daftar = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
+        return render_template("inventory/bahan_baku_list.html", daftar=daftar)
+
+    @app.route("/inventory/bahan-baku/<int:bahan_id>")
+    @admin_required
+    def bahan_baku_detail(bahan_id):
+        bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
+        produk_list_semua = Produk.query.order_by(Produk.nama_produk).all()
+        produk_sudah_dipetakan = {k.produk_id for k in bahan.kebutuhan_list}
+        produk_pilihan = [p for p in produk_list_semua if p.id not in produk_sudah_dipetakan]
+        return render_template(
+            "inventory/bahan_baku_detail.html",
+            bahan=bahan, produk_pilihan=produk_pilihan, produk_list_semua=produk_list_semua,
+            tanggal_hari_ini=today_wib().isoformat(),
+        )
+
+    @app.route("/inventory/bahan-baku/<int:bahan_id>/edit", methods=["POST"])
+    @admin_required
+    def bahan_baku_edit(bahan_id):
+        bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
+        nama_bahan = request.form.get("nama_bahan", "").strip()
+        if not nama_bahan:
+            flash("Nama bahan baku wajib diisi.", "danger")
+            return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+        bahan.nama_bahan = nama_bahan
+        bahan.satuan = request.form.get("satuan", "Yard").strip() or "Yard"
+        bahan.harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+        bahan.catatan = request.form.get("catatan", "").strip()
+        db.session.commit()
+        flash("Data bahan baku berhasil diperbarui.", "success")
+        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+    @app.route("/inventory/bahan-baku/<int:bahan_id>/hapus", methods=["POST"])
+    @admin_required
+    def bahan_baku_hapus(bahan_id):
+        bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
+        nama = bahan.nama_bahan
+        db.session.delete(bahan)
+        db.session.commit()
+        flash(f"Bahan baku {nama} beserta seluruh riwayatnya dihapus.", "info")
+        return redirect(url_for("bahan_baku_list"))
+
+    @app.route("/inventory/bahan-baku/<int:bahan_id>/kebutuhan/tambah", methods=["POST"])
+    @admin_required
+    def bahan_baku_kebutuhan_tambah(bahan_id):
+        bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
+        produk_id = request.form.get("produk_id", type=int)
+        jumlah_yard = parse_angka_iklan(request.form.get("jumlah_yard"))
+        produk = db.session.get(Produk, produk_id) if produk_id else None
+        if not produk or jumlah_yard <= 0:
+            flash("Pilih produk dan isi jumlah yard per produk (harus lebih dari 0).", "danger")
+            return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+        sudah_ada = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
+        if sudah_ada:
+            sudah_ada.jumlah_yard = jumlah_yard
+            flash(f"Kebutuhan {bahan.nama_bahan} untuk {produk.nama_produk} diperbarui.", "success")
+        else:
+            db.session.add(BahanBakuKebutuhan(bahan_baku_id=bahan.id, produk_id=produk.id, jumlah_yard=jumlah_yard))
+            flash(f"{produk.nama_produk} butuh {jumlah_yard} {bahan.satuan} {bahan.nama_bahan} berhasil dicatat.", "success")
+        db.session.commit()
+        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+    @app.route("/inventory/bahan-baku/kebutuhan/<int:kebutuhan_id>/hapus", methods=["POST"])
+    @admin_required
+    def bahan_baku_kebutuhan_hapus(kebutuhan_id):
+        k = db.session.get(BahanBakuKebutuhan, kebutuhan_id) or abort_404()
+        bahan_id = k.bahan_baku_id
+        db.session.delete(k)
+        db.session.commit()
+        flash("Kebutuhan bahan baku untuk produk itu dihapus.", "info")
+        return redirect(url_for("bahan_baku_detail", bahan_id=bahan_id))
+
+    @app.route("/inventory/bahan-baku/<int:bahan_id>/transaksi/tambah", methods=["POST"])
+    @admin_required
+    def bahan_baku_transaksi_tambah(bahan_id):
+        bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
+        jenis = request.form.get("jenis")
+        if jenis not in ("Masuk", "Keluar"):
+            flash("Jenis transaksi tidak valid.", "danger")
+            return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = today_wib()
+        produk_id = request.form.get("produk_id", type=int)
+        produk = db.session.get(Produk, produk_id) if produk_id else None
+        jumlah_unit = parse_angka_iklan(request.form.get("jumlah_unit"))
+        jumlah_yard_manual = parse_angka_iklan(request.form.get("jumlah_yard"))
+        keterangan = request.form.get("keterangan", "").strip()
+
+        jumlah_yard = jumlah_yard_manual
+        # Kalau admin pilih produk & isi jumlah unit diproduksi (bukan langsung isi
+        # jumlah yard), otomatis hitung dari kebutuhan yard/produk yang sudah dicatat --
+        # jumlah yard yang ditulis manual tetap menang kalau diisi.
+        if jenis == "Keluar" and produk and jumlah_unit > 0 and not jumlah_yard_manual:
+            kebutuhan = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
+            if kebutuhan:
+                jumlah_yard = jumlah_unit * kebutuhan.jumlah_yard
+
+        if jumlah_yard <= 0:
+            flash(
+                "Isi jumlah yard secara langsung, atau pilih produk + jumlah unit diproduksi "
+                "(kalau kebutuhan yard/produk sudah dicatat).",
+                "danger",
+            )
+            return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+        db.session.add(BahanBakuTransaksi(
+            bahan_baku_id=bahan.id, tanggal=tanggal, jenis=jenis, jumlah_yard=jumlah_yard,
+            produk_id=produk.id if produk else None, keterangan=keterangan,
+        ))
+        bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) + (jumlah_yard if jenis == "Masuk" else -jumlah_yard)
+        db.session.commit()
+
+        pesan = f"{jenis} {jumlah_yard:g} {bahan.satuan} {bahan.nama_bahan} berhasil dicatat."
+        kategori = "success"
+        if bahan.stok_saat_ini < 0:
+            pesan += " Perhatian: stok sekarang minus, cek lagi catatan stok masuknya."
+            kategori = "warning"
+        flash(pesan, kategori)
+        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+    @app.route("/inventory/bahan-baku/transaksi/<int:transaksi_id>/hapus", methods=["POST"])
+    @admin_required
+    def bahan_baku_transaksi_hapus(transaksi_id):
+        t = db.session.get(BahanBakuTransaksi, transaksi_id) or abort_404()
+        bahan = t.bahan_baku
+        bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - (t.jumlah_yard if t.jenis == "Masuk" else -t.jumlah_yard)
+        db.session.delete(t)
+        db.session.commit()
+        flash("Transaksi dihapus, stok disesuaikan kembali.", "info")
+        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
     # ---------- ABSENSI ----------
     @app.route("/absensi")

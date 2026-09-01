@@ -210,6 +210,54 @@ class Produk(db.Model):
     diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
 
 
+class BahanBaku(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nama_bahan = db.Column(db.String(128), nullable=False)
+    satuan = db.Column(db.String(16), nullable=False, default="Yard")
+    stok_saat_ini = db.Column(db.Float, nullable=False, default=0)
+    harga_per_yard = db.Column(db.Integer, default=0)  # Rp, opsional -- buat estimasi biaya
+    catatan = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+    diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
+
+    kebutuhan_list = db.relationship(
+        "BahanBakuKebutuhan", backref="bahan_baku", cascade="all, delete-orphan",
+        order_by="BahanBakuKebutuhan.id",
+    )
+    transaksi_list = db.relationship(
+        "BahanBakuTransaksi", backref="bahan_baku", cascade="all, delete-orphan",
+        order_by="BahanBakuTransaksi.tanggal.desc()",
+    )
+
+
+class BahanBakuKebutuhan(db.Model):
+    """Berapa yard bahan baku ini dibutuhkan untuk membuat 1 unit produk tertentu."""
+    id = db.Column(db.Integer, primary_key=True)
+    bahan_baku_id = db.Column(db.Integer, db.ForeignKey("bahan_baku.id"), nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    jumlah_yard = db.Column(db.Float, nullable=False, default=0)
+
+    produk = db.relationship("Produk")
+
+    __table_args__ = (
+        db.UniqueConstraint("bahan_baku_id", "produk_id", name="uq_bahan_produk"),
+    )
+
+
+class BahanBakuTransaksi(db.Model):
+    """Kartu stok: pencatatan bahan baku masuk (pembelian) & keluar (terpakai produksi)."""
+    id = db.Column(db.Integer, primary_key=True)
+    bahan_baku_id = db.Column(db.Integer, db.ForeignKey("bahan_baku.id"), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    jenis = db.Column(db.String(8), nullable=False)  # Masuk / Keluar
+    jumlah_yard = db.Column(db.Float, nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"))  # dipakai utk produk apa (kalau Keluar)
+    keterangan = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    produk = db.relationship("Produk")
+
+
 class IklanMarketplace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     marketplace = db.Column(db.String(32), nullable=False)  # Shopee/Tokopedia/TikTok Shop/Lazada/Blibli

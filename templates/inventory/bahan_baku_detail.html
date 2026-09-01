@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}{{ bahan.nama_bahan }}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <a href="{{ url_for('bahan_baku_list') }}" class="text-muted small text-decoration-none">&larr; Bahan Baku</a>
+    <h3 class="mb-0">{{ bahan.nama_bahan }}</h3>
+  </div>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditBahan">Edit</button>
+    <form method="post" action="{{ url_for('bahan_baku_hapus', bahan_id=bahan.id) }}"
+          onsubmit="return confirm('Hapus bahan baku {{ bahan.nama_bahan }} beserta seluruh riwayat stok &amp; kebutuhannya? Tindakan ini tidak bisa dibatalkan.');">
+      <button type="submit" class="btn btn-outline-danger">Hapus</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Stok Saat Ini</div>
+      <div class="fs-4 fw-bold {{ 'text-danger' if bahan.stok_saat_ini < 0 }}">{{ "%.2f"|format(bahan.stok_saat_ini) }} {{ bahan.satuan }}</div>
+    </div>
+  </div>
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Harga / {{ bahan.satuan }}</div>
+      <div class="fs-4 fw-bold">{{ bahan.harga_per_yard | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Nilai Stok</div>
+      <div class="fs-4 fw-bold">{{ (bahan.stok_saat_ini * (bahan.harga_per_yard or 0)) | round | int | rupiah }}</div>
+    </div>
+  </div>
+</div>
+
+{% if bahan.stok_saat_ini < 0 %}
+<div class="alert alert-warning small">
+  &#9888; Stok bahan ini minus &mdash; biasanya karena ada pemakaian yang dicatat sebelum stok masuknya, atau
+  jumlah stok masuk yang tercatat kurang. Cek lagi riwayat transaksi di bawah.
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="text-muted small text-uppercase mb-2">Kebutuhan per Produk</div>
+    <div class="text-muted small mb-2">Berapa {{ bahan.satuan }} bahan ini dipakai untuk membuat 1 unit produk.</div>
+    <div class="card p-3 mb-3" style="overflow-x:auto;">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Produk</th>
+            <th class="text-end">{{ bahan.satuan }} / Unit</th>
+            <th class="text-end">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for k in bahan.kebutuhan_list %}
+          <tr>
+            <td class="small">{{ k.produk.nama_produk }}</td>
+            <td class="text-end">{{ "%.2f"|format(k.jumlah_yard) }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('bahan_baku_kebutuhan_hapus', kebutuhan_id=k.id) }}"
+                    onsubmit="return confirm('Hapus kebutuhan ini?');">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-center text-muted py-3">Belum ada produk yang dipetakan ke bahan ini.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if produk_pilihan %}
+    <form method="post" action="{{ url_for('bahan_baku_kebutuhan_tambah', bahan_id=bahan.id) }}" class="card p-3">
+      <div class="fw-semibold small mb-2">Tambah Kebutuhan Produk</div>
+      <div class="row g-2 align-items-end">
+        <div class="col-7">
+          <label class="form-label small">Produk</label>
+          <select name="produk_id" class="form-select" required>
+            <option value="">Pilih produk&hellip;</option>
+            {% for p in produk_pilihan %}
+            <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-3">
+          <label class="form-label small">{{ bahan.satuan }} / Unit</label>
+          <input type="number" min="0" step="0.01" name="jumlah_yard" class="form-control" required>
+        </div>
+        <div class="col-2">
+          <button type="submit" class="btn btn-primary w-100">+</button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <div class="text-muted small">Semua produk sudah dipetakan ke bahan ini, atau belum ada Data Produk sama sekali.</div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-6">
+    <div class="text-muted small text-uppercase mb-2">Riwayat Stok</div>
+    <div class="text-muted small mb-2">Kartu stok: pencatatan bahan masuk (pembelian) &amp; keluar (terpakai produksi).</div>
+    <div class="card p-3 mb-3" style="overflow-x:auto; max-height: 360px; overflow-y: auto;">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Tanggal</th>
+            <th>Jenis</th>
+            <th class="text-end">Jumlah</th>
+            <th>Produk</th>
+            <th>Ket.</th>
+            <th class="text-end">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in bahan.transaksi_list %}
+          <tr>
+            <td class="small">{{ t.tanggal.strftime("%d/%m/%Y") }}</td>
+            <td>
+              {% if t.jenis == 'Masuk' %}<span class="badge bg-success-subtle text-success-emphasis">Masuk</span>
+              {% else %}<span class="badge bg-danger-subtle text-danger-emphasis">Keluar</span>{% endif %}
+            </td>
+            <td class="text-end small">{{ "%.2f"|format(t.jumlah_yard) }}</td>
+            <td class="small">{{ t.produk.nama_produk if t.produk else "-" }}</td>
+            <td class="small text-muted">{{ t.keterangan or "-" }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('bahan_baku_transaksi_hapus', transaksi_id=t.id) }}"
+                    onsubmit="return confirm('Hapus transaksi ini? Stok akan disesuaikan kembali.');">
+                <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-3">Belum ada riwayat transaksi.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="{{ url_for('bahan_baku_transaksi_tambah', bahan_id=bahan.id) }}" class="card p-3">
+      <div class="fw-semibold small mb-2">Catat Transaksi Baru</div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label small">Tanggal</label>
+          <input type="date" name="tanggal" class="form-control" value="{{ tanggal_hari_ini }}" required>
+        </div>
+        <div class="col-6">
+          <label class="form-label small">Jenis</label>
+          <select name="jenis" class="form-select" required>
+            <option value="Masuk">Masuk (pembelian)</option>
+            <option value="Keluar">Keluar (terpakai produksi)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label small">Produk <span class="text-muted">(opsional, kalau Keluar)</span></label>
+          <select name="produk_id" class="form-select">
+            <option value="">- Tidak terkait produk tertentu -</option>
+            {% for p in produk_list_semua %}
+            <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6">
+          <label class="form-label small">Jumlah Unit Diproduksi <span class="text-muted">(opsional)</span></label>
+          <input type="number" min="0" step="1" name="jumlah_unit" class="form-control" placeholder="isi ini ATAU jumlah yard di bawah">
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small">Jumlah {{ bahan.satuan }} <span class="text-muted">(kosongkan kalau isi Jumlah Unit di atas &amp; kebutuhannya sudah dicatat)</span></label>
+        <input type="number" min="0" step="0.01" name="jumlah_yard" class="form-control">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small">Keterangan <span class="text-muted">(opsional)</span></label>
+        <input type="text" name="keterangan" class="form-control" placeholder="mis. Pembelian dari Toko Kain Jaya">
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Simpan Transaksi</button>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="modalEditBahan" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('bahan_baku_edit', bahan_id=bahan.id) }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Bahan Baku</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nama Bahan</label>
+          <input type="text" name="nama_bahan" class="form-control" value="{{ bahan.nama_bahan }}" required>
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label">Satuan</label>
+            <input type="text" name="satuan" class="form-control" value="{{ bahan.satuan }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Harga / {{ bahan.satuan }} (Rp)</label>
+            <input type="number" min="0" step="1000" name="harga_per_yard" class="form-control" value="{{ bahan.harga_per_yard }}">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Catatan <span class="text-muted small">(opsional)</span></label>
+          <textarea name="catatan" class="form-control" rows="2">{{ bahan.catatan or '' }}</textarea>
+        </div>
+        <div class="text-muted small">Untuk mengubah jumlah stok, gunakan form "Catat Transaksi Baru", bukan di sini.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

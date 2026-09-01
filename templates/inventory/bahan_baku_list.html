@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Bahan Baku{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Bahan Baku</h3>
+    <p class="text-muted small mb-0">Stok bahan baku (kain, dsb dalam yard) &amp; kebutuhan per produk.</p>
+  </div>
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahBahan">+ Tambah Bahan Baku</button>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Nama Bahan</th>
+          <th class="text-end">Stok Saat Ini</th>
+          <th class="text-end">Harga / Yard</th>
+          <th class="text-end">Nilai Stok</th>
+          <th>Dipakai untuk</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in daftar %}
+        <tr>
+          <td>
+            <a href="{{ url_for('bahan_baku_detail', bahan_id=b.id) }}" class="text-decoration-none fw-semibold">{{ b.nama_bahan }}</a>
+          </td>
+          <td class="text-end {{ 'text-danger fw-semibold' if b.stok_saat_ini < 0 else '' }}">
+            {{ "%.2f"|format(b.stok_saat_ini) }} {{ b.satuan }}
+          </td>
+          <td class="text-end">{{ b.harga_per_yard | rupiah }}</td>
+          <td class="text-end">{{ (b.stok_saat_ini * (b.harga_per_yard or 0)) | round | int | rupiah }}</td>
+          <td class="small text-muted">
+            {% if b.kebutuhan_list %}{{ b.kebutuhan_list | length }} produk{% else %}-{% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('bahan_baku_detail', bahan_id=b.id) }}" class="btn btn-sm btn-outline-secondary">Lihat Detail</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada bahan baku. Klik "+ Tambah Bahan Baku" untuk mulai.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalTambahBahan" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('bahan_baku_list') }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tambah Bahan Baku</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nama Bahan</label>
+          <input type="text" name="nama_bahan" class="form-control" placeholder="mis. Kain Crinkle Premium Hitam" required>
+        </div>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label">Satuan</label>
+            <input type="text" name="satuan" class="form-control" value="Yard">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Harga / Yard (Rp) <span class="text-muted small">(opsional)</span></label>
+            <input type="number" min="0" step="1000" name="harga_per_yard" class="form-control" value="0">
+          </div>
+        </div>
+        <div class="mb-3 mt-3">
+          <label class="form-label">Stok Awal <span class="text-muted small">(opsional)</span></label>
+          <input type="number" min="0" step="0.01" name="stok_awal" class="form-control" value="0">
+          <div class="form-text">Kalau diisi, otomatis dicatat sebagai transaksi Masuk pertama.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
