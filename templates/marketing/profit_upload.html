@@ -71,7 +71,12 @@
 
   function kirimForm() {
     if (!adaFileDipilih()) return;
-    inputs.forEach(function (el) { el.disabled = true; });
+    // PENTING: jangan set `disabled` di input file sebelum submit -- browser
+    // otomatis membuang field yang disabled dari data yang dikirim, jadi
+    // server bakal terima form kosong (bug yang sempat kejadian). Cukup
+    // kunci lewat CSS (pointer-events none) biar tidak bisa diklik ulang,
+    // filenya tetap ikut terkirim.
+    inputs.forEach(function (el) { el.style.pointerEvents = "none"; el.style.opacity = "0.6"; });
     tombol.classList.add("d-none");
     status.classList.remove("d-none");
     status.classList.add("d-flex");
