@@ -12,32 +12,72 @@
   filenya sudah tersedia.
 </p>
 
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" id="form-upload-profit">
   <div class="row g-3 mb-4">
     <div class="col-md-4">
       <div class="card p-3 h-100">
         <div class="fw-semibold">📋 1. File Order</div>
         <div class="text-muted small mb-3">Laporan Pesanan/Order dari Shopee atau TikTok Shop.</div>
-        <input type="file" name="file_order" class="form-control" accept=".csv,.xlsx,.xlsm">
+        <input type="file" name="file_order" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
     <div class="col-md-4">
       <div class="card p-3 h-100">
         <div class="fw-semibold">💰 2. File Income</div>
         <div class="text-muted small mb-3">Laporan Pendapatan/Income dari Shopee atau TikTok Shop.</div>
-        <input type="file" name="file_income" class="form-control" accept=".csv,.xlsx,.xlsm">
+        <input type="file" name="file_income" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
     <div class="col-md-4">
       <div class="card p-3 h-100">
         <div class="fw-semibold">📣 3. File Data Iklan <span class="text-muted fw-normal">(opsional)</span></div>
         <div class="text-muted small mb-3">Dari Ads Center marketplace terkait. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
-        <input type="file" name="file_iklan" class="form-control" accept=".csv,.xlsx,.xlsm">
+        <input type="file" name="file_iklan" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
   </div>
-  <button type="submit" class="btn btn-primary mb-4">Upload &amp; Proses</button>
+  <button type="submit" class="btn btn-primary mb-4" id="btn-upload-profit">Upload &amp; Proses</button>
+  <div class="text-muted small mb-4 d-none align-items-center gap-2" id="status-auto-upload">
+    <span class="spinner-border spinner-border-sm"></span>
+    Memproses file, mohon tunggu sebentar...
+  </div>
 </form>
+
+<script>
+(function () {
+  var form = document.getElementById("form-upload-profit");
+  var tombol = document.getElementById("btn-upload-profit");
+  var status = document.getElementById("status-auto-upload");
+  var inputs = document.querySelectorAll(".auto-upload-input");
+  var timer = null;
+
+  function adaFileDipilih() {
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].files && inputs[i].files.length > 0) return true;
+    }
+    return false;
+  }
+
+  function kirimForm() {
+    if (!adaFileDipilih()) return;
+    inputs.forEach(function (el) { el.disabled = true; });
+    tombol.classList.add("d-none");
+    status.classList.remove("d-none");
+    status.classList.add("d-flex");
+    form.submit();
+  }
+
+  inputs.forEach(function (el) {
+    el.addEventListener("change", function () {
+      // Beri jeda sebentar -- kalau admin pilih file Order & Income berurutan,
+      // keduanya sempat kepilih dulu sebelum otomatis ke-upload bareng (supaya
+      // Ringkasan Setelah Digabung tetap bisa dihitung). Tidak perlu klik tombol.
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(kirimForm, 700);
+    });
+  });
+})();
+</script>
 
 {% if not hasil.order and not hasil.income and not hasil.iklan %}
 <div class="card p-4 text-center text-muted small">
