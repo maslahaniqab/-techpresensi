@@ -4654,31 +4654,8 @@ def create_app():
         cari = request.args.get("cari", "").strip()
         bulan_filter = request.args.get("bulan", "")
         marketplace_filter = request.args.get("marketplace", "")
-
-        q = PesananMarketplace.query
-        if cari:
-            like = f"%{cari}%"
-            q = q.filter(db.or_(PesananMarketplace.no_pesanan.ilike(like), PesananMarketplace.nama_produk.ilike(like)))
-        if marketplace_filter:
-            q = q.filter(PesananMarketplace.marketplace == marketplace_filter)
-        if bulan_filter:
-            try:
-                tahun_f, bulan_f = (int(x) for x in bulan_filter.split("-"))
-                q = q.filter(
-                    db.extract("year", PesananMarketplace.tanggal_pesanan) == tahun_f,
-                    db.extract("month", PesananMarketplace.tanggal_pesanan) == bulan_f,
-                )
-            except ValueError:
-                pass
-        item_pesanan = q.order_by(PesananMarketplace.tanggal_pesanan.desc()).limit(500).all()
-
-        kunci_terlihat = {(p.marketplace, p.no_pesanan) for p in item_pesanan}
-        income_map = {
-            (p.marketplace, p.no_pesanan): p
-            for p in PendapatanPesanan.query.filter(
-                db.tuple_(PendapatanPesanan.marketplace, PendapatanPesanan.no_pesanan).in_(kunci_terlihat)
-            ).all()
-        } if kunci_terlihat else {}
+        status_filter = request.args.get("status", "")
+        income_status_filter = request.args.get("income_status", "")  # "" / cocok / belum
 
         total_pesanan = PesananMarketplace.query.count()
         total_income = PendapatanPesanan.query.count()
@@ -4688,6 +4665,73 @@ def create_app():
         jumlah_belum_ada_income = len(kunci_pesanan - kunci_income)
 
         daftar_marketplace = sorted({m for m, _ in kunci_pesanan} | {m for m, _ in kunci_income})
+        daftar_status = sorted({
+            r[0] for r in PesananMarketplace.query.with_entities(PesananMarketplace.status_pesanan).distinct().all() if r[0]
+        })
+
+        subq_ada_income = db.exists().where(db.and_(
+            PendapatanPesanan.marketplace == PesananMarketplace.marketplace,
+            PendapatanPesanan.no_pesanan == PesananMarketplace.no_pesanan,
+        ))
+
+        def terapkan_filter_pesanan(query):
+            if cari:
+                like = f"%{cari}%"
+                query = query.filter(db.or_(PesananMarketplace.no_pesanan.ilike(like), PesananMarketplace.nama_produk.ilike(like)))
+            if marketplace_filter:
+                query = query.filter(PesananMarketplace.marketplace == marketplace_filter)
+            if status_filter:
+                query = query.filter(PesananMarketplace.status_pesanan == status_filter)
+            if bulan_filter:
+                try:
+                    tahun_f, bulan_f = (int(x) for x in bulan_filter.split("-"))
+                    query = query.filter(
+                        db.extract("year", PesananMarketplace.tanggal_pesanan) == tahun_f,
+                        db.extract("month", PesananMarketplace.tanggal_pesanan) == bulan_f,
+                    )
+                except ValueError:
+                    pass
+            if income_status_filter == "belum":
+                query = query.filter(~subq_ada_income)
+            elif income_status_filter == "cocok":
+                query = query.filter(subq_ada_income)
+            return query
+
+        item_pesanan = (
+            terapkan_filter_pesanan(PesananMarketplace.query)
+            .order_by(PesananMarketplace.tanggal_pesanan.desc()).limit(500).all()
+        )
+
+        kunci_terlihat = {(p.marketplace, p.no_pesanan) for p in item_pesanan}
+        income_map = {
+            (p.marketplace, p.no_pesanan): p
+            for p in PendapatanPesanan.query.filter(
+                db.tuple_(PendapatanPesanan.marketplace, PendapatanPesanan.no_pesanan).in_(kunci_terlihat)
+            ).all()
+        } if kunci_terlihat else {}
+
+        # Ringkasan omset dari SELURUH baris yang cocok filter di atas (bukan cuma 500
+        # baris yang ditampilkan) -- omset bersih mengecualikan pesanan Batal, dan nilai
+        # pesanan Batal dilaporkan terpisah, dipecah per marketplace.
+        omzet_per_marketplace = {}
+        baris_untuk_omzet = terapkan_filter_pesanan(PesananMarketplace.query).with_entities(
+            PesananMarketplace.marketplace, PesananMarketplace.status_pesanan, PesananMarketplace.subtotal,
+        ).all()
+        for mp, status, subtotal in baris_untuk_omzet:
+            d = omzet_per_marketplace.setdefault(mp, {
+                "marketplace": mp, "omzet_bersih": 0, "jumlah_pesanan": 0,
+                "nilai_batal": 0, "jumlah_batal": 0,
+            })
+            d["jumlah_pesanan"] += 1
+            if status in STATUS_BATAL_MARKETPLACE:
+                d["nilai_batal"] += subtotal or 0
+                d["jumlah_batal"] += 1
+            else:
+                d["omzet_bersih"] += subtotal or 0
+        omzet_list = sorted(omzet_per_marketplace.values(), key=lambda x: -x["omzet_bersih"])
+        total_omzet_bersih = sum(v["omzet_bersih"] for v in omzet_list)
+        total_nilai_batal = sum(v["nilai_batal"] for v in omzet_list)
+        total_jumlah_batal = sum(v["jumlah_batal"] for v in omzet_list)
 
         qi = PendapatanPesanan.query
         if marketplace_filter:
@@ -4720,6 +4764,13 @@ def create_app():
             jumlah_order_unik=len(kunci_pesanan),
             jumlah_sudah_cocok=jumlah_sudah_cocok,
             jumlah_belum_ada_income=jumlah_belum_ada_income,
+            status_filter=status_filter,
+            income_status_filter=income_status_filter,
+            daftar_status=daftar_status,
+            omzet_list=omzet_list,
+            total_omzet_bersih=total_omzet_bersih,
+            total_nilai_batal=total_nilai_batal,
+            total_jumlah_batal=total_jumlah_batal,
         )
 
     def _daftar_produk_untuk_hpp():

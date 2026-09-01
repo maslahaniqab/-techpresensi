@@ -35,27 +35,34 @@
     </div>
   </div>
   <div class="col-md-3 col-6">
-    <div class="card p-3">
+    <a href="{{ url_for('profit_order_income', cari=cari, marketplace=marketplace_filter, bulan=bulan_filter, status=status_filter, income_status='belum') }}"
+       class="card p-3 text-decoration-none {{ 'border-warning' if income_status_filter == 'belum' }}">
       <div class="text-muted small">Belum Ada Data Income</div>
       <div class="fs-5 fw-bold text-warning">{{ jumlah_belum_ada_income }}</div>
-    </div>
+      <div class="text-muted small">klik untuk telusuri &rarr;</div>
+    </a>
   </div>
 </div>
 
 {% if jumlah_belum_ada_income %}
-<div class="alert alert-warning small">
-  Ada {{ jumlah_belum_ada_income }} pesanan yang belum ketemu data Income-nya &mdash; biasanya karena dana belum
-  dilepaskan platform, pesanan dibatalkan, atau file Income untuk periode itu belum diupload.
+<div class="alert alert-warning small d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    Ada {{ jumlah_belum_ada_income }} pesanan yang belum ketemu data Income-nya &mdash; biasanya karena dana belum
+    dilepaskan platform, pesanan dibatalkan, atau file Income untuk periode itu belum diupload.
+  </div>
+  {% if income_status_filter != 'belum' %}
+  <a href="{{ url_for('profit_order_income', cari=cari, marketplace=marketplace_filter, bulan=bulan_filter, status=status_filter, income_status='belum') }}" class="btn btn-sm btn-warning">Telusuri Pesanan Ini</a>
+  {% endif %}
 </div>
 {% endif %}
 
 <form method="get" class="card p-3 mb-4">
   <div class="row g-3 align-items-end">
-    <div class="col-md-4">
+    <div class="col-md-3">
       <label class="form-label small">Cari No. Pesanan / Nama Produk</label>
       <input type="text" name="cari" class="form-control" value="{{ cari }}" placeholder="mis. 260601UU5HNMJJ atau Niqab Tali">
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <label class="form-label small">Marketplace</label>
       <select name="marketplace" class="form-select">
         <option value="">Semua Marketplace</option>
@@ -65,14 +72,97 @@
       </select>
     </div>
     <div class="col-md-2">
+      <label class="form-label small">Status Pesanan</label>
+      <select name="status" class="form-select">
+        <option value="">Semua Status</option>
+        {% for s in daftar_status %}
+        <option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small">Status Income</label>
+      <select name="income_status" class="form-select">
+        <option value="">Semua</option>
+        <option value="cocok" {{ 'selected' if income_status_filter == 'cocok' }}>Sudah Cocok</option>
+        <option value="belum" {{ 'selected' if income_status_filter == 'belum' }}>Belum Ada Income</option>
+      </select>
+    </div>
+    <div class="col-md-2">
       <label class="form-label small">Bulan</label>
       <input type="month" name="bulan" class="form-control" value="{{ bulan_filter }}">
     </div>
-    <div class="col-md-3">
-      <button type="submit" class="btn btn-primary w-100">Terapkan Filter</button>
+    <div class="col-md-1">
+      <button type="submit" class="btn btn-primary w-100">Filter</button>
     </div>
   </div>
+  {% if cari or marketplace_filter or status_filter or income_status_filter or bulan_filter %}
+  <div class="mt-2"><a href="{{ url_for('profit_order_income') }}" class="small">&times; Bersihkan semua filter</a></div>
+  {% endif %}
 </form>
+
+<div class="text-muted small text-uppercase mb-2">Omset dari Seluruh Marketplace</div>
+<div class="text-muted small mb-2">
+  Dihitung dari data Order yang sudah diupload (sesuai filter di atas kalau ada), omset bersih sudah dikurangi
+  pesanan berstatus Batal/Dibatalkan/Cancelled.
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Omset Bersih (di luar Batal)</div>
+      <div class="fs-5 fw-bold text-success">{{ total_omzet_bersih | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Nilai Pesanan Batal</div>
+      <div class="fs-5 fw-bold text-danger">{{ total_nilai_batal | rupiah }}</div>
+    </div>
+  </div>
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Jumlah Pesanan Batal</div>
+      <div class="fs-5 fw-bold text-danger">{{ total_jumlah_batal }}</div>
+    </div>
+  </div>
+</div>
+<div class="card p-3 mb-4" style="overflow-x:auto;">
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Marketplace</th>
+        <th class="text-end">Jumlah Baris</th>
+        <th class="text-end">Omset Bersih</th>
+        <th class="text-end">Jumlah Batal</th>
+        <th class="text-end">Nilai Batal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in omzet_list %}
+      <tr>
+        <td><span class="badge bg-secondary">{{ o.marketplace }}</span></td>
+        <td class="text-end">{{ o.jumlah_pesanan }}</td>
+        <td class="text-end fw-semibold text-success">{{ o.omzet_bersih | rupiah }}</td>
+        <td class="text-end">{{ o.jumlah_batal }}</td>
+        <td class="text-end text-danger">{{ o.nilai_batal | rupiah }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center text-muted py-4">Belum ada data Order yang diupload.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if omzet_list %}
+    <tfoot>
+      <tr class="fw-bold">
+        <td>Total</td>
+        <td class="text-end">{{ omzet_list | sum(attribute="jumlah_pesanan") }}</td>
+        <td class="text-end text-success">{{ total_omzet_bersih | rupiah }}</td>
+        <td class="text-end">{{ total_jumlah_batal }}</td>
+        <td class="text-end text-danger">{{ total_nilai_batal | rupiah }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
 
 <div class="text-muted small text-uppercase mb-2">Pratinjau Order</div>
 <div class="text-muted small mb-2">Data mentah pesanan dari file Order kamu: produk apa yang dipesan, harga, qty, dan statusnya.</div>
@@ -98,7 +188,11 @@
         <td class="small">{{ p.marketplace }}</td>
         <td class="small">{{ p.no_pesanan }}</td>
         <td>{{ p.tanggal_pesanan.strftime("%d/%m/%Y") }}</td>
-        <td class="small">{{ p.status_pesanan }}</td>
+        <td>
+          {% if p.status_pesanan in ('Selesai','Selesai Pesanan') %}<span class="badge bg-success-subtle text-success-emphasis">{{ p.status_pesanan }}</span>
+          {% elif p.status_pesanan in ('Batal','Dibatalkan','Cancelled','Cancel') %}<span class="badge bg-danger-subtle text-danger-emphasis">{{ p.status_pesanan }}</span>
+          {% else %}<span class="badge bg-secondary-subtle text-secondary-emphasis">{{ p.status_pesanan }}</span>{% endif %}
+        </td>
         <td class="small">{{ p.nama_produk }}</td>
         <td class="text-end">{{ p.jumlah }}</td>
         <td class="text-end">{{ p.subtotal | rupiah }}</td>
