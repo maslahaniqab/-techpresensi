@@ -1999,6 +1999,38 @@ def create_app():
         flash(f"Produk Jadi {t.bahan_baku.nama_bahan} diperbarui jadi {pcs} pcs.", "success")
         return redirect(url_for("bahan_baku_cutting"))
 
+    @app.route("/inventory/transaksi")
+    @admin_required
+    def bahan_baku_transaksi_riwayat():
+        """Kartu stok gabungan: semua pergerakan bahan baku (Masuk dari Pengadaan +
+        Keluar dari Cutting & Produksi) dalam satu tabel, bisa difilter per bahan & jenis --
+        sebelumnya riwayatnya kepisah di 2 halaman berbeda, susah lihat histori satu bahan
+        dari awal sampai akhir."""
+        bahan_id = request.args.get("bahan_id", type=int)
+        jenis = request.args.get("jenis")
+        if jenis not in ("Masuk", "Keluar"):
+            jenis = None
+
+        query = BahanBakuTransaksi.query
+        if bahan_id:
+            query = query.filter_by(bahan_baku_id=bahan_id)
+        if jenis:
+            query = query.filter_by(jenis=jenis)
+        transaksi = query.order_by(BahanBakuTransaksi.tanggal.desc(), BahanBakuTransaksi.id.desc()).limit(300).all()
+
+        total_masuk_yard = sum(t.jumlah_yard for t in transaksi if t.jenis == "Masuk")
+        total_keluar_yard = sum(t.jumlah_yard for t in transaksi if t.jenis == "Keluar")
+        total_dibayar = sum(t.total_dibayar or 0 for t in transaksi if t.jenis == "Masuk")
+
+        daftar_bahan = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
+        return render_template(
+            "inventory/bahan_baku_transaksi_riwayat.html",
+            transaksi=transaksi, daftar_bahan=daftar_bahan,
+            bahan_id_filter=bahan_id, jenis_filter=jenis,
+            total_masuk_yard=total_masuk_yard, total_keluar_yard=total_keluar_yard,
+            total_dibayar=total_dibayar,
+        )
+
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required
     def bahan_baku_input():

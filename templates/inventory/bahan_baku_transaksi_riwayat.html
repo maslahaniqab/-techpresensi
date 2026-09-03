@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Riwayat Transaksi{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Riwayat Transaksi</h3>
+    <p class="text-muted small mb-0">Kartu stok gabungan &mdash; semua bahan baku masuk (Pengadaan) &amp; keluar (Cutting &amp; Produksi) dalam satu tabel.</p>
+  </div>
+  <a href="{{ url_for('bahan_baku_list') }}" class="btn btn-outline-secondary btn-sm">Lihat Stok per Bahan &rarr;</a>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label small mb-1">Jenis Bahan</label>
+      <select name="bahan_id" class="form-select form-select-sm">
+        <option value="">- Semua bahan -</option>
+        {% for b in daftar_bahan %}
+        <option value="{{ b.id }}" {{ 'selected' if bahan_id_filter == b.id }}>{{ b.nama_bahan }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label small mb-1">Jenis Transaksi</label>
+      <select name="jenis" class="form-select form-select-sm">
+        <option value="" {{ 'selected' if not jenis_filter }}>- Masuk &amp; Keluar -</option>
+        <option value="Masuk" {{ 'selected' if jenis_filter == 'Masuk' }}>Masuk (Pengadaan)</option>
+        <option value="Keluar" {{ 'selected' if jenis_filter == 'Keluar' }}>Keluar (Cutting &amp; Produksi)</option>
+      </select>
+    </div>
+    <div class="col-md-3 d-flex gap-2">
+      <button type="submit" class="btn btn-primary btn-sm flex-fill">Filter</button>
+      <a href="{{ url_for('bahan_baku_transaksi_riwayat') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
+    </div>
+  </div>
+</form>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Masuk</div>
+      <div class="fs-5 fw-bold text-success">{{ "%.2f"|format(total_masuk_yard) }} Yard</div>
+    </div>
+  </div>
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Keluar</div>
+      <div class="fs-5 fw-bold text-danger">{{ "%.2f"|format(total_keluar_yard) }} Yard</div>
+    </div>
+  </div>
+  <div class="col-md-4 col-6">
+    <div class="card p-3">
+      <div class="text-muted small">Total Dibayar (Masuk)</div>
+      <div class="fs-5 fw-bold">{{ total_dibayar | rupiah }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <div style="overflow:auto; max-height: 520px;">
+  <table class="table table-sm align-middle mb-0">
+    <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
+      <tr>
+        <th>Tanggal</th>
+        <th>Bahan</th>
+        <th>Jenis</th>
+        <th class="text-end">Jumlah</th>
+        <th>Untuk Produk</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in transaksi %}
+      <tr>
+        <td class="small text-nowrap">{{ t.tanggal.strftime("%d/%m/%Y") }}</td>
+        <td class="small">
+          <a href="{{ url_for('bahan_baku_detail', bahan_id=t.bahan_baku_id) }}" class="text-decoration-none">{{ t.bahan_baku.nama_bahan }}</a>
+        </td>
+        <td>
+          {% if t.jenis == 'Masuk' %}
+          <span class="badge bg-success-subtle text-success-emphasis">Masuk</span>
+          {% else %}
+          <span class="badge bg-danger-subtle text-danger-emphasis">Keluar</span>
+          {% endif %}
+        </td>
+        <td class="text-end small text-nowrap">{{ "%.2f"|format(t.jumlah_yard) }} {{ t.bahan_baku.satuan }}</td>
+        <td class="small">{{ t.produk.nama_produk if t.produk else "-" }}</td>
+        <td class="small text-muted">
+          {% if t.jenis == 'Masuk' %}
+            {{ t.suplier or "-" }}{% if t.harga_per_yard %} &middot; {{ t.harga_per_yard | rupiah }}/{{ t.bahan_baku.satuan }}{% endif %}{% if t.total_dibayar %} &middot; Total {{ t.total_dibayar | rupiah }}{% endif %}
+          {% else %}
+            {{ t.vendor or "-" }}{% if t.produk_jadi_pcs is not none %} &middot; {{ t.produk_jadi_pcs }} Pcs jadi{% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">Belum ada transaksi yang cocok dengan filter ini.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if transaksi|length >= 300 %}
+  <div class="text-muted small text-center mt-2">Menampilkan 300 transaksi terbaru. Pakai filter Jenis Bahan untuk mempersempit.</div>
+  {% endif %}
+</div>
+
+{% endblock %}
