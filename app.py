@@ -45,6 +45,7 @@ from models import (
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
+    Vendor, Gudang, AkunPembayaran,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -2030,6 +2031,149 @@ def create_app():
             total_masuk_yard=total_masuk_yard, total_keluar_yard=total_keluar_yard,
             total_dibayar=total_dibayar,
         )
+
+    # ---------- INVENTORY: MASTER DATA (VENDOR / GUDANG / AKUN PEMBAYARAN) ----------
+    @app.route("/inventory/master-data/vendor", methods=["GET", "POST"])
+    @admin_required
+    def vendor_list():
+        if request.method == "POST":
+            nama_vendor = request.form.get("nama_vendor", "").strip()
+            if not nama_vendor:
+                flash("Nama vendor wajib diisi.", "danger")
+                return redirect(url_for("vendor_list"))
+            db.session.add(Vendor(
+                nama_vendor=nama_vendor,
+                jenis=request.form.get("jenis", "Keduanya"),
+                kontak=request.form.get("kontak", "").strip(),
+                alamat=request.form.get("alamat", "").strip(),
+                catatan=request.form.get("catatan", "").strip(),
+            ))
+            db.session.commit()
+            flash(f"Vendor {nama_vendor} berhasil ditambahkan.", "success")
+            return redirect(url_for("vendor_list"))
+        daftar = Vendor.query.order_by(Vendor.nama_vendor).all()
+        return render_template("inventory/vendor_list.html", daftar=daftar)
+
+    @app.route("/inventory/master-data/vendor/<int:vendor_id>/edit", methods=["POST"])
+    @admin_required
+    def vendor_edit(vendor_id):
+        v = db.session.get(Vendor, vendor_id) or abort_404()
+        nama_vendor = request.form.get("nama_vendor", "").strip()
+        if not nama_vendor:
+            flash("Nama vendor wajib diisi.", "danger")
+            return redirect(url_for("vendor_list"))
+        v.nama_vendor = nama_vendor
+        v.jenis = request.form.get("jenis", "Keduanya")
+        v.kontak = request.form.get("kontak", "").strip()
+        v.alamat = request.form.get("alamat", "").strip()
+        v.catatan = request.form.get("catatan", "").strip()
+        db.session.commit()
+        flash("Data vendor berhasil diperbarui.", "success")
+        return redirect(url_for("vendor_list"))
+
+    @app.route("/inventory/master-data/vendor/<int:vendor_id>/hapus", methods=["POST"])
+    @admin_required
+    def vendor_hapus(vendor_id):
+        v = db.session.get(Vendor, vendor_id) or abort_404()
+        nama = v.nama_vendor
+        db.session.delete(v)
+        db.session.commit()
+        flash(f"Vendor {nama} dihapus.", "info")
+        return redirect(url_for("vendor_list"))
+
+    @app.route("/inventory/master-data/gudang", methods=["GET", "POST"])
+    @admin_required
+    def gudang_list():
+        if request.method == "POST":
+            nama_gudang = request.form.get("nama_gudang", "").strip()
+            if not nama_gudang:
+                flash("Nama gudang wajib diisi.", "danger")
+                return redirect(url_for("gudang_list"))
+            db.session.add(Gudang(
+                nama_gudang=nama_gudang,
+                alamat=request.form.get("alamat", "").strip(),
+                pic=request.form.get("pic", "").strip(),
+                kontak=request.form.get("kontak", "").strip(),
+                catatan=request.form.get("catatan", "").strip(),
+            ))
+            db.session.commit()
+            flash(f"Gudang {nama_gudang} berhasil ditambahkan.", "success")
+            return redirect(url_for("gudang_list"))
+        daftar = Gudang.query.order_by(Gudang.nama_gudang).all()
+        return render_template("inventory/gudang_list.html", daftar=daftar)
+
+    @app.route("/inventory/master-data/gudang/<int:gudang_id>/edit", methods=["POST"])
+    @admin_required
+    def gudang_edit(gudang_id):
+        g = db.session.get(Gudang, gudang_id) or abort_404()
+        nama_gudang = request.form.get("nama_gudang", "").strip()
+        if not nama_gudang:
+            flash("Nama gudang wajib diisi.", "danger")
+            return redirect(url_for("gudang_list"))
+        g.nama_gudang = nama_gudang
+        g.alamat = request.form.get("alamat", "").strip()
+        g.pic = request.form.get("pic", "").strip()
+        g.kontak = request.form.get("kontak", "").strip()
+        g.catatan = request.form.get("catatan", "").strip()
+        db.session.commit()
+        flash("Data gudang berhasil diperbarui.", "success")
+        return redirect(url_for("gudang_list"))
+
+    @app.route("/inventory/master-data/gudang/<int:gudang_id>/hapus", methods=["POST"])
+    @admin_required
+    def gudang_hapus(gudang_id):
+        g = db.session.get(Gudang, gudang_id) or abort_404()
+        nama = g.nama_gudang
+        db.session.delete(g)
+        db.session.commit()
+        flash(f"Gudang {nama} dihapus.", "info")
+        return redirect(url_for("gudang_list"))
+
+    @app.route("/inventory/master-data/akun-pembayaran", methods=["GET", "POST"])
+    @admin_required
+    def akun_pembayaran_list():
+        if request.method == "POST":
+            nama_akun = request.form.get("nama_akun", "").strip()
+            if not nama_akun:
+                flash("Nama akun wajib diisi.", "danger")
+                return redirect(url_for("akun_pembayaran_list"))
+            db.session.add(AkunPembayaran(
+                nama_akun=nama_akun,
+                jenis=request.form.get("jenis", "Bank"),
+                nomor_rekening=request.form.get("nomor_rekening", "").strip(),
+                catatan=request.form.get("catatan", "").strip(),
+            ))
+            db.session.commit()
+            flash(f"Akun {nama_akun} berhasil ditambahkan.", "success")
+            return redirect(url_for("akun_pembayaran_list"))
+        daftar = AkunPembayaran.query.order_by(AkunPembayaran.nama_akun).all()
+        return render_template("inventory/akun_pembayaran_list.html", daftar=daftar)
+
+    @app.route("/inventory/master-data/akun-pembayaran/<int:akun_id>/edit", methods=["POST"])
+    @admin_required
+    def akun_pembayaran_edit(akun_id):
+        a = db.session.get(AkunPembayaran, akun_id) or abort_404()
+        nama_akun = request.form.get("nama_akun", "").strip()
+        if not nama_akun:
+            flash("Nama akun wajib diisi.", "danger")
+            return redirect(url_for("akun_pembayaran_list"))
+        a.nama_akun = nama_akun
+        a.jenis = request.form.get("jenis", "Bank")
+        a.nomor_rekening = request.form.get("nomor_rekening", "").strip()
+        a.catatan = request.form.get("catatan", "").strip()
+        db.session.commit()
+        flash("Data akun berhasil diperbarui.", "success")
+        return redirect(url_for("akun_pembayaran_list"))
+
+    @app.route("/inventory/master-data/akun-pembayaran/<int:akun_id>/hapus", methods=["POST"])
+    @admin_required
+    def akun_pembayaran_hapus(akun_id):
+        a = db.session.get(AkunPembayaran, akun_id) or abort_404()
+        nama = a.nama_akun
+        db.session.delete(a)
+        db.session.commit()
+        flash(f"Akun {nama} dihapus.", "info")
+        return redirect(url_for("akun_pembayaran_list"))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required

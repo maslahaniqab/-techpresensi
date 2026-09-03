@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Vendor{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Vendor</h3>
+    <p class="text-muted small mb-0">Master data vendor &mdash; penjahit/produksi maupun suplier kain, jadi satu daftar.</p>
+  </div>
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahVendor">+ Tambah Vendor</button>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Nama Vendor</th>
+          <th>Jenis</th>
+          <th>Kontak</th>
+          <th>Alamat</th>
+          <th>Catatan</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in daftar %}
+        <tr>
+          <td class="fw-semibold">{{ v.nama_vendor }}</td>
+          <td><span class="badge bg-secondary-subtle text-secondary-emphasis">{{ v.jenis }}</span></td>
+          <td class="small">{{ v.kontak or "-" }}</td>
+          <td class="small">{{ v.alamat or "-" }}</td>
+          <td class="small text-muted">{{ v.catatan or "-" }}</td>
+          <td class="text-end">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditVendor{{ v.id }}">Edit</button>
+            <form method="post" action="{{ url_for('vendor_hapus', vendor_id=v.id) }}" class="d-inline" onsubmit="return confirm('Hapus vendor {{ v.nama_vendor }}?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada vendor. Klik "+ Tambah Vendor" untuk mulai.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalTambahVendor" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('vendor_list') }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tambah Vendor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nama Vendor</label>
+          <input type="text" name="nama_vendor" class="form-control" placeholder="mis. Yuli Cigondewah" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Jenis</label>
+          <select name="jenis" class="form-select">
+            <option value="Keduanya">Keduanya (Penjahit &amp; Suplier Kain)</option>
+            <option value="Penjahit">Penjahit / Produksi</option>
+            <option value="Suplier Kain">Suplier Kain</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Kontak <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="kontak" class="form-control" placeholder="No. HP/WA">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Alamat <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="alamat" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Catatan <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="catatan" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% for v in daftar %}
+<div class="modal fade" id="modalEditVendor{{ v.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('vendor_edit', vendor_id=v.id) }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Vendor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nama Vendor</label>
+          <input type="text" name="nama_vendor" class="form-control" value="{{ v.nama_vendor }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Jenis</label>
+          <select name="jenis" class="form-select">
+            <option value="Keduanya" {{ 'selected' if v.jenis == 'Keduanya' }}>Keduanya (Penjahit &amp; Suplier Kain)</option>
+            <option value="Penjahit" {{ 'selected' if v.jenis == 'Penjahit' }}>Penjahit / Produksi</option>
+            <option value="Suplier Kain" {{ 'selected' if v.jenis == 'Suplier Kain' }}>Suplier Kain</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Kontak</label>
+          <input type="text" name="kontak" class="form-control" value="{{ v.kontak or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Alamat</label>
+          <input type="text" name="alamat" class="form-control" value="{{ v.alamat or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Catatan</label>
+          <input type="text" name="catatan" class="form-control" value="{{ v.catatan or '' }}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

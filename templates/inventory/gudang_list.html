@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Gudang{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Gudang</h3>
+    <p class="text-muted small mb-0">Master data alamat/lokasi gudang &mdash; referensi saja, belum dipisah per lokasi ke perhitungan stok.</p>
+  </div>
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahGudang">+ Tambah Gudang</button>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Nama Gudang</th>
+          <th>Alamat</th>
+          <th>PIC</th>
+          <th>Kontak</th>
+          <th>Catatan</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in daftar %}
+        <tr>
+          <td class="fw-semibold">{{ g.nama_gudang }}</td>
+          <td class="small">{{ g.alamat or "-" }}</td>
+          <td class="small">{{ g.pic or "-" }}</td>
+          <td class="small">{{ g.kontak or "-" }}</td>
+          <td class="small text-muted">{{ g.catatan or "-" }}</td>
+          <td class="text-end">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditGudang{{ g.id }}">Edit</button>
+            <form method="post" action="{{ url_for('gudang_hapus', gudang_id=g.id) }}" class="d-inline" onsubmit="return confirm('Hapus gudang {{ g.nama_gudang }}?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada gudang. Klik "+ Tambah Gudang" untuk mulai.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalTambahGudang" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('gudang_list') }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tambah Gudang</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nama Gudang</label>
+          <input type="text" name="nama_gudang" class="form-control" placeholder="mis. Gudang Utama Cigondewah" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Alamat <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="alamat" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">PIC <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="pic" class="form-control" placeholder="Penanggung jawab gudang">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Kontak <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="kontak" class="form-control" placeholder="No. HP/WA">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Catatan <span class="text-muted small">(opsional)</span></label>
+          <input type="text" name="catatan" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% for g in daftar %}
+<div class="modal fade" id="modalEditGudang{{ g.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('gudang_edit', gudang_id=g.id) }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Gudang</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nama Gudang</label>
+          <input type="text" name="nama_gudang" class="form-control" value="{{ g.nama_gudang }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Alamat</label>
+          <input type="text" name="alamat" class="form-control" value="{{ g.alamat or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">PIC</label>
+          <input type="text" name="pic" class="form-control" value="{{ g.pic or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Kontak</label>
+          <input type="text" name="kontak" class="form-control" value="{{ g.kontak or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Catatan</label>
+          <input type="text" name="catatan" class="form-control" value="{{ g.catatan or '' }}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

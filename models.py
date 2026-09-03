@@ -288,6 +288,41 @@ class ProdukSpekUkuran(db.Model):
     produk = db.relationship("Produk", backref=db.backref("spek_ukuran_list", cascade="all, delete-orphan"))
 
 
+class Vendor(db.Model):
+    """Master data vendor -- mencakup penjahit/produksi (dipakai di Cutting &
+    Produksi) maupun suplier kain (dipakai di Pengadaan Barang), jadi satu daftar."""
+    id = db.Column(db.Integer, primary_key=True)
+    nama_vendor = db.Column(db.String(128), nullable=False)
+    jenis = db.Column(db.String(24), nullable=False, default="Keduanya")  # Penjahit / Suplier Kain / Keduanya
+    kontak = db.Column(db.String(64))
+    alamat = db.Column(db.String(256))
+    catatan = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
+class Gudang(db.Model):
+    """Master data alamat/lokasi gudang -- referensi saja, belum dipakai buat
+    memisah stok per lokasi."""
+    id = db.Column(db.Integer, primary_key=True)
+    nama_gudang = db.Column(db.String(128), nullable=False)
+    alamat = db.Column(db.String(256))
+    pic = db.Column(db.String(64))
+    kontak = db.Column(db.String(64))
+    catatan = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
+class AkunPembayaran(db.Model):
+    """Master data rekening bank/e-wallet/kas tunai milik toko -- referensi saja,
+    belum dipakai/dikaitkan ke transaksi manapun."""
+    id = db.Column(db.Integer, primary_key=True)
+    nama_akun = db.Column(db.String(128), nullable=False)
+    jenis = db.Column(db.String(24), nullable=False, default="Bank")  # Bank / E-wallet / Tunai
+    nomor_rekening = db.Column(db.String(64))
+    catatan = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class IklanMarketplace(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     marketplace = db.Column(db.String(32), nullable=False)  # Shopee/Tokopedia/TikTok Shop/Lazada/Blibli
