@@ -57,6 +57,14 @@
       line-height: 1;
     }
     .sidebar .nav-section-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+    .sidebar .nav-subsection-toggle {
+      padding-left: 1.75rem;
+      font-size: .78rem;
+      text-transform: none;
+      letter-spacing: normal;
+      color: #6b5f4a;
+    }
+    .sidebar .nav-sublink { padding-left: 2.5rem; font-size: .87rem; }
     .sidebar .nav-link {
       color: #4a4033;
       padding: .5rem 1.25rem;
@@ -114,8 +122,11 @@
   ('laba_rugi', 'Laporan Laba/Rugi', '📊'),
   ('laba_rugi_input', 'Input Pendapatan & HPP', '➕'),
 ] %}
-{% set menu_inventory = [
-  ('bahan_baku_list', 'Master Data Barang', '🗂️'),
+{% set menu_master_data = [
+  ('bahan_baku_list', 'Bahan Baku', '🧵'),
+  ('produk_list', 'Produk', '🏷️'),
+] %}
+{% set menu_inventory_langsung = [
   ('bahan_baku_input', 'Pengadaan Barang', '📥'),
   ('bahan_baku_cutting', 'Cutting & Produksi', '✂️'),
   ('bahan_baku_transaksi_riwayat', 'Riwayat Transaksi', '📒'),
@@ -153,6 +164,18 @@
   {% endfor %}
 </div>
 {% endmacro %}
+{% macro nav_subsection(section_id, title, menu_list) %}
+{% set is_active = request.endpoint in menu_list|map('first')|list %}
+<button type="button" class="nav-section-toggle nav-subsection-toggle" data-bs-toggle="collapse" data-bs-target="#{{ section_id }}" aria-expanded="{{ 'true' if is_active else 'false' }}" aria-controls="{{ section_id }}">
+  <span>{{ title }}</span>
+  <span class="chevron">▾</span>
+</button>
+<div class="collapse {{ 'show' if is_active }}" id="{{ section_id }}">
+  {% for endpoint, label, icon in menu_list %}
+  <a class="nav-link nav-sublink {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
+  {% endfor %}
+</div>
+{% endmacro %}
 <button type="button" class="btn btn-dark btn-sm sidebar-toggle-btn no-print" onclick="document.getElementById('sidebar').classList.add('show'); document.getElementById('sidebarBackdrop').classList.add('show');">☰</button>
 <div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="document.getElementById('sidebar').classList.remove('show'); this.classList.remove('show');"></div>
 <nav class="sidebar no-print" id="sidebar">
@@ -165,7 +188,19 @@
   {{ nav_section('navKepegawaian', 'Kepegawaian', menu_kepegawaian) }}
   {{ nav_section('navKeuangan', 'Keuangan', menu_keuangan) }}
   {{ nav_section('navProfit', 'Profitabilitas', menu_profit) }}
-  {{ nav_section('navInventory', 'Inventory', menu_inventory) }}
+
+  {% set inventory_active = (request.endpoint in menu_master_data|map('first')|list) or (request.endpoint in menu_inventory_langsung|map('first')|list) %}
+  <button type="button" class="nav-section-toggle" data-bs-toggle="collapse" data-bs-target="#navInventory" aria-expanded="{{ 'true' if inventory_active else 'false' }}" aria-controls="navInventory">
+    <span>Inventory</span>
+    <span class="chevron">▾</span>
+  </button>
+  <div class="collapse {{ 'show' if inventory_active }}" id="navInventory">
+    {{ nav_subsection('navMasterData', 'Master Data', menu_master_data) }}
+    {% for endpoint, label, icon in menu_inventory_langsung %}
+    <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
+    {% endfor %}
+  </div>
+
   {{ nav_section('navMarketing', 'Marketing', menu_marketing) }}
   {{ nav_section('navPendapatan', 'Pendapatan', menu_pendapatan) }}
 
