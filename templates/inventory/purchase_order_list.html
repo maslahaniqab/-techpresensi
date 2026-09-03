@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Purchase Order{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Purchase Order</h3>
+    <p class="text-muted small mb-0">Order produksi ke vendor/penjahit &mdash; bahan yang dipakai otomatis mengurangi stok saat PO disimpan.</p>
+  </div>
+  {% if not daftar_vendor %}
+  <span class="text-muted small">Tambah <a href="{{ url_for('vendor_list') }}">Vendor</a> dulu sebelum bisa buat PO.</span>
+  {% elif not daftar_bahan %}
+  <span class="text-muted small">Tambah <a href="{{ url_for('bahan_baku_list') }}">Bahan Baku</a> dulu sebelum bisa buat PO.</span>
+  {% else %}
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalBuatPO">+ Buat PO Baru</button>
+  {% endif %}
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Nomor PO</th>
+          <th>Vendor</th>
+          <th>Tgl Order</th>
+          <th>Estimasi Selesai</th>
+          <th class="text-end">Total Biaya</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for po in daftar %}
+        <tr>
+          <td class="fw-semibold">{{ po.nomor_po }}</td>
+          <td class="small">{{ po.vendor.nama_vendor }}</td>
+          <td class="small">{{ po.tanggal_order.strftime("%d/%m/%Y") }}</td>
+          <td class="small">{{ po.estimasi_selesai.strftime("%d/%m/%Y") if po.estimasi_selesai else "-" }}</td>
+          <td class="text-end small">{{ po.total_biaya | rupiah }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="btn btn-sm btn-outline-secondary">Detail</a>
+            <form method="post" action="{{ url_for('purchase_order_hapus', po_id=po.id) }}" class="d-inline" onsubmit="return confirm('Hapus PO {{ po.nomor_po }}? Stok bahan yg kepotong akan dikembalikan.');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada Purchase Order. Klik "+ Buat PO Baru" untuk mulai.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalBuatPO" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <form method="post" action="{{ url_for('purchase_order_list') }}" class="modal-content" id="formBuatPO">
+      <div class="modal-header">
+        <h5 class="modal-title">Buat PO Baru &amp; Pemakaian Bahan</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 mb-3">
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Nomor PO *</label>
+            <input type="text" name="nomor_po" class="form-control" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Vendor *</label>
+            <select name="vendor_id" class="form-select" required>
+              <option value="">Pilih Vendor</option>
+              {% for v in daftar_vendor %}
+              <option value="{{ v.id }}">{{ v.nama_vendor }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Tgl Order *</label>
+            <input type="date" name="tanggal_order" class="form-control" value="{{ tanggal_hari_ini }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Estimasi Selesai</label>
+            <input type="date" name="estimasi_selesai" class="form-control">
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-semibold small">📦 Item Produk</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="tambahBarisProduk()">+ Item</button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead><tr><th>Produk</th><th style="width:80px;">Warna</th><th style="width:70px;">Size</th><th style="width:70px;">Qty</th><th class="text-end" style="width:90px;">Total</th><th style="width:30px;"></th></tr></thead>
+                <tbody id="tbodyItemProduk"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-semibold small text-danger">✂️ Pemakaian Bahan (Input)</span>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="tambahBarisBahan()">+ Bahan</button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead><tr><th>Nama Bahan (Stok Tersedia)</th><th style="width:90px;">Qty Pakai</th><th style="width:60px;">Satuan</th><th style="width:30px;"></th></tr></thead>
+                <tbody id="tbodyBahanPakai"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-end fw-semibold mt-2">Total Biaya: <span id="totalBiayaDisplay">Rp 0</span></div>
+        <div class="text-muted small mt-1">* Stok bahan akan berkurang otomatis saat PO disimpan.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">SIMPAN PO &amp; KURANGI STOK BAHAN</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PRODUK_DATA = {{ produk_json | tojson }};
+  const BAHAN_DATA = {{ bahan_json | tojson }};
+
+  function optionsProduk() {
+    let html = '<option value="">Pilih produk...</option>';
+    for (const id in PRODUK_DATA) html += `<option value="${id}">${PRODUK_DATA[id].nama}</option>`;
+    return html;
+  }
+  function optionsBahan() {
+    let html = '<option value="">Pilih bahan...</option>';
+    for (const id in BAHAN_DATA) html += `<option value="${id}">${BAHAN_DATA[id].nama} (${BAHAN_DATA[id].stok.toFixed(2)} ${BAHAN_DATA[id].satuan})</option>`;
+    return html;
+  }
+
+  function rupiah(n) {
+    return "Rp " + Math.round(n).toLocaleString("id-ID");
+  }
+
+  function hitungTotalBiaya() {
+    let total = 0;
+    document.querySelectorAll("#tbodyItemProduk tr").forEach(tr => {
+      const sel = tr.querySelector("select[name='ip_produk_id[]']");
+      const qty = parseFloat(tr.querySelector("input[name='ip_qty[]']").value) || 0;
+      const produk = PRODUK_DATA[sel.value];
+      const modal = produk ? produk.modal : 0;
+      const rowTotal = qty * modal;
+      tr.querySelector(".ip-total").textContent = rupiah(rowTotal);
+      total += rowTotal;
+    });
+    document.getElementById("totalBiayaDisplay").textContent = rupiah(total);
+  }
+
+  function tambahBarisProduk() {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><select name="ip_produk_id[]" class="form-select form-select-sm" onchange="hitungTotalBiaya()">${optionsProduk()}</select></td>
+      <td><input type="text" name="ip_warna[]" class="form-control form-control-sm"></td>
+      <td><input type="text" name="ip_size[]" class="form-control form-control-sm"></td>
+      <td><input type="number" name="ip_qty[]" class="form-control form-control-sm" min="1" value="1" oninput="hitungTotalBiaya()"></td>
+      <td class="text-end ip-total small">Rp 0</td>
+      <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove(); hitungTotalBiaya();">&times;</button></td>
+    `;
+    document.getElementById("tbodyItemProduk").appendChild(tr);
+  }
+
+  function tambahBarisBahan() {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><select name="bp_bahan_id[]" class="form-select form-select-sm">${optionsBahan()}</select></td>
+      <td><input type="number" step="0.01" name="bp_qty[]" class="form-control form-control-sm" min="0.01"></td>
+      <td class="bp-satuan small text-muted"></td>
+      <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove();">&times;</button></td>
+    `;
+    const sel = tr.querySelector("select[name='bp_bahan_id[]']");
+    sel.addEventListener("change", () => {
+      const b = BAHAN_DATA[sel.value];
+      tr.querySelector(".bp-satuan").textContent = b ? b.satuan : "";
+    });
+    document.getElementById("tbodyBahanPakai").appendChild(tr);
+  }
+
+  document.getElementById("modalBuatPO").addEventListener("show.bs.modal", function () {
+    document.getElementById("tbodyItemProduk").innerHTML = "";
+    document.getElementById("tbodyBahanPakai").innerHTML = "";
+    document.getElementById("totalBiayaDisplay").textContent = "Rp 0";
+    tambahBarisProduk();
+    tambahBarisBahan();
+  });
+</script>
+{% endblock %}

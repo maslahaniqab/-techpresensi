@@ -270,7 +270,11 @@ class BahanBakuTransaksi(db.Model):
     lebar_kain = db.Column(db.Float)  # lebar kain dalam meter yg dipakai batch ini
     produk_jadi_pcs = db.Column(db.Integer)  # realisasi/estimasi jumlah produk jadi
 
+    # -- kalau baris ini dibuat otomatis dari sebuah Purchase Order --
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"))
+
     produk = db.relationship("Produk")
+    purchase_order = db.relationship("PurchaseOrder")
 
 
 class ProdukSpekUkuran(db.Model):
@@ -321,6 +325,52 @@ class AkunPembayaran(db.Model):
     nomor_rekening = db.Column(db.String(64))
     catatan = db.Column(db.String(256))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
+class PurchaseOrder(db.Model):
+    """PO produksi ke vendor/penjahit -- satu PO bisa punya banyak Item Produk (yg
+    dipesan/diproduksi) & banyak Pemakaian Bahan (yg dipotong dari stok saat disimpan)."""
+    id = db.Column(db.Integer, primary_key=True)
+    nomor_po = db.Column(db.String(64), nullable=False, unique=True)
+    vendor_id = db.Column(db.Integer, db.ForeignKey("vendor.id"), nullable=False)
+    tanggal_order = db.Column(db.Date, nullable=False)
+    estimasi_selesai = db.Column(db.Date)
+    total_biaya = db.Column(db.Integer, nullable=False, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    vendor = db.relationship("Vendor")
+    item_produk_list = db.relationship(
+        "PurchaseOrderItemProduk", backref="po", cascade="all, delete-orphan",
+        order_by="PurchaseOrderItemProduk.id",
+    )
+    bahan_pakai_list = db.relationship(
+        "PurchaseOrderBahanPakai", backref="po", cascade="all, delete-orphan",
+        order_by="PurchaseOrderBahanPakai.id",
+    )
+
+
+class PurchaseOrderItemProduk(db.Model):
+    """Baris produk yg dipesan/diproduksi dalam 1 Purchase Order."""
+    id = db.Column(db.Integer, primary_key=True)
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"), nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    warna = db.Column(db.String(64))
+    size = db.Column(db.String(32))
+    qty = db.Column(db.Integer, nullable=False, default=0)
+    total = db.Column(db.Integer, nullable=False, default=0)  # snapshot qty x modal produk saat itu
+
+    produk = db.relationship("Produk")
+
+
+class PurchaseOrderBahanPakai(db.Model):
+    """Baris bahan baku yg dipakai (dikurangi dari stok) dalam 1 Purchase Order."""
+    id = db.Column(db.Integer, primary_key=True)
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"), nullable=False)
+    bahan_baku_id = db.Column(db.Integer, db.ForeignKey("bahan_baku.id"), nullable=False)
+    qty_pakai = db.Column(db.Float, nullable=False, default=0)
+    satuan = db.Column(db.String(16))  # snapshot satuan bahan saat itu
+
+    bahan_baku = db.relationship("BahanBaku")
 
 
 class IklanMarketplace(db.Model):

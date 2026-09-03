@@ -7,7 +7,10 @@
     <h3 class="mb-1">Bahan Baku</h3>
     <p class="text-muted small mb-0">Stok bahan baku (kain, dsb dalam yard) &amp; kebutuhan per produk.</p>
   </div>
-  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahBahan">+ Tambah Bahan Baku</button>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('bahan_baku_input') }}" class="btn btn-outline-primary">📥 Catat Bahan Masuk (Pengadaan)</a>
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahBahan">+ Tambah Bahan Baku</button>
+  </div>
 </div>
 
 <div class="card p-3">

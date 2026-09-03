@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}PO {{ po.nomor_po }}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Purchase Order {{ po.nomor_po }}</h3>
+    <p class="text-muted small mb-0">
+      Vendor: <strong>{{ po.vendor.nama_vendor }}</strong> &middot;
+      Tgl Order: {{ po.tanggal_order.strftime("%d/%m/%Y") }} &middot;
+      Estimasi Selesai: {{ po.estimasi_selesai.strftime("%d/%m/%Y") if po.estimasi_selesai else "-" }}
+    </p>
+  </div>
+  <a href="{{ url_for('purchase_order_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Purchase Order</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="fw-semibold mb-2">📦 Item Produk</div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Produk</th><th>Warna</th><th>Size</th><th class="text-end">Qty</th><th class="text-end">Total</th></tr></thead>
+          <tbody>
+            {% for ip in po.item_produk_list %}
+            <tr>
+              <td class="small">{{ ip.produk.nama_produk }}</td>
+              <td class="small">{{ ip.warna or "-" }}</td>
+              <td class="small">{{ ip.size or "-" }}</td>
+              <td class="text-end small">{{ ip.qty }}</td>
+              <td class="text-end small">{{ ip.total | rupiah }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-3">Tidak ada item produk di PO ini.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="fw-semibold mb-2 text-danger">✂️ Pemakaian Bahan</div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Bahan</th><th class="text-end">Qty Pakai</th><th>Satuan</th></tr></thead>
+          <tbody>
+            {% for bp in po.bahan_pakai_list %}
+            <tr>
+              <td class="small">
+                <a href="{{ url_for('bahan_baku_detail', bahan_id=bp.bahan_baku_id) }}" class="text-decoration-none">{{ bp.bahan_baku.nama_bahan }}</a>
+              </td>
+              <td class="text-end small">{{ "%.2f"|format(bp.qty_pakai) }}</td>
+              <td class="small">{{ bp.satuan }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-center text-muted py-3">Tidak ada bahan yang dipakai di PO ini.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="text-end fw-semibold mt-3">Total Biaya: {{ po.total_biaya | rupiah }}</div>
+
+{% endblock %}

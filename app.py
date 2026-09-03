@@ -45,7 +45,8 @@ from models import (
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
-    Vendor, Gudang, AkunPembayaran,
+    Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
+    PurchaseOrderBahanPakai,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1426,7 +1427,7 @@ def create_app():
         for kolom, tipe in [
             ("warna", "VARCHAR(64)"), ("suplier", "VARCHAR(128)"), ("tinggi_meter", "FLOAT"),
             ("harga_per_yard", "INTEGER"), ("total_dibayar", "INTEGER"), ("vendor", "VARCHAR(128)"),
-            ("lebar_kain", "FLOAT"), ("produk_jadi_pcs", "INTEGER"),
+            ("lebar_kain", "FLOAT"), ("produk_jadi_pcs", "INTEGER"), ("purchase_order_id", "INTEGER"),
         ]:
             if kolom not in kolom_bb_transaksi:
                 db.session.execute(db.text(f"ALTER TABLE bahan_baku_transaksi ADD COLUMN {kolom} {tipe}"))
@@ -2174,6 +2175,129 @@ def create_app():
         db.session.commit()
         flash(f"Akun {nama} dihapus.", "info")
         return redirect(url_for("akun_pembayaran_list"))
+
+    @app.route("/inventory/master-data/purchase-order", methods=["GET", "POST"])
+    @admin_required
+    def purchase_order_list():
+        if request.method == "POST":
+            nomor_po = request.form.get("nomor_po", "").strip()
+            vendor_id = request.form.get("vendor_id", type=int)
+            vendor = db.session.get(Vendor, vendor_id) if vendor_id else None
+            try:
+                tanggal_order = datetime.strptime(request.form.get("tanggal_order", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal_order = None
+            estimasi_selesai = None
+            if request.form.get("estimasi_selesai"):
+                try:
+                    estimasi_selesai = datetime.strptime(request.form.get("estimasi_selesai"), "%Y-%m-%d").date()
+                except ValueError:
+                    estimasi_selesai = None
+
+            if not nomor_po or not vendor or not tanggal_order:
+                flash("Nomor PO, Vendor, dan Tgl Order wajib diisi.", "danger")
+                return redirect(url_for("purchase_order_list"))
+            if PurchaseOrder.query.filter_by(nomor_po=nomor_po).first():
+                flash(f"Nomor PO {nomor_po} sudah dipakai, pakai nomor lain.", "danger")
+                return redirect(url_for("purchase_order_list"))
+
+            # -- baris Item Produk (opsional, boleh kosong semua) --
+            item_produk_rows = []
+            for produk_id_s, warna, size, qty_s in zip(
+                request.form.getlist("ip_produk_id[]"), request.form.getlist("ip_warna[]"),
+                request.form.getlist("ip_size[]"), request.form.getlist("ip_qty[]"),
+            ):
+                produk = db.session.get(Produk, int(produk_id_s)) if produk_id_s else None
+                qty = parse_angka_iklan(qty_s)
+                if produk and qty > 0:
+                    item_produk_rows.append((produk, warna.strip(), size.strip(), int(qty)))
+
+            # -- baris Pemakaian Bahan (wajib minimal 1) --
+            bahan_pakai_rows = []
+            for bahan_id_s, qty_s in zip(
+                request.form.getlist("bp_bahan_id[]"), request.form.getlist("bp_qty[]"),
+            ):
+                bahan = db.session.get(BahanBaku, int(bahan_id_s)) if bahan_id_s else None
+                qty = parse_angka_iklan(qty_s)
+                if bahan and qty > 0:
+                    bahan_pakai_rows.append((bahan, qty))
+
+            if not bahan_pakai_rows:
+                flash("Isi minimal 1 baris Pemakaian Bahan (bahan + qty pakai) sebelum disimpan.", "danger")
+                return redirect(url_for("purchase_order_list"))
+
+            total_biaya = sum(qty * (produk.modal or 0) for produk, _, _, qty in item_produk_rows)
+            po = PurchaseOrder(
+                nomor_po=nomor_po, vendor_id=vendor.id, tanggal_order=tanggal_order,
+                estimasi_selesai=estimasi_selesai, total_biaya=total_biaya,
+            )
+            db.session.add(po)
+            db.session.flush()
+
+            for produk, warna, size, qty in item_produk_rows:
+                db.session.add(PurchaseOrderItemProduk(
+                    purchase_order_id=po.id, produk_id=produk.id, warna=warna, size=size,
+                    qty=qty, total=qty * (produk.modal or 0),
+                ))
+
+            stok_minus = False
+            for bahan, qty in bahan_pakai_rows:
+                db.session.add(PurchaseOrderBahanPakai(
+                    purchase_order_id=po.id, bahan_baku_id=bahan.id, qty_pakai=qty, satuan=bahan.satuan,
+                ))
+                bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - qty
+                if bahan.stok_saat_ini < 0:
+                    stok_minus = True
+                db.session.add(BahanBakuTransaksi(
+                    bahan_baku_id=bahan.id, tanggal=tanggal_order, jenis="Keluar", jumlah_yard=qty,
+                    vendor=vendor.nama_vendor, keterangan=f"Purchase Order {nomor_po}",
+                    purchase_order_id=po.id,
+                ))
+
+            db.session.commit()
+            pesan = f"Purchase Order {nomor_po} berhasil disimpan, stok bahan sudah dikurangi."
+            kategori = "success"
+            if stok_minus:
+                pesan += " Perhatian: ada stok bahan yang jadi minus, cek lagi catatan stok masuknya."
+                kategori = "warning"
+            flash(pesan, kategori)
+            return redirect(url_for("purchase_order_list"))
+
+        daftar = PurchaseOrder.query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
+        daftar_vendor = Vendor.query.order_by(Vendor.nama_vendor).all()
+        daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
+        daftar_bahan = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
+        produk_json = {p.id: {"nama": p.nama_produk, "modal": p.modal or 0} for p in daftar_produk}
+        bahan_json = {
+            b.id: {"nama": b.nama_bahan, "stok": b.stok_saat_ini or 0, "satuan": b.satuan} for b in daftar_bahan
+        }
+        return render_template(
+            "inventory/purchase_order_list.html",
+            daftar=daftar, daftar_vendor=daftar_vendor, daftar_produk=daftar_produk,
+            daftar_bahan=daftar_bahan, produk_json=produk_json, bahan_json=bahan_json,
+            tanggal_hari_ini=today_wib().isoformat(),
+        )
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>")
+    @admin_required
+    def purchase_order_detail(po_id):
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        return render_template("inventory/purchase_order_detail.html", po=po)
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/hapus", methods=["POST"])
+    @admin_required
+    def purchase_order_hapus(po_id):
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        nomor_po = po.nomor_po
+        # Kembalikan stok bahan yg kepotong PO ini, & hapus transaksi Keluar yg
+        # otomatis dibuat bareng PO -- biar catatan kartu stok gak nyisain data yatim.
+        for bp in po.bahan_pakai_list:
+            bp.bahan_baku.stok_saat_ini = (bp.bahan_baku.stok_saat_ini or 0) + bp.qty_pakai
+        BahanBakuTransaksi.query.filter_by(purchase_order_id=po.id).delete()
+        db.session.delete(po)
+        db.session.commit()
+        flash(f"Purchase Order {nomor_po} dihapus, stok bahan yg kepotong sudah dikembalikan.", "info")
+        return redirect(url_for("purchase_order_list"))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required
