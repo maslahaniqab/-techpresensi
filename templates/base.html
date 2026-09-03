@@ -35,13 +35,28 @@
       margin-bottom: .5rem;
     }
     .sidebar .brand img { height: 30px; width: 30px; object-fit: cover; border-radius: 6px; }
-    .sidebar .nav-section-label {
+    .sidebar .nav-section-toggle {
+      width: 100%;
+      background: none;
+      border: none;
       font-size: .68rem;
       text-transform: uppercase;
       letter-spacing: .06em;
       color: #a08f6d;
       padding: 1rem 1.25rem .35rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .5rem;
+      cursor: pointer;
     }
+    .sidebar .nav-section-toggle:hover { color: #4a4033; }
+    .sidebar .nav-section-toggle .chevron {
+      transition: transform .2s ease;
+      font-size: .65rem;
+      line-height: 1;
+    }
+    .sidebar .nav-section-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
     .sidebar .nav-link {
       color: #4a4033;
       padding: .5rem 1.25rem;
@@ -120,6 +135,22 @@
 {% set menu_pendapatan = [
   ('pendapatan_penjualan_dashboard', 'Penjualan', '🛒'),
 ] %}
+{% macro nav_section(section_id, title, menu_list) %}
+{% set is_active = request.endpoint in menu_list|map('first')|list %}
+<button type="button" class="nav-section-toggle" data-bs-toggle="collapse" data-bs-target="#{{ section_id }}" aria-expanded="{{ 'true' if is_active else 'false' }}" aria-controls="{{ section_id }}">
+  <span>{{ title }}</span>
+  <span class="chevron">▾</span>
+</button>
+<div class="collapse {{ 'show' if is_active }}" id="{{ section_id }}">
+  {% for endpoint, label, icon in menu_list %}
+  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">
+    {{ icon }} {{ label }}
+    {% if endpoint == 'pengajuan_izin_list' and pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
+    {% if endpoint == 'pengajuan_lembur_list' and pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endmacro %}
 <button type="button" class="btn btn-dark btn-sm sidebar-toggle-btn no-print" onclick="document.getElementById('sidebar').classList.add('show'); document.getElementById('sidebarBackdrop').classList.add('show');">☰</button>
 <div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="document.getElementById('sidebar').classList.remove('show'); this.classList.remove('show');"></div>
 <nav class="sidebar no-print" id="sidebar">
@@ -129,39 +160,12 @@
   </a>
   <a class="nav-link {{ 'active' if request.endpoint == 'dashboard' }}" href="{{ url_for('dashboard') }}">🏠 Dashboard</a>
 
-  <div class="nav-section-label">Kepegawaian</div>
-  {% for endpoint, label, icon in menu_kepegawaian %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">
-    {{ icon }} {{ label }}
-    {% if endpoint == 'pengajuan_izin_list' and pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
-    {% if endpoint == 'pengajuan_lembur_list' and pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
-  </a>
-  {% endfor %}
-
-  <div class="nav-section-label">Keuangan</div>
-  {% for endpoint, label, icon in menu_keuangan %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
-  {% endfor %}
-
-  <div class="nav-section-label">Profitabilitas</div>
-  {% for endpoint, label, icon in menu_profit %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
-  {% endfor %}
-
-  <div class="nav-section-label">Inventory</div>
-  {% for endpoint, label, icon in menu_inventory %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
-  {% endfor %}
-
-  <div class="nav-section-label">Marketing</div>
-  {% for endpoint, label, icon in menu_marketing %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
-  {% endfor %}
-
-  <div class="nav-section-label">Pendapatan</div>
-  {% for endpoint, label, icon in menu_pendapatan %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
-  {% endfor %}
+  {{ nav_section('navKepegawaian', 'Kepegawaian', menu_kepegawaian) }}
+  {{ nav_section('navKeuangan', 'Keuangan', menu_keuangan) }}
+  {{ nav_section('navProfit', 'Profitabilitas', menu_profit) }}
+  {{ nav_section('navInventory', 'Inventory', menu_inventory) }}
+  {{ nav_section('navMarketing', 'Marketing', menu_marketing) }}
+  {{ nav_section('navPendapatan', 'Pendapatan', menu_pendapatan) }}
 
   <div class="sidebar-bottom">
     <a class="nav-link {{ 'active' if request.endpoint == 'pengaturan' }}" href="{{ url_for('pengaturan') }}">⚙️ Pengaturan</a>
