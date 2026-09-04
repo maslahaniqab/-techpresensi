@@ -258,12 +258,21 @@
         <td class="small">{{ t.vendor or "-" }}</td>
         <td class="text-end small">
           {% if t.produk_jadi_pcs %}
-          {{ t.produk_jadi_pcs }} Pcs
+          <span id="pj-display-{{ t.id }}">
+            {{ t.produk_jadi_pcs }} Pcs
+            <a href="#" class="small ms-1" title="Koreksi manual (admin)"
+               onclick="document.getElementById('pj-display-{{ t.id }}').classList.add('d-none'); document.getElementById('pj-form-{{ t.id }}').classList.remove('d-none'); return false;">✎</a>
+          </span>
+          <form method="post" action="{{ url_for('bahan_baku_transaksi_isi_produk_jadi', transaksi_id=t.id) }}" class="d-none d-flex gap-1 justify-content-end" id="pj-form-{{ t.id }}">
+            <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control form-control-sm" style="width:70px;" value="{{ t.produk_jadi_pcs }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Simpan</button>
+          </form>
           {% else %}
           <form method="post" action="{{ url_for('bahan_baku_transaksi_isi_produk_jadi', transaksi_id=t.id) }}" class="d-flex gap-1 justify-content-end">
             <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control form-control-sm" style="width:70px;" placeholder="isi">
             <button type="submit" class="btn btn-sm btn-outline-primary">Simpan</button>
           </form>
+          <div class="text-muted" style="font-size:.7rem;">otomatis kalau Kebutuhan sudah diisi</div>
           {% endif %}
         </td>
       </tr>

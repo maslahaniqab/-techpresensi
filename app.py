@@ -1215,6 +1215,37 @@ def haversine_meter(lat1, lng1, lat2, lng2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def isi_otomatis_produk_jadi_kosong():
+    """Self-heal: cari transaksi Keluar yang Produk Jadi-nya masih kosong, lalu coba
+    hitung otomatis pakai rumus (yard dipakai transaksi / Kebutuhan Yard per Pcs).
+    Dipanggil tiap kali halaman Cutting & Produksi dibuka, supaya baris lama yang
+    dulu belum kehitung (mis. karena Kebutuhan baru diisi belakangan, atau transaksi
+    dari Purchase Order yang gak selalu punya produk_id langsung) otomatis kepenuhin
+    begitu datanya sudah lengkap -- gak perlu diketik manual satu-satu."""
+    kandidat = BahanBakuTransaksi.query.filter_by(jenis="Keluar", produk_jadi_pcs=None).all()
+    ada_perubahan = False
+    for t in kandidat:
+        produk_id = t.produk_id
+        # Transaksi dari Purchase Order kadang gak punya produk_id langsung (karena
+        # 1 PO bisa punya banyak Item Produk sekaligus) -- kalau PO-nya ternyata cuma
+        # punya 1 produk yang beda-beda, aman ditebak itu produknya.
+        if not produk_id and t.purchase_order_id and t.purchase_order:
+            produk_ids_po = {ip.produk_id for ip in t.purchase_order.item_produk_list}
+            if len(produk_ids_po) == 1:
+                produk_id = next(iter(produk_ids_po))
+        if not produk_id or not t.jumlah_yard:
+            continue
+        kebutuhan = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=t.bahan_baku_id, produk_id=produk_id).first()
+        if not kebutuhan or not kebutuhan.jumlah_yard:
+            continue
+        if not t.produk_id:
+            t.produk_id = produk_id
+        t.produk_jadi_pcs = round(t.jumlah_yard / kebutuhan.jumlah_yard)
+        ada_perubahan = True
+    if ada_perubahan:
+        db.session.commit()
+
+
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ganti-secret-key-ini")
@@ -2297,6 +2328,12 @@ def create_app():
                     qty=qty, total=qty * (produk.modal or 0),
                 ))
 
+            # Kalau semua Item Produk di PO ini sama-sama 1 produk, aman ditebak itu
+            # peruntukan bahan yang dipakai -- biar Produk Jadi bisa langsung kehitung
+            # otomatis dari Kebutuhan Yard per Pcs begitu PO ini disimpan.
+            produk_ids_po = {produk.id for produk, _, _, _ in item_produk_rows}
+            produk_id_tunggal = next(iter(produk_ids_po)) if len(produk_ids_po) == 1 else None
+
             stok_minus = False
             for bahan, qty in bahan_pakai_rows:
                 db.session.add(PurchaseOrderBahanPakai(
@@ -2305,10 +2342,19 @@ def create_app():
                 bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - qty
                 if bahan.stok_saat_ini < 0:
                     stok_minus = True
+
+                produk_jadi_pcs = None
+                if produk_id_tunggal:
+                    kebutuhan = BahanBakuKebutuhan.query.filter_by(
+                        bahan_baku_id=bahan.id, produk_id=produk_id_tunggal,
+                    ).first()
+                    if kebutuhan and kebutuhan.jumlah_yard:
+                        produk_jadi_pcs = round(qty / kebutuhan.jumlah_yard)
+
                 db.session.add(BahanBakuTransaksi(
                     bahan_baku_id=bahan.id, tanggal=tanggal_order, jenis="Keluar", jumlah_yard=qty,
                     vendor=vendor.nama_vendor, keterangan=f"Purchase Order {nomor_po}",
-                    purchase_order_id=po.id,
+                    purchase_order_id=po.id, produk_id=produk_id_tunggal, produk_jadi_pcs=produk_jadi_pcs,
                 ))
 
             db.session.commit()
@@ -2525,6 +2571,7 @@ def create_app():
             flash(pesan, kategori)
             return redirect(url_for("bahan_baku_cutting"))
 
+        isi_otomatis_produk_jadi_kosong()
         bahan_list = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
         produk_list = Produk.query.order_by(Produk.nama_produk).all()
         spek_per_produk = {
