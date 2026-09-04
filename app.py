@@ -65,6 +65,7 @@ KATEGORI_SPEK_FIELDS = {
     ],
     "Khimar": [
         ("lingkar_dada", "Lingkar Kepala"), ("panjang_atas", "Panjang Khimar"), ("lingkar_pinggang", "Lebar Bawah"),
+        ("ld_lengan", "Panjang Depan"), ("pergelangan", "Panjang Belakang"),
     ],
     "Pashmina": [
         ("lingkar_dada", "Panjang"), ("panjang_atas", "Lebar"),
