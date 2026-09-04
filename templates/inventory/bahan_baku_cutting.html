@@ -30,7 +30,7 @@
     </div>
     <div class="col-md-6">
       <label class="form-label">Peruntukan Produk</label>
-      <select name="produk_id" id="peruntukan_produk" class="form-select">
+      <select name="produk_id" id="peruntukan_produk" class="form-select produk-search">
         <option value="">- Belum tentu -</option>
         {% for p in produk_list %}
         <option value="{{ p.id }}">{{ p.nama_produk }}</option>
@@ -118,7 +118,7 @@
     </div>
     <div class="col-md-4 col-6">
       <label class="form-label small">Produk</label>
-      <select name="produk_id" class="form-select form-select-sm" required>
+      <select name="produk_id" class="form-select form-select-sm produk-search" required>
         <option value="">Pilih produk&hellip;</option>
         {% for p in produk_list %}
         <option value="{{ p.id }}">{{ p.nama_produk }}</option>
@@ -165,7 +165,7 @@
   <form method="post" id="form-tambah-spek" action="{{ url_for('produk_spek_ukuran_tambah', produk_id=0) }}" class="row g-2 align-items-end">
     <div class="col-md-3 col-6">
       <label class="form-label small">Produk</label>
-      <select id="spek_produk_id" class="form-select form-select-sm" required>
+      <select id="spek_produk_id" class="form-select form-select-sm produk-search" required>
         <option value="">Pilih produk&hellip;</option>
         {% for p in produk_list %}
         <option value="{{ p.id }}">{{ p.nama_produk }}</option>

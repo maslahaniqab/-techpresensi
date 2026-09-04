@@ -162,7 +162,7 @@
   function tambahBarisProduk() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><select name="ip_produk_id[]" class="form-select form-select-sm" onchange="hitungTotalBiaya()">${optionsProduk()}</select></td>
+      <td><select name="ip_produk_id[]" class="form-select form-select-sm produk-search">${optionsProduk()}</select></td>
       <td><input type="text" name="ip_warna[]" class="form-control form-control-sm"></td>
       <td><input type="text" name="ip_size[]" class="form-control form-control-sm"></td>
       <td><input type="number" name="ip_qty[]" class="form-control form-control-sm" min="1" value="1" oninput="hitungTotalBiaya()"></td>
@@ -170,12 +170,15 @@
       <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove(); hitungTotalBiaya();">&times;</button></td>
     `;
     document.getElementById("tbodyItemProduk").appendChild(tr);
+    const sel = tr.querySelector("select[name='ip_produk_id[]']");
+    sel.addEventListener("change", hitungTotalBiaya);
+    initProdukSearch(sel);
   }
 
   function tambahBarisBahan() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><select name="bp_bahan_id[]" class="form-select form-select-sm">${optionsBahan()}</select></td>
+      <td><select name="bp_bahan_id[]" class="form-select form-select-sm bahan-search">${optionsBahan()}</select></td>
       <td><input type="number" step="0.01" name="bp_qty[]" class="form-control form-control-sm" min="0.01"></td>
       <td class="bp-satuan small text-muted"></td>
       <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove();">&times;</button></td>
@@ -186,6 +189,7 @@
       tr.querySelector(".bp-satuan").textContent = b ? b.satuan : "";
     });
     document.getElementById("tbodyBahanPakai").appendChild(tr);
+    initBahanSearch(sel);
   }
 
   document.getElementById("modalBuatPO").addEventListener("show.bs.modal", function () {

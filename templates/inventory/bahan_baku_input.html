@@ -34,7 +34,7 @@
     </div>
     <div class="col-md-6">
       <label class="form-label">Peruntukan Produk <span class="text-muted small">(opsional)</span></label>
-      <select name="produk_id" class="form-select">
+      <select name="produk_id" class="form-select produk-search">
         <option value="">- Belum tentu, umum -</option>
         {% for p in produk_list %}
         <option value="{{ p.id }}">{{ p.nama_produk }}</option>
