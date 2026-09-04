@@ -66,7 +66,7 @@
     <div class="table-responsive">
       <table class="table table-sm table-bordered mb-0" style="max-width: 640px;">
         <thead class="table-light">
-          <tr>
+          <tr id="spec-thead-row">
             <th>Size</th>
             <th>Lingkar Dada (LD)</th>
             <th>Panjang Atas (PA)</th>
@@ -163,7 +163,7 @@
   <div class="fw-semibold small mb-2">Kelola Spek Ukuran per Produk</div>
   <p class="text-muted small mb-3">Isi acuan ukuran badan (cm) untuk 1 pcs produk, supaya tampil otomatis pas produk itu dipilih di form Cutting di atas.</p>
   <form method="post" id="form-tambah-spek" action="{{ url_for('produk_spek_ukuran_tambah', produk_id=0) }}" class="row g-2 align-items-end">
-    <div class="col-md-3 col-6">
+    <div class="col-md-4 col-6">
       <label class="form-label small">Produk</label>
       <select id="spek_produk_id" class="form-select form-select-sm produk-search" required>
         <option value="">Pilih produk&hellip;</option>
@@ -172,66 +172,61 @@
         {% endfor %}
       </select>
     </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Kategori</label>
+      <select name="kategori" id="spek_kategori" class="form-select form-select-sm" required>
+        <option value="">Pilih kategori&hellip;</option>
+        {% for kat in kategori_fields if kat %}
+        <option value="{{ kat }}">{{ kat }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="col-md-2 col-6">
       <label class="form-label small">Size</label>
       <input type="text" name="size" class="form-control form-control-sm" value="All Size">
     </div>
-    <div class="col-md-1 col-4">
-      <label class="form-label small">LD</label>
-      <input type="number" step="0.1" name="lingkar_dada" class="form-control form-control-sm">
+    <div class="col-md-3 col-6">
+      <button type="submit" class="btn btn-sm btn-primary w-100">+ Simpan Ukuran</button>
     </div>
-    <div class="col-md-1 col-4">
-      <label class="form-label small">PA</label>
-      <input type="number" step="0.1" name="panjang_atas" class="form-control form-control-sm">
-    </div>
-    <div class="col-md-2 col-4">
-      <label class="form-label small">Ling. Pinggang</label>
-      <input type="number" step="0.1" name="lingkar_pinggang" class="form-control form-control-sm">
-    </div>
-    <div class="col-md-1 col-6">
-      <label class="form-label small">LD Lengan</label>
-      <input type="number" step="0.1" name="ld_lengan" class="form-control form-control-sm">
-    </div>
-    <div class="col-md-1 col-6">
-      <label class="form-label small">Pergelangan</label>
-      <input type="number" step="0.1" name="pergelangan" class="form-control form-control-sm">
-    </div>
-    <div class="col-md-1 col-12">
-      <button type="submit" class="btn btn-sm btn-primary w-100">+</button>
+    <div class="col-12">
+      <div class="row g-2 mt-1" id="spek-fields-container">
+        <div class="col-12 text-muted small">Pilih kategori dulu untuk menentukan kolom ukurannya.</div>
+      </div>
     </div>
   </form>
 
-  {% set semua_spek = produk_list | selectattr('spek_ukuran_list') | list %}
-  {% if semua_spek %}
-  <div class="table-responsive mt-3">
-    <table class="table table-sm mb-0">
-      <thead>
-        <tr>
-          <th>Produk</th><th>Size</th><th>LD</th><th>PA</th><th>Ling. Pinggang</th><th>LD Lengan</th><th>Pergelangan</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in semua_spek %}
-        {% for s in p.spek_ukuran_list %}
-        <tr>
-          <td class="small">{{ p.nama_produk }}</td>
-          <td class="small">{{ s.size }}</td>
-          <td class="small">{{ s.lingkar_dada or "-" }}</td>
-          <td class="small">{{ s.panjang_atas or "-" }}</td>
-          <td class="small">{{ s.lingkar_pinggang or "-" }}</td>
-          <td class="small">{{ s.ld_lengan or "-" }}</td>
-          <td class="small">{{ s.pergelangan or "-" }}</td>
-          <td class="text-end">
-            <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
-              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-        {% endfor %}
-      </tbody>
-    </table>
+  {% if spek_by_kategori %}
+  {% for kat, baris_list in spek_by_kategori.items() %}
+  {% set fields = kategori_fields.get(kat, kategori_fields['']) %}
+  <div class="mt-3">
+    <div class="fw-semibold small text-muted text-uppercase mb-1">{{ kat or 'Umum (belum dikategorikan)' }}</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Produk</th><th>Size</th>
+            {% for slot, label in fields %}<th>{{ label }}</th>{% endfor %}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in baris_list %}
+          <tr>
+            <td class="small">{{ s.produk.nama_produk }}</td>
+            <td class="small">{{ s.size }}</td>
+            {% for slot, label in fields %}<td class="small">{{ s[slot] or "-" }}</td>{% endfor %}
+            <td class="text-end">
+              <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
+                <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
+  {% endfor %}
   {% endif %}
 </div>
 
@@ -279,6 +274,7 @@
 <script>
 (function () {
   var SPEK_DATA = {{ spek_per_produk_json | tojson }};
+  var KATEGORI_FIELDS = {{ kategori_fields | tojson }};
 
   var selBahan = document.getElementById('bahan_baku_id');
   var warnaDisplay = document.getElementById('warna_bahan_display');
@@ -292,6 +288,7 @@
   var selProduk = document.getElementById('peruntukan_produk');
   var specBody = document.getElementById('spec-body');
   var specTitle = document.getElementById('spec-title');
+  var specTheadRow = document.getElementById('spec-thead-row');
 
   function renderSpec() {
     var produkId = selProduk.value;
@@ -299,29 +296,55 @@
     specBody.innerHTML = '';
     if (!produkId) {
       specTitle.textContent = 'Jika admin memilih Peruntukan Produk, tampil hitungan untuk 1 pcs produk jadi adalah:';
-      specBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted small py-3">Pilih Peruntukan Produk dulu.</td></tr>';
+      specBody.innerHTML = '<tr><td colspan="' + specTheadRow.children.length + '" class="text-center text-muted small py-3">Pilih Peruntukan Produk dulu.</td></tr>';
       return;
     }
     specTitle.textContent = 'Hitungan untuk 1 pcs ' + namaProduk + ' jadi adalah:';
     var rows = SPEK_DATA[produkId] || [];
+    // Kolom tabel ngikutin kategori dari baris spek yg sudah diisi utk produk ini
+    // (kategori "" = belum diisi kategorinya sama sekali -> fallback ke label generik).
+    var kat = rows.length ? (rows[0].kategori || '') : '';
+    var fields = KATEGORI_FIELDS[kat] || KATEGORI_FIELDS[''];
+    specTheadRow.innerHTML = '<th>Size</th>' + fields.map(function (f) { return '<th>' + f[1] + '</th>'; }).join('');
     if (!rows.length) {
-      specBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted small py-3">Belum ada spek ukuran utk produk ini. Isi di "Kelola Spek Ukuran per Produk" di bawah.</td></tr>';
+      specBody.innerHTML = '<tr><td colspan="' + (fields.length + 1) + '" class="text-center text-muted small py-3">Belum ada spek ukuran utk produk ini. Isi di "Kelola Spek Ukuran per Produk" di bawah.</td></tr>';
       return;
     }
     rows.forEach(function (r) {
       var tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td>' + r.size + '</td>' +
-        '<td>' + (r.lingkar_dada != null ? r.lingkar_dada + ' cm' : '-') + '</td>' +
-        '<td>' + (r.panjang_atas != null ? r.panjang_atas + ' cm' : '-') + '</td>' +
-        '<td>' + (r.lingkar_pinggang != null ? r.lingkar_pinggang + ' cm' : '-') + '</td>' +
-        '<td>' + (r.ld_lengan != null ? r.ld_lengan + ' cm' : '-') + '</td>' +
-        '<td>' + (r.pergelangan != null ? r.pergelangan + ' cm' : '-') + '</td>';
+      var cells = '<td>' + r.size + '</td>';
+      fields.forEach(function (f) {
+        var val = r[f[0]];
+        cells += '<td>' + (val != null ? val + ' cm' : '-') + '</td>';
+      });
+      tr.innerHTML = cells;
       specBody.appendChild(tr);
     });
   }
   if (selProduk) {
     selProduk.addEventListener('change', renderSpec);
+  }
+
+  // Kelola Spek Ukuran per Produk: kolom ukuran yg ditampilkan ngikutin Kategori
+  // yg dipilih (mis. Cadar cuma butuh 3 kolom, Abaya butuh 5 kolom yg beda arti).
+  var selKategoriSpek = document.getElementById('spek_kategori');
+  var spekFieldsContainer = document.getElementById('spek-fields-container');
+  function renderSpekFieldsForm() {
+    var kat = selKategoriSpek.value;
+    var fields = KATEGORI_FIELDS[kat] || [];
+    if (!fields.length) {
+      spekFieldsContainer.innerHTML = '<div class="col-12 text-muted small">Pilih kategori dulu untuk menentukan kolom ukurannya.</div>';
+      return;
+    }
+    spekFieldsContainer.innerHTML = fields.map(function (f) {
+      return '<div class="col-md-2 col-4">' +
+        '<label class="form-label small">' + f[1] + '</label>' +
+        '<input type="number" step="0.1" name="' + f[0] + '" class="form-control form-control-sm">' +
+        '</div>';
+    }).join('');
+  }
+  if (selKategoriSpek) {
+    selKategoriSpek.addEventListener('change', renderSpekFieldsForm);
   }
 
   var formSpek = document.getElementById('form-tambah-spek');

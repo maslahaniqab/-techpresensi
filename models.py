@@ -279,9 +279,16 @@ class BahanBakuTransaksi(db.Model):
 
 class ProdukSpekUkuran(db.Model):
     """Spek ukuran badan per size utk 1 pcs produk -- ditampilkan sbg acuan cutting
-    di halaman Barang Cutting & Produksi saat produk tsb dipilih."""
+    di halaman Barang Cutting & Produksi saat produk tsb dipilih.
+
+    5 kolom ukuran (lingkar_dada s/d pergelangan) dipakai sbg "slot" generik yg
+    label & maknanya beda-beda tergantung `kategori` (lihat KATEGORI_SPEK_FIELDS
+    di app.py) -- misal utk kategori Cadar, kolom lingkar_dada dipakai buat nyimpen
+    "Lingkar Kepala", bukan lingkar dada beneran. kategori kosong (baris lama sblm
+    fitur ini ada) fallback ke label generik LD/PA/Lingkar Pinggang/LD Lengan/Pergelangan."""
     id = db.Column(db.Integer, primary_key=True)
     produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    kategori = db.Column(db.String(24))  # Cadar/Khimar/Pashmina/Handshock/Celamis/Abaya/Oneset/Gamis
     size = db.Column(db.String(32), nullable=False, default="All Size")
     lingkar_dada = db.Column(db.Float)
     panjang_atas = db.Column(db.Float)

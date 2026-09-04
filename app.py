@@ -51,6 +51,44 @@ from models import (
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 
+# Kolom ukuran di ProdukSpekUkuran (lingkar_dada s/d pergelangan) dipakai sbg "slot"
+# generik yg label & maknanya beda-beda tergantung kategori produknya. "" = kategori
+# kosong/belum diisi (baris lama sblm fitur kategori ini ada) -> fallback ke label
+# generik yg sama seperti sebelumnya, jadi data lama tetap kebaca normal.
+KATEGORI_SPEK_FIELDS = {
+    "": [
+        ("lingkar_dada", "Lingkar Dada (LD)"), ("panjang_atas", "Panjang Atas (PA)"),
+        ("lingkar_pinggang", "Lingkar Pinggang"), ("ld_lengan", "LD Lengan"), ("pergelangan", "Pergelangan"),
+    ],
+    "Cadar": [
+        ("lingkar_dada", "Lingkar Kepala"), ("panjang_atas", "Lingkar Wajah"), ("lingkar_pinggang", "Panjang Cadar"),
+    ],
+    "Khimar": [
+        ("lingkar_dada", "Lingkar Kepala"), ("panjang_atas", "Panjang Khimar"), ("lingkar_pinggang", "Lebar Bawah"),
+    ],
+    "Pashmina": [
+        ("lingkar_dada", "Panjang"), ("panjang_atas", "Lebar"),
+    ],
+    "Handshock": [
+        ("lingkar_dada", "Panjang"), ("panjang_atas", "Lingkar Pergelangan"),
+    ],
+    "Celamis": [
+        ("lingkar_dada", "Lingkar Pinggang"), ("panjang_atas", "Lingkar Pinggul"), ("lingkar_pinggang", "Panjang Celana"),
+    ],
+    "Abaya": [
+        ("lingkar_dada", "Lingkar Dada"), ("lingkar_pinggang", "Lingkar Pinggang"), ("panjang_atas", "Panjang Baju"),
+        ("ld_lengan", "Panjang Lengan"), ("pergelangan", "Lingkar Lengan"),
+    ],
+    "Oneset": [
+        ("panjang_atas", "Panjang Atas"), ("pergelangan", "Panjang Bawah"),
+        ("lingkar_dada", "Lingkar Dada"), ("lingkar_pinggang", "Lingkar Pinggang"),
+    ],
+    "Gamis": [
+        ("lingkar_dada", "Lingkar Dada"), ("lingkar_pinggang", "Lingkar Pinggang"), ("panjang_atas", "Panjang Baju"),
+        ("ld_lengan", "Panjang Lengan"), ("pergelangan", "Lingkar Lengan"),
+    ],
+}
+
 HARI_LIBUR_2026 = [
     ("2026-01-01", "Tahun Baru Masehi"),
     ("2026-01-16", "Isra Mikraj Nabi Muhammad SAW"),
@@ -1432,6 +1470,10 @@ def create_app():
             if kolom not in kolom_bb_transaksi:
                 db.session.execute(db.text(f"ALTER TABLE bahan_baku_transaksi ADD COLUMN {kolom} {tipe}"))
                 db.session.commit()
+        kolom_spek_ukuran = {c["name"] for c in db.inspect(db.engine).get_columns("produk_spek_ukuran")}
+        if "kategori" not in kolom_spek_ukuran:
+            db.session.execute(db.text("ALTER TABLE produk_spek_ukuran ADD COLUMN kategori VARCHAR(24)"))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -2403,13 +2445,21 @@ def create_app():
         spek_per_produk = {
             p.id: [
                 {
-                    "id": s.id, "size": s.size, "lingkar_dada": s.lingkar_dada, "panjang_atas": s.panjang_atas,
+                    "id": s.id, "size": s.size, "kategori": s.kategori or "",
+                    "lingkar_dada": s.lingkar_dada, "panjang_atas": s.panjang_atas,
                     "lingkar_pinggang": s.lingkar_pinggang, "ld_lengan": s.ld_lengan, "pergelangan": s.pergelangan,
                 }
                 for s in p.spek_ukuran_list
             ]
             for p in produk_list
         }
+        # Kelompokkan semua baris spek ukuran per kategori (bukan per produk) buat
+        # ditampilkan sbg tabel terpisah-pisah di "Kelola Spek Ukuran per Produk" --
+        # tiap kategori kolomnya beda (lihat KATEGORI_SPEK_FIELDS).
+        spek_by_kategori = {}
+        for p in produk_list:
+            for s in p.spek_ukuran_list:
+                spek_by_kategori.setdefault(s.kategori or "", []).append(s)
         # "bahanId_produkId" -> yard dibutuhkan per 1 pcs (dari menu Bahan Baku > Kebutuhan
         # per Produk) -- dipakai JS di halaman ini utk otomatis hitung Estimasi Produk Jadi
         # begitu Jenis Bahan + Peruntukan Produk + Panjang Bahan sudah diisi.
@@ -2429,6 +2479,7 @@ def create_app():
             bahan_list=bahan_list, produk_list=produk_list, riwayat=riwayat,
             daftar_kebutuhan=daftar_kebutuhan,
             spek_per_produk_json=spek_per_produk, kebutuhan_map_json=kebutuhan_map,
+            spek_by_kategori=spek_by_kategori, kategori_fields=KATEGORI_SPEK_FIELDS,
             tanggal_hari_ini=today_wib().isoformat(),
         )
 
@@ -2437,8 +2488,12 @@ def create_app():
     def produk_spek_ukuran_tambah(produk_id):
         produk = db.session.get(Produk, produk_id) or abort_404()
         size = request.form.get("size", "").strip() or "All Size"
+        kategori = request.form.get("kategori", "").strip()
+        if kategori not in KATEGORI_SPEK_FIELDS or not kategori:
+            flash("Pilih kategori produk dulu (Cadar/Khimar/Pashmina/dsb).", "danger")
+            return redirect(url_for("bahan_baku_cutting"))
         db.session.add(ProdukSpekUkuran(
-            produk_id=produk.id, size=size,
+            produk_id=produk.id, size=size, kategori=kategori,
             lingkar_dada=parse_angka_iklan(request.form.get("lingkar_dada")) or None,
             panjang_atas=parse_angka_iklan(request.form.get("panjang_atas")) or None,
             lingkar_pinggang=parse_angka_iklan(request.form.get("lingkar_pinggang")) or None,
@@ -2446,7 +2501,7 @@ def create_app():
             pergelangan=parse_angka_iklan(request.form.get("pergelangan")) or None,
         ))
         db.session.commit()
-        flash(f"Spek ukuran {size} untuk {produk.nama_produk} disimpan.", "success")
+        flash(f"Spek ukuran {kategori} - {size} untuk {produk.nama_produk} disimpan.", "success")
         return redirect(url_for("bahan_baku_cutting"))
 
     @app.route("/inventory/spek-ukuran/<int:spek_id>/hapus", methods=["POST"])
