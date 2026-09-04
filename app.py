@@ -2180,7 +2180,6 @@ def create_app():
     @admin_required
     def purchase_order_list():
         if request.method == "POST":
-            nomor_po = request.form.get("nomor_po", "").strip()
             vendor_id = request.form.get("vendor_id", type=int)
             vendor = db.session.get(Vendor, vendor_id) if vendor_id else None
             try:
@@ -2194,11 +2193,8 @@ def create_app():
                 except ValueError:
                     estimasi_selesai = None
 
-            if not nomor_po or not vendor or not tanggal_order:
-                flash("Nomor PO, Vendor, dan Tgl Order wajib diisi.", "danger")
-                return redirect(url_for("purchase_order_list"))
-            if PurchaseOrder.query.filter_by(nomor_po=nomor_po).first():
-                flash(f"Nomor PO {nomor_po} sudah dipakai, pakai nomor lain.", "danger")
+            if not vendor or not tanggal_order:
+                flash("Vendor dan Tgl Order wajib diisi.", "danger")
                 return redirect(url_for("purchase_order_list"))
 
             # -- baris Item Produk (opsional, boleh kosong semua) --
@@ -2228,11 +2224,17 @@ def create_app():
 
             total_biaya = sum(qty * (produk.modal or 0) for produk, _, _, qty in item_produk_rows)
             po = PurchaseOrder(
-                nomor_po=nomor_po, vendor_id=vendor.id, tanggal_order=tanggal_order,
+                # Nomor PO final (format dd/mm/yy/nomor-urut) baru bisa dipastikan setelah
+                # baris ini punya id asli -- placeholder unik sementara di sini, ditimpa di
+                # bawah sebelum commit. Pakai id (bukan hitungan jumlah PO) supaya nggak
+                # bentrok kalau ada PO lama yang sudah dihapus.
+                nomor_po=f"TEMP-{uuid.uuid4().hex}", vendor_id=vendor.id, tanggal_order=tanggal_order,
                 estimasi_selesai=estimasi_selesai, total_biaya=total_biaya,
             )
             db.session.add(po)
             db.session.flush()
+            nomor_po = f"{tanggal_order.strftime('%d/%m/%y')}/{po.id}"
+            po.nomor_po = nomor_po
 
             for produk, warna, size, qty in item_produk_rows:
                 db.session.add(PurchaseOrderItemProduk(
