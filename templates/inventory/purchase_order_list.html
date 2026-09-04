@@ -16,40 +16,83 @@
   {% endif %}
 </div>
 
-<div class="card p-3">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
-        <tr>
-          <th>Nomor PO</th>
-          <th>Vendor</th>
-          <th>Tgl Order</th>
-          <th>Estimasi Selesai</th>
-          <th class="text-end">Total Biaya</th>
-          <th class="text-end">Aksi</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for po in daftar %}
-        <tr>
-          <td class="fw-semibold">{{ po.nomor_po }}</td>
-          <td class="small">{{ po.vendor.nama_vendor }}</td>
-          <td class="small">{{ po.tanggal_order.strftime("%d/%m/%Y") }}</td>
-          <td class="small">{{ po.estimasi_selesai.strftime("%d/%m/%Y") if po.estimasi_selesai else "-" }}</td>
-          <td class="text-end small">{{ po.total_biaya | rupiah }}</td>
-          <td class="text-end">
-            <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="btn btn-sm btn-outline-secondary">Detail</a>
-            <form method="post" action="{{ url_for('purchase_order_hapus', po_id=po.id) }}" class="d-inline" onsubmit="return confirm('Hapus PO {{ po.nomor_po }}? Stok bahan yg kepotong akan dikembalikan.');">
-              <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
-            </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada Purchase Order. Klik "+ Buat PO Baru" untuk mulai.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<form method="get" class="card p-2 mb-3">
+  <div class="input-group">
+    <input type="text" name="q" class="form-control" placeholder="Cari nomor PO..." value="{{ q }}">
+    <button type="submit" class="btn btn-outline-secondary">🔍</button>
+    {% if q %}<a href="{{ url_for('purchase_order_list') }}" class="btn btn-outline-secondary">&times;</a>{% endif %}
   </div>
+</form>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <table class="table table-hover align-middle mb-0">
+    <thead>
+      <tr>
+        <th>No PO</th>
+        <th>Vendor</th>
+        <th style="min-width:260px;">Detail Item</th>
+        <th class="text-end">Total Biaya</th>
+        <th>Status</th>
+        <th>Pembayaran</th>
+        <th class="text-end">Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for po in daftar %}
+      <tr>
+        <td>
+          <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="text-decoration-none fw-semibold">{{ po.nomor_po }}</a>
+          <div class="text-muted small">{{ po.tanggal_order.strftime("%d/%m/%Y") }}</div>
+        </td>
+        <td class="small">{{ po.vendor.nama_vendor }}</td>
+        <td class="small">
+          <ul class="mb-1 ps-3">
+            {% for ip in po.item_produk_list %}
+            <li>
+              {{ ip.produk.nama_produk }}
+              {%- set ket = [] -%}
+              {%- if ip.warna %}{% set _ = ket.append(ip.warna) %}{% endif -%}
+              {%- if ip.size %}{% set _ = ket.append(ip.size) %}{% endif -%}
+              {%- if ket %} ({{ ket | join(", ") }}){% endif %} x {{ ip.qty }}
+            </li>
+            {% endfor %}
+          </ul>
+          {% if po.bahan_pakai_list %}
+          <div class="text-muted"><strong>Bahan:</strong>
+            {% for bp in po.bahan_pakai_list %}{{ bp.bahan_baku.nama_bahan }} ({{ "%.2f"|format(bp.qty_pakai) }} {{ bp.satuan }}){% if not loop.last %}, {% endif %}{% endfor %}
+          </div>
+          {% endif %}
+        </td>
+        <td class="text-end small text-nowrap">{{ po.total_biaya | rupiah }}</td>
+        <td>
+          {% set status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Dibatalkan": "#e2e3e5"} %}
+          <form method="post" action="{{ url_for('purchase_order_status_update', po_id=po.id) }}">
+            <select name="status" class="form-select form-select-sm border-0 fw-semibold" style="background-color: {{ status_bg.get(po.status, '#eee') }}; min-width:150px;" onchange="this.form.submit()">
+              {% for s in status_pilihan %}
+              <option value="{{ s }}" {{ 'selected' if po.status == s }}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        </td>
+        <td class="text-nowrap">
+          {% set bayar_bg = {"Belum Lunas": "#f8d7da", "Cicilan": "#fff3cd", "Lunas": "#d1e7dd"} %}
+          <span class="badge" style="background-color: {{ bayar_bg.get(po.status_pembayaran) }}; color:#212529;">{{ po.status_pembayaran }}</span>
+          {% if po.status_pembayaran != "Lunas" %}
+          <br><a href="#" data-bs-toggle="modal" data-bs-target="#modalBayar{{ po.id }}" class="small">Bayar</a>
+          {% if po.total_dibayar %}<div class="text-muted small">Sisa {{ po.sisa_bayar | rupiah }}</div>{% endif %}
+          {% endif %}
+        </td>
+        <td class="text-end">
+          <form method="post" action="{{ url_for('purchase_order_hapus', po_id=po.id) }}" onsubmit="return confirm('Hapus PO {{ po.nomor_po }}? Stok bahan yg kepotong akan dikembalikan.');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">🗑️</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-muted py-4">{{ "Tidak ada PO yang cocok dengan pencarian." if q else 'Belum ada Purchase Order. Klik "+ Buat PO Baru" untuk mulai.' }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 
 <div class="modal fade" id="modalBuatPO" tabindex="-1">
@@ -122,6 +165,50 @@
     </form>
   </div>
 </div>
+
+{% for po in daftar %}
+<div class="modal fade" id="modalBayar{{ po.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('purchase_order_pembayaran_tambah', po_id=po.id) }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Catat Pembayaran &mdash; {{ po.nomor_po }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">
+          Total Biaya {{ po.total_biaya | rupiah }} &middot; Sudah dibayar {{ po.total_dibayar | rupiah }} &middot;
+          Sisa <strong>{{ po.sisa_bayar | rupiah }}</strong>
+        </p>
+        <div class="mb-3">
+          <label class="form-label small">Jumlah Dibayar</label>
+          <input type="number" min="1" step="1" name="jumlah" class="form-control" value="{{ po.sisa_bayar }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small">Tanggal</label>
+          <input type="date" name="tanggal" class="form-control" value="{{ tanggal_hari_ini }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small">Akun Pembayaran <span class="text-muted">(opsional)</span></label>
+          <select name="akun_pembayaran_id" class="form-select">
+            <option value="">- Pilih akun -</option>
+            {% for a in daftar_akun %}
+            <option value="{{ a.id }}">{{ a.nama_akun }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small">Catatan <span class="text-muted">(opsional)</span></label>
+          <input type="text" name="catatan" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Simpan Pembayaran</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
 
 {% endblock %}
 

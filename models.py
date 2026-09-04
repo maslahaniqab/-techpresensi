@@ -343,6 +343,8 @@ class PurchaseOrder(db.Model):
     tanggal_order = db.Column(db.Date, nullable=False)
     estimasi_selesai = db.Column(db.Date)
     total_biaya = db.Column(db.Integer, nullable=False, default=0)
+    # Menunggu Produksi -> Diproses -> Selesai Produksi, atau Dibatalkan kapan saja
+    status = db.Column(db.String(24), nullable=False, default="Menunggu Produksi")
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
     vendor = db.relationship("Vendor")
@@ -354,6 +356,26 @@ class PurchaseOrder(db.Model):
         "PurchaseOrderBahanPakai", backref="po", cascade="all, delete-orphan",
         order_by="PurchaseOrderBahanPakai.id",
     )
+    pembayaran_list = db.relationship(
+        "PurchaseOrderPembayaran", backref="po", cascade="all, delete-orphan",
+        order_by="PurchaseOrderPembayaran.tanggal.desc()",
+    )
+
+    @property
+    def total_dibayar(self):
+        return sum(p.jumlah for p in self.pembayaran_list)
+
+    @property
+    def sisa_bayar(self):
+        return max(self.total_biaya - self.total_dibayar, 0)
+
+    @property
+    def status_pembayaran(self):
+        if self.total_dibayar <= 0:
+            return "Belum Lunas"
+        if self.total_dibayar < self.total_biaya:
+            return "Cicilan"
+        return "Lunas"
 
 
 class PurchaseOrderItemProduk(db.Model):
@@ -378,6 +400,20 @@ class PurchaseOrderBahanPakai(db.Model):
     satuan = db.Column(db.String(16))  # snapshot satuan bahan saat itu
 
     bahan_baku = db.relationship("BahanBaku")
+
+
+class PurchaseOrderPembayaran(db.Model):
+    """Catatan pembayaran (bisa dicicil) ke vendor utk 1 Purchase Order -- status
+    Belum Lunas/Cicilan/Lunas di PurchaseOrder dihitung otomatis dari total baris ini."""
+    id = db.Column(db.Integer, primary_key=True)
+    purchase_order_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    jumlah = db.Column(db.Integer, nullable=False, default=0)
+    akun_pembayaran_id = db.Column(db.Integer, db.ForeignKey("akun_pembayaran.id"))
+    catatan = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    akun_pembayaran = db.relationship("AkunPembayaran")
 
 
 class IklanMarketplace(db.Model):

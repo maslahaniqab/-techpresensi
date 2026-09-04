@@ -46,7 +46,7 @@ from models import (
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
-    PurchaseOrderBahanPakai,
+    PurchaseOrderBahanPakai, PurchaseOrderPembayaran,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1475,6 +1475,12 @@ def create_app():
         if "kategori" not in kolom_spek_ukuran:
             db.session.execute(db.text("ALTER TABLE produk_spek_ukuran ADD COLUMN kategori VARCHAR(24)"))
             db.session.commit()
+        kolom_po = {c["name"] for c in db.inspect(db.engine).get_columns("purchase_order")}
+        if "status" not in kolom_po:
+            db.session.execute(db.text(
+                "ALTER TABLE purchase_order ADD COLUMN status VARCHAR(24) NOT NULL DEFAULT 'Menunggu Produksi'"
+            ))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -2308,10 +2314,15 @@ def create_app():
             flash(pesan, kategori)
             return redirect(url_for("purchase_order_list"))
 
-        daftar = PurchaseOrder.query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
+        q = request.args.get("q", "").strip()
+        query = PurchaseOrder.query
+        if q:
+            query = query.filter(PurchaseOrder.nomor_po.ilike(f"%{q}%"))
+        daftar = query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
         daftar_vendor = Vendor.query.order_by(Vendor.nama_vendor).all()
         daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
         daftar_bahan = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
+        daftar_akun = AkunPembayaran.query.order_by(AkunPembayaran.nama_akun).all()
         produk_json = {p.id: {"nama": p.nama_produk, "modal": p.modal or 0} for p in daftar_produk}
         bahan_json = {
             b.id: {"nama": b.nama_bahan, "stok": b.stok_saat_ini or 0, "satuan": b.satuan} for b in daftar_bahan
@@ -2319,8 +2330,9 @@ def create_app():
         return render_template(
             "inventory/purchase_order_list.html",
             daftar=daftar, daftar_vendor=daftar_vendor, daftar_produk=daftar_produk,
-            daftar_bahan=daftar_bahan, produk_json=produk_json, bahan_json=bahan_json,
-            tanggal_hari_ini=today_wib().isoformat(),
+            daftar_bahan=daftar_bahan, daftar_akun=daftar_akun, produk_json=produk_json, bahan_json=bahan_json,
+            tanggal_hari_ini=today_wib().isoformat(), q=q,
+            status_pilihan=["Menunggu Produksi", "Diproses", "Selesai Produksi", "Dibatalkan"],
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>")
@@ -2343,6 +2355,59 @@ def create_app():
         db.session.commit()
         flash(f"Purchase Order {nomor_po} dihapus, stok bahan yg kepotong sudah dikembalikan.", "info")
         return redirect(url_for("purchase_order_list"))
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/status", methods=["POST"])
+    @admin_required
+    def purchase_order_status_update(po_id):
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        status = request.form.get("status", "")
+        if status not in ("Menunggu Produksi", "Diproses", "Selesai Produksi", "Dibatalkan"):
+            flash("Status tidak valid.", "danger")
+            return redirect(url_for("purchase_order_list"))
+        po.status = status
+        db.session.commit()
+        flash(f"Status PO {po.nomor_po} diperbarui jadi {status}.", "success")
+        return redirect(url_for("purchase_order_list"))
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/pembayaran/tambah", methods=["POST"])
+    @admin_required
+    def purchase_order_pembayaran_tambah(po_id):
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        jumlah = round(parse_angka_iklan(request.form.get("jumlah")))
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = today_wib()
+        akun_id = request.form.get("akun_pembayaran_id", type=int)
+        akun = db.session.get(AkunPembayaran, akun_id) if akun_id else None
+        catatan = request.form.get("catatan", "").strip()
+
+        if jumlah <= 0:
+            flash("Isi jumlah pembayaran (harus lebih dari 0).", "danger")
+            return redirect(url_for("purchase_order_list"))
+
+        db.session.add(PurchaseOrderPembayaran(
+            purchase_order_id=po.id, tanggal=tanggal, jumlah=jumlah,
+            akun_pembayaran_id=akun.id if akun else None, catatan=catatan,
+        ))
+        db.session.commit()
+        sisa = po.sisa_bayar
+        flash(
+            f"Pembayaran Rp {jumlah:,.0f}".replace(",", ".") + f" utk PO {po.nomor_po} dicatat. "
+            + (f"Sisa Rp {sisa:,.0f}".replace(",", ".") if sisa > 0 else "PO ini sudah lunas."),
+            "success",
+        )
+        return redirect(url_for("purchase_order_list"))
+
+    @app.route("/inventory/master-data/purchase-order/pembayaran/<int:pembayaran_id>/hapus", methods=["POST"])
+    @admin_required
+    def purchase_order_pembayaran_hapus(pembayaran_id):
+        p = db.session.get(PurchaseOrderPembayaran, pembayaran_id) or abort_404()
+        po_id = p.purchase_order_id
+        db.session.delete(p)
+        db.session.commit()
+        flash("Catatan pembayaran dihapus.", "info")
+        return redirect(url_for("purchase_order_detail", po_id=po_id))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required
