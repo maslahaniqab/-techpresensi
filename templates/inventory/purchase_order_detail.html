@@ -13,7 +13,10 @@
       Pembayaran: <strong>{{ po.status_pembayaran }}</strong>
     </p>
   </div>
-  <a href="{{ url_for('purchase_order_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Purchase Order</a>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('purchase_order_pembayaran', po_id=po.id) }}" class="btn btn-success btn-sm">💵 Pembayaran</a>
+    <a href="{{ url_for('purchase_order_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Purchase Order</a>
+  </div>
 </div>
 
 <div class="row g-3">
@@ -65,35 +68,12 @@
   </div>
 </div>
 
-<div class="text-end fw-semibold mt-3">Total Biaya: {{ po.total_biaya | rupiah }}</div>
-
-<div class="card p-3 mt-3">
-  <div class="fw-semibold mb-2">💳 Riwayat Pembayaran</div>
-  <div class="table-responsive">
-    <table class="table table-sm align-middle mb-0">
-      <thead><tr><th>Tanggal</th><th class="text-end">Jumlah</th><th>Akun</th><th>Catatan</th><th class="text-end">Aksi</th></tr></thead>
-      <tbody>
-        {% for p in po.pembayaran_list %}
-        <tr>
-          <td class="small">{{ p.tanggal.strftime("%d/%m/%Y") }}</td>
-          <td class="text-end small">{{ p.jumlah | rupiah }}</td>
-          <td class="small">{{ p.akun_pembayaran.nama_akun if p.akun_pembayaran else "-" }}</td>
-          <td class="small text-muted">{{ p.catatan or "-" }}</td>
-          <td class="text-end">
-            <form method="post" action="{{ url_for('purchase_order_pembayaran_hapus', pembayaran_id=p.id) }}" onsubmit="return confirm('Hapus catatan pembayaran ini?');">
-              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
-            </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="text-center text-muted py-3">Belum ada pembayaran tercatat.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <div class="small text-muted">
+    Sudah dibayar {{ po.total_dibayar | rupiah }} &middot; Sisa <strong>{{ po.sisa_bayar | rupiah }}</strong> &middot;
+    <a href="{{ url_for('purchase_order_pembayaran', po_id=po.id) }}">Lihat/catat pembayaran &rarr;</a>
   </div>
-  <div class="text-end small text-muted mt-2">
-    Sudah dibayar {{ po.total_dibayar | rupiah }} &middot; Sisa <strong>{{ po.sisa_bayar | rupiah }}</strong>
-  </div>
+  <div class="fw-semibold">Total Biaya: {{ po.total_biaya | rupiah }}</div>
 </div>
 
 {% endblock %}

@@ -409,6 +409,9 @@ class PurchaseOrderPembayaran(db.Model):
     purchase_order_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"), nullable=False)
     tanggal = db.Column(db.Date, nullable=False)
     jumlah = db.Column(db.Integer, nullable=False, default=0)
+    # Kasbon = uang muka/DP ke vendor sblm produksi kelar, Cicilan = bayar bertahap,
+    # Pelunasan = pembayaran yg nutup sisa tagihan
+    metode = db.Column(db.String(16), nullable=False, default="Cicilan")
     akun_pembayaran_id = db.Column(db.Integer, db.ForeignKey("akun_pembayaran.id"))
     catatan = db.Column(db.String(256))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)

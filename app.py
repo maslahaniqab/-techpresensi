@@ -1481,6 +1481,12 @@ def create_app():
                 "ALTER TABLE purchase_order ADD COLUMN status VARCHAR(24) NOT NULL DEFAULT 'Menunggu Produksi'"
             ))
             db.session.commit()
+        kolom_po_pembayaran = {c["name"] for c in db.inspect(db.engine).get_columns("purchase_order_pembayaran")}
+        if "metode" not in kolom_po_pembayaran:
+            db.session.execute(db.text(
+                "ALTER TABLE purchase_order_pembayaran ADD COLUMN metode VARCHAR(16) NOT NULL DEFAULT 'Cicilan'"
+            ))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -2341,6 +2347,16 @@ def create_app():
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         return render_template("inventory/purchase_order_detail.html", po=po)
 
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/pembayaran")
+    @admin_required
+    def purchase_order_pembayaran(po_id):
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        daftar_akun = AkunPembayaran.query.order_by(AkunPembayaran.nama_akun).all()
+        return render_template(
+            "inventory/purchase_order_pembayaran.html",
+            po=po, daftar_akun=daftar_akun, tanggal_hari_ini=today_wib().isoformat(),
+        )
+
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/hapus", methods=["POST"])
     @admin_required
     def purchase_order_hapus(po_id):
@@ -2378,26 +2394,29 @@ def create_app():
             tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
         except ValueError:
             tanggal = today_wib()
+        metode = request.form.get("metode", "")
+        if metode not in ("Kasbon", "Cicilan", "Pelunasan"):
+            metode = "Cicilan"
         akun_id = request.form.get("akun_pembayaran_id", type=int)
         akun = db.session.get(AkunPembayaran, akun_id) if akun_id else None
         catatan = request.form.get("catatan", "").strip()
 
         if jumlah <= 0:
             flash("Isi jumlah pembayaran (harus lebih dari 0).", "danger")
-            return redirect(url_for("purchase_order_list"))
+            return redirect(url_for("purchase_order_pembayaran", po_id=po.id))
 
         db.session.add(PurchaseOrderPembayaran(
-            purchase_order_id=po.id, tanggal=tanggal, jumlah=jumlah,
+            purchase_order_id=po.id, tanggal=tanggal, jumlah=jumlah, metode=metode,
             akun_pembayaran_id=akun.id if akun else None, catatan=catatan,
         ))
         db.session.commit()
         sisa = po.sisa_bayar
         flash(
-            f"Pembayaran Rp {jumlah:,.0f}".replace(",", ".") + f" utk PO {po.nomor_po} dicatat. "
+            f"{metode} Rp {jumlah:,.0f}".replace(",", ".") + f" utk PO {po.nomor_po} dicatat. "
             + (f"Sisa Rp {sisa:,.0f}".replace(",", ".") if sisa > 0 else "PO ini sudah lunas."),
             "success",
         )
-        return redirect(url_for("purchase_order_list"))
+        return redirect(url_for("purchase_order_pembayaran", po_id=po.id))
 
     @app.route("/inventory/master-data/purchase-order/pembayaran/<int:pembayaran_id>/hapus", methods=["POST"])
     @admin_required
@@ -2407,7 +2426,7 @@ def create_app():
         db.session.delete(p)
         db.session.commit()
         flash("Catatan pembayaran dihapus.", "info")
-        return redirect(url_for("purchase_order_detail", po_id=po_id))
+        return redirect(url_for("purchase_order_pembayaran", po_id=po_id))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required

@@ -77,10 +77,8 @@
         <td class="text-nowrap">
           {% set bayar_bg = {"Belum Lunas": "#f8d7da", "Cicilan": "#fff3cd", "Lunas": "#d1e7dd"} %}
           <span class="badge" style="background-color: {{ bayar_bg.get(po.status_pembayaran) }}; color:#212529;">{{ po.status_pembayaran }}</span>
-          {% if po.status_pembayaran != "Lunas" %}
-          <br><a href="#" data-bs-toggle="modal" data-bs-target="#modalBayar{{ po.id }}" class="small">Bayar</a>
-          {% if po.total_dibayar %}<div class="text-muted small">Sisa {{ po.sisa_bayar | rupiah }}</div>{% endif %}
-          {% endif %}
+          <br><a href="{{ url_for('purchase_order_pembayaran', po_id=po.id) }}" class="small">{{ "Bayar" if po.status_pembayaran != "Lunas" else "Riwayat" }}</a>
+          {% if po.total_dibayar and po.status_pembayaran != "Lunas" %}<div class="text-muted small">Sisa {{ po.sisa_bayar | rupiah }}</div>{% endif %}
         </td>
         <td class="text-end">
           <form method="post" action="{{ url_for('purchase_order_hapus', po_id=po.id) }}" onsubmit="return confirm('Hapus PO {{ po.nomor_po }}? Stok bahan yg kepotong akan dikembalikan.');">
@@ -165,50 +163,6 @@
     </form>
   </div>
 </div>
-
-{% for po in daftar %}
-<div class="modal fade" id="modalBayar{{ po.id }}" tabindex="-1">
-  <div class="modal-dialog">
-    <form method="post" action="{{ url_for('purchase_order_pembayaran_tambah', po_id=po.id) }}" class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Catat Pembayaran &mdash; {{ po.nomor_po }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p class="small text-muted">
-          Total Biaya {{ po.total_biaya | rupiah }} &middot; Sudah dibayar {{ po.total_dibayar | rupiah }} &middot;
-          Sisa <strong>{{ po.sisa_bayar | rupiah }}</strong>
-        </p>
-        <div class="mb-3">
-          <label class="form-label small">Jumlah Dibayar</label>
-          <input type="number" min="1" step="1" name="jumlah" class="form-control" value="{{ po.sisa_bayar }}" required>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small">Tanggal</label>
-          <input type="date" name="tanggal" class="form-control" value="{{ tanggal_hari_ini }}" required>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small">Akun Pembayaran <span class="text-muted">(opsional)</span></label>
-          <select name="akun_pembayaran_id" class="form-select">
-            <option value="">- Pilih akun -</option>
-            {% for a in daftar_akun %}
-            <option value="{{ a.id }}">{{ a.nama_akun }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small">Catatan <span class="text-muted">(opsional)</span></label>
-          <input type="text" name="catatan" class="form-control">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="submit" class="btn btn-primary">Simpan Pembayaran</button>
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
-      </div>
-    </form>
-  </div>
-</div>
-{% endfor %}
 
 {% endblock %}
 
