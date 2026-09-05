@@ -2748,15 +2748,9 @@ def create_app():
         kebutuhan_tanpa_ukuran = [
             k for k in daftar_kebutuhan if f"{k.bahan_baku_id}_{k.produk_id}" not in kombinasi_ada_ukuran
         ]
-        riwayat = (
-            BahanBakuTransaksi.query.filter_by(jenis="Keluar")
-            .join(BahanBaku)
-            .order_by(BahanBakuTransaksi.tanggal.desc(), BahanBakuTransaksi.id.desc())
-            .limit(50).all()
-        )
         return render_template(
             "inventory/bahan_baku_cutting.html",
-            bahan_list=bahan_list, produk_list=produk_list, riwayat=riwayat,
+            bahan_list=bahan_list, produk_list=produk_list,
             daftar_kebutuhan=daftar_kebutuhan, kebutuhan_tanpa_ukuran=kebutuhan_tanpa_ukuran,
             spek_per_produk_json=spek_per_produk, kebutuhan_map_json=kebutuhan_map,
             spek_by_kategori=spek_by_kategori, kategori_fields=KATEGORI_SPEK_FIELDS,

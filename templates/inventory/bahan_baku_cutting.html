@@ -222,56 +222,6 @@
   {% endif %}
 </div>
 
-<div class="text-muted small text-uppercase mb-2">Riwayat Cutting &amp; Produksi</div>
-<div class="card p-3" style="overflow-x:auto;">
-  <div style="overflow:auto; max-height: 420px;">
-  <table class="table table-sm align-middle mb-0">
-    <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
-      <tr>
-        <th>Tanggal</th>
-        <th>Jenis Bahan</th>
-        <th class="text-end">Panjang Dipakai</th>
-        <th>Produk</th>
-        <th>Vendor</th>
-        <th class="text-end">Produk Jadi</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in riwayat %}
-      <tr>
-        <td class="small">{{ t.tanggal.strftime("%d/%m/%Y") }}</td>
-        <td class="small">{{ t.bahan_baku.nama_bahan }}</td>
-        <td class="text-end small">{{ "%.2f"|format(t.jumlah_yard) }} Yard</td>
-        <td class="small">{{ t.produk.nama_produk if t.produk else "-" }}</td>
-        <td class="small">{{ t.vendor or "-" }}</td>
-        <td class="text-end small">
-          {% if t.produk_jadi_pcs %}
-          <span id="pj-display-{{ t.id }}">
-            {{ t.produk_jadi_pcs }} Pcs
-            <a href="#" class="small ms-1" title="Koreksi manual (admin)"
-               onclick="document.getElementById('pj-display-{{ t.id }}').classList.add('d-none'); document.getElementById('pj-form-{{ t.id }}').classList.remove('d-none'); return false;">✎</a>
-          </span>
-          <form method="post" action="{{ url_for('bahan_baku_transaksi_isi_produk_jadi', transaksi_id=t.id) }}" class="d-none d-flex gap-1 justify-content-end" id="pj-form-{{ t.id }}">
-            <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control form-control-sm" style="width:70px;" value="{{ t.produk_jadi_pcs }}">
-            <button type="submit" class="btn btn-sm btn-outline-primary">Simpan</button>
-          </form>
-          {% else %}
-          <form method="post" action="{{ url_for('bahan_baku_transaksi_isi_produk_jadi', transaksi_id=t.id) }}" class="d-flex gap-1 justify-content-end">
-            <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control form-control-sm" style="width:70px;" placeholder="isi">
-            <button type="submit" class="btn btn-sm btn-outline-primary">Simpan</button>
-          </form>
-          <div class="text-muted" style="font-size:.7rem;">otomatis kalau Kebutuhan sudah diisi</div>
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">Belum ada riwayat cutting/produksi.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
 <script>
 (function () {
   var SPEK_DATA = {{ spek_per_produk_json | tojson }};
