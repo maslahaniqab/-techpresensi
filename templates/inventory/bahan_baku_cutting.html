@@ -182,9 +182,12 @@
             <td class="small">{{ s.bahan_baku.nama_bahan if s.bahan_baku else "-" }}</td>
             <td class="text-end small">{{ "%.2f"|format(s.yard_per_pcs) if s.yard_per_pcs else "-" }}</td>
             <td class="text-end">
-              <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
-                <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
-              </form>
+              <div class="d-flex flex-column gap-1 align-items-end">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditSpek{{ s.id }}">✎</button>
+                <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+                </form>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -192,6 +195,58 @@
       </table>
     </div>
   </div>
+  {% for s in baris_list %}
+  <div class="modal fade" id="modalEditSpek{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog">
+      <form method="post" action="{{ url_for('produk_spek_ukuran_edit', spek_id=s.id) }}" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Ukuran &mdash; {{ s.produk.nama_produk }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small">Kategori</label>
+            <input type="text" class="form-control form-control-sm" value="{{ s.kategori }}" disabled>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Size</label>
+            <select name="size" class="form-select form-select-sm">
+              <option value="All Size" {{ 'selected' if s.size == 'All Size' }}>All Size</option>
+              <option value="Jumbo" {{ 'selected' if s.size == 'Jumbo' }}>Jumbo</option>
+              <option value="Standar" {{ 'selected' if s.size == 'Standar' }}>Standar</option>
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            {% for slot, label in fields %}
+            <div class="col-6">
+              <label class="form-label small">{{ label }}</label>
+              <input type="number" step="0.1" name="{{ slot }}" class="form-control form-control-sm" value="{{ s[slot] if s[slot] is not none else '' }}">
+            </div>
+            {% endfor %}
+          </div>
+          <hr class="my-2">
+          <div class="mb-2">
+            <label class="form-label small">Bahan &amp; Yard per Pcs <span class="text-muted">(opsional)</span></label>
+            <select name="bahan_baku_id" class="form-select form-select-sm bahan-search">
+              <option value="">- Nggak diisi -</option>
+              {% for b in bahan_list %}
+              <option value="{{ b.id }}" {{ 'selected' if s.bahan_baku_id == b.id }}>{{ b.nama_bahan }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="input-group input-group-sm">
+            <input type="number" min="0" step="0.01" name="yard_per_pcs" class="form-control form-control-sm" placeholder="Contoh: 2.5" value="{{ s.yard_per_pcs if s.yard_per_pcs is not none else '' }}">
+            <span class="input-group-text">Yard/Pcs</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
   {% endfor %}
   {% endif %}
 

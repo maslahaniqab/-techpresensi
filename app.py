@@ -1216,6 +1216,28 @@ def haversine_meter(lat1, lng1, lat2, lng2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def upsert_kebutuhan_yard(bahan, produk, yard_per_pcs):
+    """Simpan/timpa BahanBakuKebutuhan(bahan, produk) = yard_per_pcs, lalu backfill
+    Produk Jadi transaksi Keluar lama yg cocok tapi masih kosong. Dipakai bareng dari
+    form "Kelola Ukuran & Kebutuhan Yard" (baik pas Simpan/tambah baru maupun Edit)
+    biar logikanya nggak keduplikat. Return potongan kalimat buat disambung ke flash."""
+    sudah_ada = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
+    if sudah_ada:
+        sudah_ada.jumlah_yard = yard_per_pcs
+    else:
+        db.session.add(BahanBakuKebutuhan(bahan_baku_id=bahan.id, produk_id=produk.id, jumlah_yard=yard_per_pcs))
+    pesan = f" Kebutuhan {bahan.nama_bahan} {yard_per_pcs:g} {bahan.satuan}/pcs ikut kesimpan."
+
+    transaksi_kosong = BahanBakuTransaksi.query.filter_by(
+        bahan_baku_id=bahan.id, produk_id=produk.id, jenis="Keluar", produk_jadi_pcs=None,
+    ).all()
+    for t in transaksi_kosong:
+        t.produk_jadi_pcs = round(t.jumlah_yard / yard_per_pcs)
+    if transaksi_kosong:
+        pesan += f" {len(transaksi_kosong)} transaksi Keluar lama otomatis terisi Produk Jadi-nya."
+    return pesan
+
+
 def isi_otomatis_produk_jadi_kosong():
     """Self-heal: cari transaksi Keluar yang Produk Jadi-nya masih kosong, lalu coba
     hitung otomatis pakai rumus (yard dipakai transaksi / Kebutuhan Yard per Pcs).
@@ -2791,22 +2813,40 @@ def create_app():
             yard_per_pcs=yard_per_pcs if (bahan and yard_per_pcs) else None,
         ))
         pesan = f"Ukuran {kategori} - {size} untuk {produk.nama_produk} disimpan."
-
         if bahan and yard_per_pcs:
-            sudah_ada = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
-            if sudah_ada:
-                sudah_ada.jumlah_yard = yard_per_pcs
-            else:
-                db.session.add(BahanBakuKebutuhan(bahan_baku_id=bahan.id, produk_id=produk.id, jumlah_yard=yard_per_pcs))
-            pesan += f" Kebutuhan {bahan.nama_bahan} {yard_per_pcs:g} {bahan.satuan}/pcs ikut kesimpan."
+            pesan += upsert_kebutuhan_yard(bahan, produk, yard_per_pcs)
 
-            transaksi_kosong = BahanBakuTransaksi.query.filter_by(
-                bahan_baku_id=bahan.id, produk_id=produk.id, jenis="Keluar", produk_jadi_pcs=None,
-            ).all()
-            for t in transaksi_kosong:
-                t.produk_jadi_pcs = round(t.jumlah_yard / yard_per_pcs)
-            if transaksi_kosong:
-                pesan += f" {len(transaksi_kosong)} transaksi Keluar lama otomatis terisi Produk Jadi-nya."
+        db.session.commit()
+        flash(pesan, "success")
+        return redirect(url_for("bahan_baku_cutting"))
+
+    @app.route("/inventory/spek-ukuran/<int:spek_id>/edit", methods=["POST"])
+    @admin_required
+    def produk_spek_ukuran_edit(spek_id):
+        """Edit baris ukuran (+ opsional Bahan/Yard per Pcs-nya) yang sudah ada --
+        kategori-nya tetap (nentuin kolom ukuran mana yg berlaku), yg bisa diubah:
+        Size, angka-angka ukurannya, dan Bahan+Yard per Pcs."""
+        s = db.session.get(ProdukSpekUkuran, spek_id) or abort_404()
+        size = request.form.get("size", "").strip() or "All Size"
+        s.size = size
+        s.lingkar_dada = parse_angka_iklan(request.form.get("lingkar_dada")) or None
+        s.panjang_atas = parse_angka_iklan(request.form.get("panjang_atas")) or None
+        s.lingkar_pinggang = parse_angka_iklan(request.form.get("lingkar_pinggang")) or None
+        s.ld_lengan = parse_angka_iklan(request.form.get("ld_lengan")) or None
+        s.pergelangan = parse_angka_iklan(request.form.get("pergelangan")) or None
+
+        bahan_id = request.form.get("bahan_baku_id", type=int)
+        bahan = db.session.get(BahanBaku, bahan_id) if bahan_id else None
+        yard_per_pcs = parse_angka_iklan(request.form.get("yard_per_pcs")) or None
+
+        pesan = f"Ukuran {s.kategori} - {size} untuk {s.produk.nama_produk} diperbarui."
+        if bahan and yard_per_pcs:
+            s.bahan_baku_id, s.yard_per_pcs = bahan.id, yard_per_pcs
+            pesan += upsert_kebutuhan_yard(bahan, s.produk, yard_per_pcs)
+        else:
+            # Dikosongin -- baris Kebutuhan lama (kalau ada) TIDAK dihapus, cuma
+            # tautannya dari sini dilepas (bakal muncul lagi di "tanpa ukuran").
+            s.bahan_baku_id, s.yard_per_pcs = None, None
 
         db.session.commit()
         flash(pesan, "success")
