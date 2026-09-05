@@ -305,6 +305,7 @@ class Vendor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nama_vendor = db.Column(db.String(128), nullable=False)
     jenis = db.Column(db.String(24), nullable=False, default="Keduanya")  # Penjahit / Suplier Kain / Keduanya
+    kode = db.Column(db.String(4))  # kode 2 digit dipakai di nomor PO, mis. "01" = Yuli Cigondewah
     kontak = db.Column(db.String(64))
     alamat = db.Column(db.String(256))
     catatan = db.Column(db.String(256))

@@ -112,16 +112,17 @@
           <div class="col-md-3">
             <label class="form-label small mb-1">Nomor PO</label>
             <input type="text" class="form-control" value="Dibuat otomatis" disabled>
-            <div class="form-text">Format: tgl order/nomor urut, mis. 04/09/26/8</div>
+            <div class="form-text">Format: PO-tgl-kodevendor+urut, mis. PO-04/09/2026-01001</div>
           </div>
           <div class="col-md-3">
             <label class="form-label small mb-1">Vendor *</label>
             <select name="vendor_id" class="form-select" required>
               <option value="">Pilih Vendor</option>
               {% for v in daftar_vendor %}
-              <option value="{{ v.id }}">{{ v.nama_vendor }}</option>
+              <option value="{{ v.id }}" {{ 'disabled' if not v.kode }}>{{ v.nama_vendor }}{% if v.kode %} ({{ v.kode }}){% else %} &mdash; kode belum diisi{% endif %}</option>
               {% endfor %}
             </select>
+            <div class="form-text">Vendor tanpa Kode Vendor nggak bisa dipilih &mdash; isi dulu di Master Data &rarr; Vendor.</div>
           </div>
           <div class="col-md-3">
             <label class="form-label small mb-1">Tgl Order *</label>

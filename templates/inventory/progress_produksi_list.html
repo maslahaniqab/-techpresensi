@@ -1,10 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Progress Produksi{% endblock %}
+{% block title %}Produksi{% endblock %}
 {% block content %}
 
-<div class="mb-3">
-  <h3 class="mb-1">Progress Produksi (Per Item)</h3>
-  <p class="text-muted small mb-0">Update progress jahit &amp; finishing per varian produk di tiap Purchase Order. Status PO otomatis ngikutin progress ini.</p>
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Produksi</h3>
+    <p class="text-muted small mb-0">Riwayat &amp; progress produksi per Purchase Order &mdash; tiap PO otomatis jadi 1 catatan produksi (historikal dari nomor PO). Update progress jahit &amp; finishing per varian produk di sini, status PO otomatis ngikutin.</p>
+  </div>
+  <a href="{{ url_for('bahan_baku_cutting') }}" class="btn btn-outline-secondary btn-sm text-nowrap">⚙️ Kelola Kebutuhan &amp; Spek Ukuran</a>
 </div>
 
 <form method="get" class="card p-2 mb-3">
@@ -32,8 +35,8 @@
       {% for po in daftar %}
       <tr>
         <td>
-          <span class="fw-semibold">{{ po.nomor_po }}</span>
-          <div class="text-muted small">{{ po.tanggal_order.strftime("%d/%m/%Y") }}</div>
+          <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="fw-semibold text-decoration-none">{{ po.nomor_po }}</a>
+          <div class="text-muted small">{{ po.vendor.nama_vendor }} &middot; {{ po.tanggal_order.strftime("%d/%m/%Y") }}</div>
         </td>
         <td class="small">
           {% for ip in po.item_produk_list %}

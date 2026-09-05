@@ -1526,6 +1526,10 @@ def create_app():
                     f"ALTER TABLE purchase_order_item_produk ADD COLUMN {kolom} INTEGER NOT NULL DEFAULT 0"
                 ))
                 db.session.commit()
+        kolom_vendor = {c["name"] for c in db.inspect(db.engine).get_columns("vendor")}
+        if "kode" not in kolom_vendor:
+            db.session.execute(db.text("ALTER TABLE vendor ADD COLUMN kode VARCHAR(4)"))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -2203,6 +2207,7 @@ def create_app():
             db.session.add(Vendor(
                 nama_vendor=nama_vendor,
                 jenis=request.form.get("jenis", "Keduanya"),
+                kode=request.form.get("kode", "").strip() or None,
                 kontak=request.form.get("kontak", "").strip(),
                 alamat=request.form.get("alamat", "").strip(),
                 catatan=request.form.get("catatan", "").strip(),
@@ -2223,6 +2228,7 @@ def create_app():
             return redirect(url_for("vendor_list"))
         v.nama_vendor = nama_vendor
         v.jenis = request.form.get("jenis", "Keduanya")
+        v.kode = request.form.get("kode", "").strip() or None
         v.kontak = request.form.get("kontak", "").strip()
         v.alamat = request.form.get("alamat", "").strip()
         v.catatan = request.form.get("catatan", "").strip()
@@ -2355,6 +2361,15 @@ def create_app():
                 flash("Vendor dan Tgl Order wajib diisi.", "danger")
                 return redirect(url_for("purchase_order_list"))
 
+            kode_vendor = (vendor.kode or "").strip()
+            if not kode_vendor:
+                flash(
+                    f"Vendor {vendor.nama_vendor} belum punya Kode Vendor (2 digit, mis. 01). "
+                    "Isi dulu di Master Data → Vendor sebelum bikin PO, biar nomor PO-nya bisa kebentuk.",
+                    "danger",
+                )
+                return redirect(url_for("purchase_order_list"))
+
             # -- baris Item Produk (opsional, boleh kosong semua) --
             item_produk_rows = []
             for produk_id_s, warna, size, qty_s in zip(
@@ -2380,18 +2395,29 @@ def create_app():
                 flash("Isi minimal 1 baris Pemakaian Bahan (bahan + qty pakai) sebelum disimpan.", "danger")
                 return redirect(url_for("purchase_order_list"))
 
+            # Nomor urut PO ini KHUSUS untuk vendor ybs (bukan global), sesuai jumlah PO
+            # yang sudah pernah dibuat vendor ini -- dihitung SEBELUM po baru ini dibuat
+            # biar nggak ikut kehitung sendiri (off-by-one).
+            urutan = PurchaseOrder.query.filter_by(vendor_id=vendor.id).count()
+
             total_biaya = sum(qty * (produk.modal or 0) for produk, _, _, qty in item_produk_rows)
             po = PurchaseOrder(
-                # Nomor PO final (format dd/mm/yy/nomor-urut) baru bisa dipastikan setelah
-                # baris ini punya id asli -- placeholder unik sementara di sini, ditimpa di
-                # bawah sebelum commit. Pakai id (bukan hitungan jumlah PO) supaya nggak
-                # bentrok kalau ada PO lama yang sudah dihapus.
+                # Nomor PO final (format PO-dd/mm/yyyy-KKNNN, KK=kode vendor, NNN=urutan
+                # per vendor) baru dibentuk di bawah -- placeholder unik dulu di sini biar
+                # kolom unique nggak bentrok sebelum di-flush.
                 nomor_po=f"TEMP-{uuid.uuid4().hex}", vendor_id=vendor.id, tanggal_order=tanggal_order,
                 estimasi_selesai=estimasi_selesai, total_biaya=total_biaya,
             )
             db.session.add(po)
             db.session.flush()
-            nomor_po = f"{tanggal_order.strftime('%d/%m/%y')}/{po.id}"
+
+            # Dicek ulang (bukan cuma pakai urutan+1 mentah) biar nggak bentrok kalau ada
+            # nomor yang somehow udah kepakai (mis. sisa PO lama yang dihapus).
+            while True:
+                urutan += 1
+                nomor_po = f"PO-{tanggal_order.strftime('%d/%m/%Y')}-{kode_vendor}{urutan:03d}"
+                if not PurchaseOrder.query.filter_by(nomor_po=nomor_po).first():
+                    break
             po.nomor_po = nomor_po
 
             for produk, warna, size, qty in item_produk_rows:
