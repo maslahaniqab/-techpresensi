@@ -50,6 +50,7 @@ from models import (
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+YARD_KE_METER = 0.9144  # konversi resmi 1 Yard = 0.9144 Meter
 
 # Kolom ukuran di ProdukSpekUkuran (lingkar_dada s/d pergelangan) dipakai sbg "slot"
 # generik yg label & maknanya beda-beda tergantung kategori produknya. "" = kategori
@@ -1945,12 +1946,33 @@ def create_app():
         if not nama_bahan:
             flash("Nama bahan baku wajib diisi.", "danger")
             return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
+        satuan_lama = bahan.satuan
+        satuan_baru = request.form.get("satuan", "Yard").strip() or "Yard"
+        harga_input = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+        harga_tidak_diubah_manual = (harga_input == bahan.harga_per_yard)
+
+        pesan_konversi = ""
+        if (
+            satuan_baru != satuan_lama
+            and satuan_lama in ("Yard", "Meter") and satuan_baru in ("Yard", "Meter")
+        ):
+            # Ganti satuan Yard<->Meter di sini artinya KONVERSI, bukan ganti label doang --
+            # stok & harga ikut disesuaikan proporsional (1 Yard = 0.9144 Meter) supaya
+            # angkanya tetap merepresentasikan jumlah kain fisik yang sama, bukan malah
+            # kelihatan nambah/berkurang stok gara2 cuma ganti nama satuannya.
+            faktor = YARD_KE_METER if satuan_lama == "Yard" else (1 / YARD_KE_METER)
+            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) * faktor
+            if harga_tidak_diubah_manual:
+                harga_input = round((bahan.harga_per_yard or 0) / faktor)
+            pesan_konversi = f" Stok &amp; harga otomatis dikonversi dari {satuan_lama} ke {satuan_baru}."
+
         bahan.nama_bahan = nama_bahan
-        bahan.satuan = request.form.get("satuan", "Yard").strip() or "Yard"
-        bahan.harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+        bahan.satuan = satuan_baru
+        bahan.harga_per_yard = harga_input
         bahan.catatan = request.form.get("catatan", "").strip()
         db.session.commit()
-        flash("Data bahan baku berhasil diperbarui.", "success")
+        flash("Data bahan baku berhasil diperbarui." + pesan_konversi, "success")
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/hapus", methods=["POST"])

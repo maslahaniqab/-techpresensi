@@ -67,11 +67,14 @@
         <div class="row g-3">
           <div class="col-6">
             <label class="form-label">Satuan</label>
-            <input type="text" name="satuan" class="form-control" value="Yard">
+            <select name="satuan" class="form-select">
+              <option value="Yard" selected>Yard</option>
+              <option value="Meter">Meter</option>
+            </select>
           </div>
           <div class="col-6">
             <label class="form-label">Harga / Yard (Rp) <span class="text-muted small">(opsional)</span></label>
-            <input type="number" min="0" step="1000" name="harga_per_yard" class="form-control" value="0">
+            <input type="number" min="0" step="1" name="harga_per_yard" class="form-control" value="0">
           </div>
         </div>
         <div class="mb-3 mt-3">

@@ -201,11 +201,18 @@
         <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label">Satuan</label>
-            <input type="text" name="satuan" class="form-control" value="{{ bahan.satuan }}">
+            <select name="satuan" class="form-select">
+              <option value="Yard" {{ 'selected' if bahan.satuan == 'Yard' }}>Yard</option>
+              <option value="Meter" {{ 'selected' if bahan.satuan == 'Meter' }}>Meter</option>
+              {% if bahan.satuan not in ('Yard', 'Meter') %}
+              <option value="{{ bahan.satuan }}" selected>{{ bahan.satuan }} (tidak dikenal, pilih Yard/Meter)</option>
+              {% endif %}
+            </select>
+            <div class="form-text">Ganti Yard&harr;Meter di sini otomatis mengonversi Stok &amp; Harga (bukan menambah).</div>
           </div>
           <div class="col-6">
             <label class="form-label">Harga / {{ bahan.satuan }} (Rp)</label>
-            <input type="number" min="0" step="1000" name="harga_per_yard" class="form-control" value="{{ bahan.harga_per_yard }}">
+            <input type="number" min="0" step="1" name="harga_per_yard" class="form-control" value="{{ bahan.harga_per_yard }}">
           </div>
         </div>
         <div class="mb-3">
