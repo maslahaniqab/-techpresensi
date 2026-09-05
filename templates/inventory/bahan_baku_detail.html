@@ -219,7 +219,22 @@
           <label class="form-label">Catatan <span class="text-muted small">(opsional)</span></label>
           <textarea name="catatan" class="form-control" rows="2">{{ bahan.catatan or '' }}</textarea>
         </div>
-        <div class="text-muted small">Untuk mengubah jumlah stok, gunakan form "Catat Transaksi Baru", bukan di sini.</div>
+        <hr>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label">Tambah Stok <span class="text-muted small">(opsional)</span></label>
+            <input type="number" min="0" step="0.01" name="tambah_stok" class="form-control" placeholder="Contoh: 50">
+            <div class="form-text">
+              Stok saat ini: {{ "%.2f"|format(bahan.stok_saat_ini) }} {{ bahan.satuan }}. Kalau diisi, otomatis
+              dicatat sbg transaksi Masuk baru &amp; ditambahkan ke stok (bukan menimpa angkanya).
+            </div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Tanggal Stok Masuk</label>
+            <input type="date" name="tanggal_tambah_stok" class="form-control" value="{{ tanggal_hari_ini }}">
+          </div>
+        </div>
+        <div class="text-muted small mt-2">Untuk stok Keluar (terpakai produksi), tetap pakai form "Catat Transaksi Baru" di bawah.</div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>

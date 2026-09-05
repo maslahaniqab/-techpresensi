@@ -1971,8 +1971,29 @@ def create_app():
         bahan.satuan = satuan_baru
         bahan.harga_per_yard = harga_input
         bahan.catatan = request.form.get("catatan", "").strip()
+
+        # Tambah Stok (opsional) -- dicatat sbg transaksi Masuk baru (bukan langsung nimpa
+        # stok_saat_ini) supaya Riwayat Stok tetap punya jejaknya, sama kayak input dari
+        # form "Catat Transaksi Baru". Jumlahnya dianggap dlm satuan yg BARU (kalau
+        # satuannya ikut diganti di submit yg sama).
+        tambah_stok = parse_angka_iklan(request.form.get("tambah_stok"))
+        pesan_tambah = ""
+        if tambah_stok > 0:
+            try:
+                tanggal_tambah = datetime.strptime(request.form.get("tanggal_tambah_stok", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal_tambah = today_wib()
+            db.session.add(BahanBakuTransaksi(
+                bahan_baku_id=bahan.id, tanggal=tanggal_tambah, jenis="Masuk", jumlah_yard=tambah_stok,
+                harga_per_yard=bahan.harga_per_yard,
+                total_dibayar=round(tambah_stok * (bahan.harga_per_yard or 0)),
+                keterangan="Tambah stok dari Edit Bahan Baku",
+            ))
+            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) + tambah_stok
+            pesan_tambah = f" Stok ditambah {tambah_stok:g} {satuan_baru}."
+
         db.session.commit()
-        flash("Data bahan baku berhasil diperbarui." + pesan_konversi, "success")
+        flash("Data bahan baku berhasil diperbarui." + pesan_konversi + pesan_tambah, "success")
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/hapus", methods=["POST"])
