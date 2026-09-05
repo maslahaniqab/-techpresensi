@@ -66,13 +66,20 @@
         <td class="text-end small text-nowrap">{{ po.total_biaya | rupiah }}</td>
         <td>
           {% set status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Dibatalkan": "#e2e3e5"} %}
-          <form method="post" action="{{ url_for('purchase_order_status_update', po_id=po.id) }}">
-            <select name="status" class="form-select form-select-sm border-0 fw-semibold" style="background-color: {{ status_bg.get(po.status, '#eee') }}; min-width:150px;" onchange="this.form.submit()">
-              {% for s in status_pilihan %}
-              <option value="{{ s }}" {{ 'selected' if po.status == s }}>{{ s }}</option>
-              {% endfor %}
-            </select>
+          <span class="badge" style="background-color: {{ status_bg.get(po.status_produksi, '#eee') }}; color:#212529;">{{ po.status_produksi }}</span>
+          {% if po.status_produksi != "Dibatalkan" %}
+          <br>
+          <form method="post" action="{{ url_for('purchase_order_status_update', po_id=po.id) }}" onsubmit="return confirm('Batalkan PO {{ po.nomor_po }}?');">
+            <input type="hidden" name="aksi" value="batalkan">
+            <button type="submit" class="btn btn-link btn-sm p-0 small text-danger">Batalkan</button>
           </form>
+          {% else %}
+          <br>
+          <form method="post" action="{{ url_for('purchase_order_status_update', po_id=po.id) }}">
+            <input type="hidden" name="aksi" value="aktifkan">
+            <button type="submit" class="btn btn-link btn-sm p-0 small">Aktifkan lagi</button>
+          </form>
+          {% endif %}
         </td>
         <td class="text-nowrap">
           {% set bayar_bg = {"Belum Lunas": "#f8d7da", "Cicilan": "#fff3cd", "Lunas": "#d1e7dd"} %}

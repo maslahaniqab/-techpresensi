@@ -377,6 +377,43 @@ class PurchaseOrder(db.Model):
             return "Cicilan"
         return "Lunas"
 
+    @property
+    def total_qty_item(self):
+        return sum(ip.qty for ip in self.item_produk_list)
+
+    @property
+    def total_jahit_selesai(self):
+        return sum(ip.jahit_selesai for ip in self.item_produk_list)
+
+    @property
+    def total_finish_selesai(self):
+        return sum(ip.finish_selesai for ip in self.item_produk_list)
+
+    @property
+    def persen_progress(self):
+        """Global progress % -- dihitung dari rata2 Jahit & Finish thd total qty item."""
+        total = self.total_qty_item
+        if not total:
+            return 0
+        capaian = (self.total_jahit_selesai + self.total_finish_selesai) / 2
+        return round(min(capaian, total) / total * 100)
+
+    @property
+    def status_produksi(self):
+        """Status produksi (Menunggu/Diproses/Selesai) OTOMATIS ngikutin progress Jahit &
+        Finish per item -- admin cuma bisa nge-override manual ke 'Dibatalkan' (field
+        `status` dipakai khusus utk itu, gak dipakai lagi utk 3 status lainnya)."""
+        if self.status == "Dibatalkan":
+            return "Dibatalkan"
+        total = self.total_qty_item
+        if not total:
+            return "Menunggu Produksi"
+        if self.total_finish_selesai >= total:
+            return "Selesai Produksi"
+        if self.total_jahit_selesai > 0 or self.total_finish_selesai > 0:
+            return "Diproses"
+        return "Menunggu Produksi"
+
 
 class PurchaseOrderItemProduk(db.Model):
     """Baris produk yg dipesan/diproduksi dalam 1 Purchase Order."""
@@ -387,6 +424,8 @@ class PurchaseOrderItemProduk(db.Model):
     size = db.Column(db.String(32))
     qty = db.Column(db.Integer, nullable=False, default=0)
     total = db.Column(db.Integer, nullable=False, default=0)  # snapshot qty x modal produk saat itu
+    jahit_selesai = db.Column(db.Integer, nullable=False, default=0)  # progress: sdh dijahit sebanyak ini
+    finish_selesai = db.Column(db.Integer, nullable=False, default=0)  # progress: sdh finishing sebanyak ini
 
     produk = db.relationship("Produk")
 

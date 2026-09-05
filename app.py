@@ -1519,6 +1519,13 @@ def create_app():
                 "ALTER TABLE purchase_order_pembayaran ADD COLUMN metode VARCHAR(16) NOT NULL DEFAULT 'Cicilan'"
             ))
             db.session.commit()
+        kolom_po_item = {c["name"] for c in db.inspect(db.engine).get_columns("purchase_order_item_produk")}
+        for kolom in ("jahit_selesai", "finish_selesai"):
+            if kolom not in kolom_po_item:
+                db.session.execute(db.text(
+                    f"ALTER TABLE purchase_order_item_produk ADD COLUMN {kolom} INTEGER NOT NULL DEFAULT 0"
+                ))
+                db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -2449,7 +2456,6 @@ def create_app():
             daftar=daftar, daftar_vendor=daftar_vendor, daftar_produk=daftar_produk,
             daftar_bahan=daftar_bahan, daftar_akun=daftar_akun, produk_json=produk_json, bahan_json=bahan_json,
             tanggal_hari_ini=today_wib().isoformat(), q=q,
-            status_pilihan=["Menunggu Produksi", "Diproses", "Selesai Produksi", "Dibatalkan"],
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>")
@@ -2486,14 +2492,22 @@ def create_app():
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/status", methods=["POST"])
     @admin_required
     def purchase_order_status_update(po_id):
+        """Status Menunggu Produksi/Diproses/Selesai Produksi sekarang OTOMATIS dari
+        progress Jahit & Finish (lihat menu Progress Produksi) -- route ini cuma buat
+        toggle Dibatalkan, satu2nya status yg masih manual."""
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
-        status = request.form.get("status", "")
-        if status not in ("Menunggu Produksi", "Diproses", "Selesai Produksi", "Dibatalkan"):
-            flash("Status tidak valid.", "danger")
+        aksi = request.form.get("aksi", "")
+        if aksi == "batalkan":
+            po.status = "Dibatalkan"
+            pesan = f"PO {po.nomor_po} dibatalkan."
+        elif aksi == "aktifkan":
+            po.status = "Menunggu Produksi"
+            pesan = f"PO {po.nomor_po} diaktifkan lagi, status ngikutin progress produksi."
+        else:
+            flash("Aksi tidak valid.", "danger")
             return redirect(url_for("purchase_order_list"))
-        po.status = status
         db.session.commit()
-        flash(f"Status PO {po.nomor_po} diperbarui jadi {status}.", "success")
+        flash(pesan, "success")
         return redirect(url_for("purchase_order_list"))
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/pembayaran/tambah", methods=["POST"])
@@ -2538,6 +2552,36 @@ def create_app():
         db.session.commit()
         flash("Catatan pembayaran dihapus.", "info")
         return redirect(url_for("purchase_order_pembayaran", po_id=po_id))
+
+    @app.route("/inventory/master-data/purchase-order/progress-produksi")
+    @admin_required
+    def progress_produksi_list():
+        q = request.args.get("q", "").strip()
+        query = PurchaseOrder.query
+        if q:
+            query = query.filter(PurchaseOrder.nomor_po.ilike(f"%{q}%"))
+        daftar = query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
+        return render_template("inventory/progress_produksi_list.html", daftar=daftar, q=q)
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
+    @admin_required
+    def progress_produksi_update(po_id):
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        item_ids = request.form.getlist("item_id[]")
+        jahit_list = request.form.getlist("jahit[]")
+        finish_list = request.form.getlist("finish[]")
+        by_id = {ip.id: ip for ip in po.item_produk_list}
+        for item_id_s, jahit_s, finish_s in zip(item_ids, jahit_list, finish_list):
+            item = by_id.get(int(item_id_s)) if item_id_s else None
+            if not item:
+                continue
+            jahit = max(0, min(int(parse_angka_iklan(jahit_s)), item.qty))
+            finish = max(0, min(int(parse_angka_iklan(finish_s)), item.qty))
+            item.jahit_selesai = jahit
+            item.finish_selesai = finish
+        db.session.commit()
+        flash(f"Progress produksi PO {po.nomor_po} diperbarui. Status sekarang: {po.status_produksi}.", "success")
+        return redirect(url_for("progress_produksi_list"))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
     @admin_required
