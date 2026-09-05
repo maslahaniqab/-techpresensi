@@ -126,7 +126,17 @@
               {% if t.jenis == 'Masuk' %}<span class="badge bg-success-subtle text-success-emphasis">Masuk</span>
               {% else %}<span class="badge bg-danger-subtle text-danger-emphasis">Keluar</span>{% endif %}
             </td>
-            <td class="text-end small">{{ "%.2f"|format(t.jumlah_yard) }}</td>
+            <td class="text-end small">
+              <span id="jml-display-{{ t.id }}">
+                {{ "%.2f"|format(t.jumlah_yard) }}
+                <a href="#" class="small ms-1" title="Koreksi jumlah"
+                   onclick="document.getElementById('jml-display-{{ t.id }}').classList.add('d-none'); document.getElementById('jml-form-{{ t.id }}').classList.remove('d-none'); return false;">&#9998;</a>
+              </span>
+              <form method="post" action="{{ url_for('bahan_baku_transaksi_edit_jumlah', transaksi_id=t.id) }}" class="d-none d-flex gap-1 justify-content-end" id="jml-form-{{ t.id }}">
+                <input type="number" min="0.01" step="0.01" name="jumlah_yard" class="form-control form-control-sm" style="width:80px;" value="{{ t.jumlah_yard }}">
+                <button type="submit" class="btn btn-sm btn-outline-primary">Simpan</button>
+              </form>
+            </td>
             <td class="small">{{ t.produk.nama_produk if t.produk else "-" }}</td>
             <td class="small text-muted">{{ t.keterangan or "-" }}</td>
             <td class="text-end">

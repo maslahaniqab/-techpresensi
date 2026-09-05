@@ -2114,6 +2114,28 @@ def create_app():
         flash("Transaksi dihapus, stok disesuaikan kembali.", "info")
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
+    @app.route("/inventory/bahan-baku/transaksi/<int:transaksi_id>/edit-jumlah", methods=["POST"])
+    @admin_required
+    def bahan_baku_transaksi_edit_jumlah(transaksi_id):
+        """Koreksi jumlah yard di 1 baris Riwayat Stok (mis. salah ketik pas input awal) --
+        Stok Saat Ini disesuaikan pakai selisih (bukan diganti mentah2), jadi transaksi
+        lain yg udah kejadian sesudahnya tetap konsisten."""
+        t = db.session.get(BahanBakuTransaksi, transaksi_id) or abort_404()
+        jumlah_baru = parse_angka_iklan(request.form.get("jumlah_yard"))
+        if jumlah_baru <= 0:
+            flash("Isi jumlah yang valid (harus lebih dari 0).", "danger")
+            return redirect(url_for("bahan_baku_detail", bahan_id=t.bahan_baku_id))
+
+        bahan = t.bahan_baku
+        selisih = jumlah_baru - t.jumlah_yard
+        bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) + (selisih if t.jenis == "Masuk" else -selisih)
+        if t.jenis == "Masuk" and t.harga_per_yard:
+            t.total_dibayar = round(jumlah_baru * t.harga_per_yard)
+        t.jumlah_yard = jumlah_baru
+        db.session.commit()
+        flash(f"Jumlah transaksi dikoreksi jadi {jumlah_baru:g} {bahan.satuan}, stok disesuaikan.", "success")
+        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+
     @app.route("/inventory/cutting/transaksi/<int:transaksi_id>/produk-jadi", methods=["POST"])
     @admin_required
     def bahan_baku_transaksi_isi_produk_jadi(transaksi_id):
