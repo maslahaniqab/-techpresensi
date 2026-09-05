@@ -61,9 +61,9 @@
           <input type="text" name="nama_vendor" class="form-control" placeholder="mis. Yuli Cigondewah" required>
         </div>
         <div class="mb-3">
-          <label class="form-label">Kode Vendor <span class="text-muted small">(2 digit, dipakai di nomor PO)</span></label>
-          <input type="text" name="kode" class="form-control" placeholder="mis. 01" maxlength="4" style="max-width:120px;">
-          <div class="form-text">Contoh: kode 01 → nomor PO jadi PO-dd/mm/yyyy-01001, PO-dd/mm/yyyy-01002, dst.</div>
+          <label class="form-label">Kode Vendor <span class="text-muted small">(dipakai di nomor PO)</span></label>
+          <input type="text" name="kode" class="form-control" placeholder="mis. 01 (Penjahit) / K (Suplier Kain)" maxlength="4" style="max-width:220px;">
+          <div class="form-text">Vendor Penjahit: 2 digit angka (01, 02, 03&hellip;) → nomor PO jadi PO-dd/mm/yyyy-01001. Vendor Suplier Kain: huruf (K, L&hellip;) → PO-dd/mm/yyyy-K001, K002, dst.</div>
         </div>
         <div class="mb-3">
           <label class="form-label">Jenis</label>
@@ -108,8 +108,9 @@
           <input type="text" name="nama_vendor" class="form-control" value="{{ v.nama_vendor }}" required>
         </div>
         <div class="mb-3">
-          <label class="form-label">Kode Vendor <span class="text-muted small">(2 digit, dipakai di nomor PO)</span></label>
-          <input type="text" name="kode" class="form-control" value="{{ v.kode or '' }}" placeholder="mis. 01" maxlength="4" style="max-width:120px;">
+          <label class="form-label">Kode Vendor <span class="text-muted small">(dipakai di nomor PO)</span></label>
+          <input type="text" name="kode" class="form-control" value="{{ v.kode or '' }}" placeholder="mis. 01 (Penjahit) / K (Suplier Kain)" maxlength="4" style="max-width:220px;">
+          <div class="form-text">Penjahit: angka 2 digit (01, 02&hellip;). Suplier Kain: huruf (K, L&hellip;) → nomor PO jadi K001, K002, dst.</div>
         </div>
         <div class="mb-3">
           <label class="form-label">Jenis</label>

@@ -295,8 +295,16 @@ class ProdukSpekUkuran(db.Model):
     lingkar_pinggang = db.Column(db.Float)
     ld_lengan = db.Column(db.Float)
     pergelangan = db.Column(db.Float)
+    # Kebutuhan yard (opsional) yg dicatat bareng ukuran ini -- dientry manual (bukan
+    # dihitung dari cm di atas, belum ada rumus baku konversi cm->yard per pola), tapi
+    # 1x isi di sini otomatis ikut nyatet/nimpa baris BahanBakuKebutuhan yg sepadan
+    # (bahan_baku_id, produk_id) biar tetap 1 sumber data yg dipakai buat hitung
+    # otomatis Estimasi/Produk Jadi di tempat lain -- lihat kolom bahan_baku_id.
+    bahan_baku_id = db.Column(db.Integer, db.ForeignKey("bahan_baku.id"))
+    yard_per_pcs = db.Column(db.Float)
 
     produk = db.relationship("Produk", backref=db.backref("spek_ukuran_list", cascade="all, delete-orphan"))
+    bahan_baku = db.relationship("BahanBaku")
 
 
 class Vendor(db.Model):

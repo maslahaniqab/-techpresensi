@@ -1507,6 +1507,10 @@ def create_app():
         if "kategori" not in kolom_spek_ukuran:
             db.session.execute(db.text("ALTER TABLE produk_spek_ukuran ADD COLUMN kategori VARCHAR(24)"))
             db.session.commit()
+        for kolom, tipe in [("bahan_baku_id", "INTEGER"), ("yard_per_pcs", "FLOAT")]:
+            if kolom not in kolom_spek_ukuran:
+                db.session.execute(db.text(f"ALTER TABLE produk_spek_ukuran ADD COLUMN {kolom} {tipe}"))
+                db.session.commit()
         kolom_po = {c["name"] for c in db.inspect(db.engine).get_columns("purchase_order")}
         if "status" not in kolom_po:
             db.session.execute(db.text(
@@ -2735,6 +2739,15 @@ def create_app():
             f"{k.bahan_baku_id}_{k.produk_id}": k.jumlah_yard
             for k in daftar_kebutuhan
         }
+        # Kombinasi bahan+produk yg SUDAH ketautan ke baris ukuran (diisi lewat form
+        # gabungan) -- sisanya (kebutuhan lama dari form terpisah sblm digabung, atau
+        # dari halaman detail Bahan Baku) ditampilin terpisah biar nggak "hilang".
+        kombinasi_ada_ukuran = {
+            f"{s.bahan_baku_id}_{s.produk_id}" for s in ProdukSpekUkuran.query.filter(ProdukSpekUkuran.bahan_baku_id.isnot(None))
+        }
+        kebutuhan_tanpa_ukuran = [
+            k for k in daftar_kebutuhan if f"{k.bahan_baku_id}_{k.produk_id}" not in kombinasi_ada_ukuran
+        ]
         riwayat = (
             BahanBakuTransaksi.query.filter_by(jenis="Keluar")
             .join(BahanBaku)
@@ -2744,7 +2757,7 @@ def create_app():
         return render_template(
             "inventory/bahan_baku_cutting.html",
             bahan_list=bahan_list, produk_list=produk_list, riwayat=riwayat,
-            daftar_kebutuhan=daftar_kebutuhan,
+            daftar_kebutuhan=daftar_kebutuhan, kebutuhan_tanpa_ukuran=kebutuhan_tanpa_ukuran,
             spek_per_produk_json=spek_per_produk, kebutuhan_map_json=kebutuhan_map,
             spek_by_kategori=spek_by_kategori, kategori_fields=KATEGORI_SPEK_FIELDS,
             tanggal_hari_ini=today_wib().isoformat(),
@@ -2753,12 +2766,26 @@ def create_app():
     @app.route("/inventory/spek-ukuran/<int:produk_id>/tambah", methods=["POST"])
     @admin_required
     def produk_spek_ukuran_tambah(produk_id):
+        """Form gabungan "Kelola Ukuran & Kebutuhan Yard per Produk" -- 1x pilih Produk +
+        Kategori, isi ukuran badan (cm) DAN (opsional) Bahan + Yard per Pcs sekaligus.
+        Yard per Pcs-nya tetap manual (bukan dihitung dari cm, belum ada rumus baku),
+        tapi begitu diisi otomatis ikut nyatet/nimpa BahanBakuKebutuhan yg sepadan --
+        itu yg tetap dipakai di tempat lain (estimasi Produk Jadi, dsb)."""
         produk = db.session.get(Produk, produk_id) or abort_404()
         size = request.form.get("size", "").strip() or "All Size"
         kategori = request.form.get("kategori", "").strip()
         if kategori not in KATEGORI_SPEK_FIELDS or not kategori:
             flash("Pilih kategori produk dulu (Cadar/Khimar/Pashmina/dsb).", "danger")
             return redirect(url_for("bahan_baku_cutting"))
+
+        bahan_id = request.form.get("bahan_baku_id", type=int)
+        bahan = db.session.get(BahanBaku, bahan_id) if bahan_id else None
+        yard_per_pcs = parse_angka_iklan(request.form.get("yard_per_pcs")) or None
+        if bahan and not yard_per_pcs:
+            flash("Sudah pilih Bahan tapi Yard per Pcs belum diisi -- kebutuhan yard nggak kesimpan.", "warning")
+        if yard_per_pcs and not bahan:
+            flash("Sudah isi Yard per Pcs tapi Bahan belum dipilih -- kebutuhan yard nggak kesimpan.", "warning")
+
         db.session.add(ProdukSpekUkuran(
             produk_id=produk.id, size=size, kategori=kategori,
             lingkar_dada=parse_angka_iklan(request.form.get("lingkar_dada")) or None,
@@ -2766,9 +2793,29 @@ def create_app():
             lingkar_pinggang=parse_angka_iklan(request.form.get("lingkar_pinggang")) or None,
             ld_lengan=parse_angka_iklan(request.form.get("ld_lengan")) or None,
             pergelangan=parse_angka_iklan(request.form.get("pergelangan")) or None,
+            bahan_baku_id=bahan.id if (bahan and yard_per_pcs) else None,
+            yard_per_pcs=yard_per_pcs if (bahan and yard_per_pcs) else None,
         ))
+        pesan = f"Ukuran {kategori} - {size} untuk {produk.nama_produk} disimpan."
+
+        if bahan and yard_per_pcs:
+            sudah_ada = BahanBakuKebutuhan.query.filter_by(bahan_baku_id=bahan.id, produk_id=produk.id).first()
+            if sudah_ada:
+                sudah_ada.jumlah_yard = yard_per_pcs
+            else:
+                db.session.add(BahanBakuKebutuhan(bahan_baku_id=bahan.id, produk_id=produk.id, jumlah_yard=yard_per_pcs))
+            pesan += f" Kebutuhan {bahan.nama_bahan} {yard_per_pcs:g} {bahan.satuan}/pcs ikut kesimpan."
+
+            transaksi_kosong = BahanBakuTransaksi.query.filter_by(
+                bahan_baku_id=bahan.id, produk_id=produk.id, jenis="Keluar", produk_jadi_pcs=None,
+            ).all()
+            for t in transaksi_kosong:
+                t.produk_jadi_pcs = round(t.jumlah_yard / yard_per_pcs)
+            if transaksi_kosong:
+                pesan += f" {len(transaksi_kosong)} transaksi Keluar lama otomatis terisi Produk Jadi-nya."
+
         db.session.commit()
-        flash(f"Spek ukuran {kategori} - {size} untuk {produk.nama_produk} disimpan.", "success")
+        flash(pesan, "success")
         return redirect(url_for("bahan_baku_cutting"))
 
     @app.route("/inventory/spek-ukuran/<int:spek_id>/hapus", methods=["POST"])

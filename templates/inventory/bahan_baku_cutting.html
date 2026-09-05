@@ -97,71 +97,14 @@
 </form>
 {% endif %}
 
-{% if bahan_list %}
 <div class="card p-3 mb-4">
-  <div class="fw-semibold small mb-2">Kelola Kebutuhan Yard per Produk</div>
+  <div class="fw-semibold small mb-2">Kelola Ukuran &amp; Kebutuhan Yard per Produk</div>
   <p class="text-muted small mb-3">
-    Isi berapa yard bahan ini dibutuhkan untuk 1 pcs produk tertentu -- ini yang dipakai buat otomatis
-    menghitung Estimasi Produk Jadi di form Cutting di atas. Kalau kombinasi bahan+produk belum ada di sini,
-    Produk Jadi tidak akan kehitung otomatis.
+    Isi acuan ukuran badan (cm) untuk 1 pcs produk sesuai kategorinya, sekalian (opsional) berapa Yard bahan
+    dibutuhkan untuk 1 pcs-nya -- 1x isi di sini kepakai buat dua hal: tampilan acuan ukuran di form Cutting
+    di atas, DAN otomatis menghitung Estimasi/Produk Jadi (Total Yard &divide; Yard per Pcs = Jumlah Pcs).
+    Yard per Pcs tetap diisi manual (belum ada rumus baku konversi cm ke yard per pola).
   </p>
-  <form method="post" id="form-tambah-kebutuhan" action="{{ url_for('bahan_baku_kebutuhan_tambah', bahan_id=0) }}" class="row g-2 align-items-end">
-    <input type="hidden" name="next" value="{{ url_for('bahan_baku_cutting') }}">
-    <div class="col-md-4 col-6">
-      <label class="form-label small">Jenis Bahan</label>
-      <select id="kebutuhan_bahan_id" class="form-select form-select-sm" required>
-        <option value="">Pilih bahan&hellip;</option>
-        {% for b in bahan_list %}
-        <option value="{{ b.id }}">{{ b.nama_bahan }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-4 col-6">
-      <label class="form-label small">Produk</label>
-      <select name="produk_id" class="form-select form-select-sm produk-search" required>
-        <option value="">Pilih produk&hellip;</option>
-        {% for p in produk_list %}
-        <option value="{{ p.id }}">{{ p.nama_produk }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-3 col-8">
-      <label class="form-label small">Yard per Pcs</label>
-      <input type="number" min="0" step="0.01" name="jumlah_yard" class="form-control form-control-sm" placeholder="Contoh: 2.5" required>
-    </div>
-    <div class="col-md-1 col-4">
-      <button type="submit" class="btn btn-sm btn-primary w-100">+</button>
-    </div>
-  </form>
-
-  {% if daftar_kebutuhan %}
-  <div class="table-responsive mt-3">
-    <table class="table table-sm mb-0">
-      <thead><tr><th>Jenis Bahan</th><th>Produk</th><th class="text-end">Yard / Pcs</th><th></th></tr></thead>
-      <tbody>
-        {% for k in daftar_kebutuhan %}
-        <tr>
-          <td class="small">{{ k.bahan_baku.nama_bahan }}</td>
-          <td class="small">{{ k.produk.nama_produk }}</td>
-          <td class="text-end small">{{ "%.2f"|format(k.jumlah_yard) }}</td>
-          <td class="text-end">
-            <form method="post" action="{{ url_for('bahan_baku_kebutuhan_hapus', kebutuhan_id=k.id) }}" onsubmit="return confirm('Hapus kebutuhan ini?');">
-              <input type="hidden" name="next" value="{{ url_for('bahan_baku_cutting') }}">
-              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-</div>
-{% endif %}
-
-<div class="card p-3 mb-4">
-  <div class="fw-semibold small mb-2">Kelola Spek Ukuran per Produk</div>
-  <p class="text-muted small mb-3">Isi acuan ukuran badan (cm) untuk 1 pcs produk, supaya tampil otomatis pas produk itu dipilih di form Cutting di atas.</p>
   <form method="post" id="form-tambah-spek" action="{{ url_for('produk_spek_ukuran_tambah', produk_id=0) }}" class="row g-2 align-items-end">
     <div class="col-md-4 col-6">
       <label class="form-label small">Produk</label>
@@ -190,11 +133,27 @@
       </select>
     </div>
     <div class="col-md-3 col-6">
-      <button type="submit" class="btn btn-sm btn-primary w-100">+ Simpan Ukuran</button>
+      <button type="submit" class="btn btn-sm btn-primary w-100">+ Simpan</button>
     </div>
     <div class="col-12">
       <div class="row g-2 mt-1" id="spek-fields-container">
         <div class="col-12 text-muted small">Pilih kategori dulu untuk menentukan kolom ukurannya.</div>
+      </div>
+    </div>
+    <div class="col-12"><hr class="my-2"></div>
+    <div class="col-md-5 col-7">
+      <label class="form-label small">Bahan &amp; Yard per Pcs <span class="text-muted">(opsional)</span></label>
+      <select name="bahan_baku_id" class="form-select form-select-sm bahan-search">
+        <option value="">- Nggak diisi -</option>
+        {% for b in bahan_list %}
+        <option value="{{ b.id }}">{{ b.nama_bahan }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 col-5">
+      <div class="input-group input-group-sm">
+        <input type="number" min="0" step="0.01" name="yard_per_pcs" class="form-control form-control-sm" placeholder="Contoh: 2.5">
+        <span class="input-group-text">Yard/Pcs</span>
       </div>
     </div>
   </form>
@@ -210,6 +169,7 @@
           <tr>
             <th>Produk</th><th>Size</th>
             {% for slot, label in fields %}<th>{{ label }}</th>{% endfor %}
+            <th>Bahan</th><th class="text-end">Yard/Pcs</th>
             <th></th>
           </tr>
         </thead>
@@ -219,6 +179,8 @@
             <td class="small">{{ s.produk.nama_produk }}</td>
             <td class="small">{{ s.size }}</td>
             {% for slot, label in fields %}<td class="small">{{ s[slot] or "-" }}</td>{% endfor %}
+            <td class="small">{{ s.bahan_baku.nama_bahan if s.bahan_baku else "-" }}</td>
+            <td class="text-end small">{{ "%.2f"|format(s.yard_per_pcs) if s.yard_per_pcs else "-" }}</td>
             <td class="text-end">
               <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
                 <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
@@ -231,6 +193,32 @@
     </div>
   </div>
   {% endfor %}
+  {% endif %}
+
+  {% if kebutuhan_tanpa_ukuran %}
+  <div class="mt-3">
+    <div class="fw-semibold small text-muted text-uppercase mb-1">Kebutuhan Yard tanpa ukuran (dicatat sebelum digabung)</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Bahan</th><th>Produk</th><th class="text-end">Yard/Pcs</th><th></th></tr></thead>
+        <tbody>
+          {% for k in kebutuhan_tanpa_ukuran %}
+          <tr>
+            <td class="small">{{ k.bahan_baku.nama_bahan }}</td>
+            <td class="small">{{ k.produk.nama_produk }}</td>
+            <td class="text-end small">{{ "%.2f"|format(k.jumlah_yard) }}</td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('bahan_baku_kebutuhan_hapus', kebutuhan_id=k.id) }}" onsubmit="return confirm('Hapus kebutuhan ini?');">
+                <input type="hidden" name="next" value="{{ url_for('bahan_baku_cutting') }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
   {% endif %}
 </div>
 
@@ -320,7 +308,7 @@
     var fields = KATEGORI_FIELDS[kat] || KATEGORI_FIELDS[''];
     specTheadRow.innerHTML = '<th>Size</th>' + fields.map(function (f) { return '<th>' + f[1] + '</th>'; }).join('');
     if (!rows.length) {
-      specBody.innerHTML = '<tr><td colspan="' + (fields.length + 1) + '" class="text-center text-muted small py-3">Belum ada spek ukuran utk produk ini. Isi di "Kelola Spek Ukuran per Produk" di bawah.</td></tr>';
+      specBody.innerHTML = '<tr><td colspan="' + (fields.length + 1) + '" class="text-center text-muted small py-3">Belum ada spek ukuran utk produk ini. Isi di "Kelola Ukuran &amp; Kebutuhan Yard per Produk" di bawah.</td></tr>';
       return;
     }
     rows.forEach(function (r) {
@@ -366,15 +354,6 @@
     formSpek.addEventListener('submit', function (e) {
       if (!selSpekProduk.value) return; // biarkan validasi HTML jalan
       formSpek.action = formSpek.action.replace(/\/0\/tambah$/, '/' + selSpekProduk.value + '/tambah');
-    });
-  }
-
-  var formKebutuhan = document.getElementById('form-tambah-kebutuhan');
-  var selKebutuhanBahan = document.getElementById('kebutuhan_bahan_id');
-  if (formKebutuhan && selKebutuhanBahan) {
-    formKebutuhan.addEventListener('submit', function (e) {
-      if (!selKebutuhanBahan.value) return; // biarkan validasi HTML jalan
-      formKebutuhan.action = formKebutuhan.action.replace(/\/0\/kebutuhan\/tambah$/, '/' + selKebutuhanBahan.value + '/kebutuhan/tambah');
     });
   }
 
