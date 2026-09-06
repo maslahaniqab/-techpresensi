@@ -19,6 +19,13 @@
   </div>
 </div>
 
+{% if not po.produksi_mulai_pada %}
+<div class="alert alert-warning small">
+  Belum <strong>Mulai Produksi</strong> -- Size &amp; Qty pcs di bawah masih kosong, stok bahan juga belum dikurangi.
+  Klik "▶️ Mulai Produksi" di <a href="{{ url_for('progress_produksi_list') }}">halaman Produksi</a> begitu siap.
+</div>
+{% endif %}
+
 <div class="row g-3">
   <div class="col-md-6">
     <div class="card p-3 h-100">

@@ -355,6 +355,10 @@ class PurchaseOrder(db.Model):
     # Menunggu Produksi -> Diproses -> Selesai Produksi, atau Dibatalkan kapan saja
     status = db.Column(db.String(24), nullable=False, default="Menunggu Produksi")
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
+    # Null = belum "Mulai Produksi" -- Item Produk msh blm ada Size/Qty final & stok
+    # bahan BELUM kepotong. Begitu diisi (lewat tombol Mulai Produksi), Size/Qty
+    # final disimpan & stok baru dikurangi -- bukan lagi pas PO dibuat.
+    produksi_mulai_pada = db.Column(db.DateTime)
 
     vendor = db.relationship("Vendor")
     item_produk_list = db.relationship(

@@ -40,7 +40,8 @@
         </td>
         <td class="small">
           {% for ip in po.item_produk_list %}
-          <div>{{ ip.produk.nama_produk }}{% if ip.warna or ip.size %} ({{ [ip.warna, ip.size] | select | join(", ") }}){% endif %} &mdash; {{ ip.jahit_selesai }}/{{ ip.qty }}</div>
+          <div>{{ ip.produk.nama_produk }}{% if ip.warna or ip.size %} ({{ [ip.warna, ip.size] | select | join(", ") }}){% endif %}
+            {%- if po.produksi_mulai_pada %} &mdash; {{ ip.jahit_selesai }}/{{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}</div>
           {% else %}
           <span class="text-muted">Tidak ada item produk.</span>
           {% endfor %}
@@ -59,7 +60,11 @@
         </td>
         <td class="text-end">
           {% if po.item_produk_list %}
-          <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUpdate{{ po.id }}">Update</button>
+            {% if not po.produksi_mulai_pada %}
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalMulai{{ po.id }}">▶️ Mulai Produksi</button>
+            {% else %}
+            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUpdate{{ po.id }}">Update</button>
+            {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -71,7 +76,68 @@
 </div>
 
 {% for po in daftar %}
-{% if po.item_produk_list %}
+{% if po.item_produk_list and not po.produksi_mulai_pada %}
+<div class="modal fade" id="modalMulai{{ po.id }}" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <form method="post" action="{{ url_for('purchase_order_mulai_produksi', po_id=po.id) }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Mulai Produksi &mdash; {{ po.nomor_po }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Isi Size &amp; Qty pcs final tiap produk, dan koreksi Qty Pakai bahan kalau perlu &mdash; begitu disimpan, stok bahan langsung dikurangi &amp; PO masuk status Diproses.</p>
+        <div class="fw-semibold small mb-1">📦 Item Produk</div>
+        <div class="table-responsive mb-3">
+          <table class="table table-sm align-middle">
+            <thead><tr><th>Produk</th><th>Warna</th><th style="width:110px;">Size</th><th style="width:100px;">Qty Pcs</th></tr></thead>
+            <tbody>
+              {% for ip in po.item_produk_list %}
+              <tr>
+                <td class="small">{{ ip.produk.nama_produk }}</td>
+                <td class="small">{{ ip.warna or "-" }}</td>
+                <td>
+                  <input type="hidden" name="item_id[]" value="{{ ip.id }}">
+                  <input type="text" name="size[]" class="form-control form-control-sm" placeholder="mis. All Size">
+                </td>
+                <td>
+                  <input type="number" min="0" step="1" name="qty[]" class="form-control form-control-sm" value="{{ saran_qty.get(po.id, '') }}" placeholder="0">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if saran_qty.get(po.id) %}
+        <div class="text-muted small mb-3">Qty di atas sudah keisi otomatis (estimasi dari Qty Pakai bahan &divide; Kebutuhan Yard per Pcs) &mdash; boleh diedit kalau beda per warna/size.</div>
+        {% endif %}
+        <div class="fw-semibold small mb-1 text-danger">✂️ Pemakaian Bahan (final)</div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead><tr><th>Bahan</th><th style="width:110px;">Qty Pakai</th><th>Satuan</th></tr></thead>
+            <tbody>
+              {% for bp in po.bahan_pakai_list %}
+              <tr>
+                <td class="small">{{ bp.bahan_baku.nama_bahan }}</td>
+                <td>
+                  <input type="hidden" name="bp_id[]" value="{{ bp.id }}">
+                  <input type="number" min="0" step="0.01" name="qty_final[]" class="form-control form-control-sm" value="{{ "%.2f"|format(bp.qty_pakai) }}">
+                </td>
+                <td class="small">{{ bp.satuan }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-success">Mulai Produksi &amp; Kurangi Stok</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% if po.item_produk_list and po.produksi_mulai_pada %}
 <div class="modal fade" id="modalUpdate{{ po.id }}" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <form method="post" action="{{ url_for('progress_produksi_update', po_id=po.id) }}" class="modal-content">

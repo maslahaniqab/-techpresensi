@@ -1556,6 +1556,9 @@ def create_app():
         if "kode" not in kolom_vendor:
             db.session.execute(db.text("ALTER TABLE vendor ADD COLUMN kode VARCHAR(4)"))
             db.session.commit()
+        if "produksi_mulai_pada" not in kolom_po:
+            db.session.execute(db.text("ALTER TABLE purchase_order ADD COLUMN produksi_mulai_pada DATETIME"))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -2396,16 +2399,17 @@ def create_app():
                 )
                 return redirect(url_for("purchase_order_list"))
 
-            # -- baris Item Produk (opsional, boleh kosong semua) --
+            # -- baris Item Produk (opsional, boleh kosong semua) -- Size & Qty BELUM
+            # diisi di sini, baru difinalisasi + kehitung stok pas "Mulai Produksi"
+            # (lihat purchase_order_mulai_produksi), krn di titik order dibuat qty pcs
+            # pastinya belum tentu diketahui.
             item_produk_rows = []
-            for produk_id_s, warna, size, qty_s in zip(
+            for produk_id_s, warna in zip(
                 request.form.getlist("ip_produk_id[]"), request.form.getlist("ip_warna[]"),
-                request.form.getlist("ip_size[]"), request.form.getlist("ip_qty[]"),
             ):
                 produk = db.session.get(Produk, int(produk_id_s)) if produk_id_s else None
-                qty = parse_angka_iklan(qty_s)
-                if produk and qty > 0:
-                    item_produk_rows.append((produk, warna.strip(), size.strip(), int(qty)))
+                if produk:
+                    item_produk_rows.append((produk, warna.strip()))
 
             # -- baris Pemakaian Bahan (wajib minimal 1) --
             bahan_pakai_rows = []
@@ -2426,13 +2430,13 @@ def create_app():
             # biar nggak ikut kehitung sendiri (off-by-one).
             urutan = PurchaseOrder.query.filter_by(vendor_id=vendor.id).count()
 
-            total_biaya = sum(qty * (produk.modal or 0) for produk, _, _, qty in item_produk_rows)
             po = PurchaseOrder(
                 # Nomor PO final (format PO-dd/mm/yyyy-KKNNN, KK=kode vendor, NNN=urutan
                 # per vendor) baru dibentuk di bawah -- placeholder unik dulu di sini biar
-                # kolom unique nggak bentrok sebelum di-flush.
+                # kolom unique nggak bentrok sebelum di-flush. Total Biaya masih 0 --
+                # baru kehitung pas Mulai Produksi (Qty pcs blm final di titik ini).
                 nomor_po=f"TEMP-{uuid.uuid4().hex}", vendor_id=vendor.id, tanggal_order=tanggal_order,
-                estimasi_selesai=estimasi_selesai, total_biaya=total_biaya,
+                estimasi_selesai=estimasi_selesai, total_biaya=0,
             )
             db.session.add(po)
             db.session.flush()
@@ -2446,48 +2450,25 @@ def create_app():
                     break
             po.nomor_po = nomor_po
 
-            for produk, warna, size, qty in item_produk_rows:
+            # Size & Qty pcs sengaja belum diisi (qty=0) -- difinalisasi nanti pas
+            # "Mulai Produksi" di halaman Produksi, begitu juga stok bahannya.
+            for produk, warna in item_produk_rows:
                 db.session.add(PurchaseOrderItemProduk(
-                    purchase_order_id=po.id, produk_id=produk.id, warna=warna, size=size,
-                    qty=qty, total=qty * (produk.modal or 0),
+                    purchase_order_id=po.id, produk_id=produk.id, warna=warna, size=None,
+                    qty=0, total=0,
                 ))
 
-            # Kalau semua Item Produk di PO ini sama-sama 1 produk, aman ditebak itu
-            # peruntukan bahan yang dipakai -- biar Produk Jadi bisa langsung kehitung
-            # otomatis dari Kebutuhan Yard per Pcs begitu PO ini disimpan.
-            produk_ids_po = {produk.id for produk, _, _, _ in item_produk_rows}
-            produk_id_tunggal = next(iter(produk_ids_po)) if len(produk_ids_po) == 1 else None
-
-            stok_minus = False
             for bahan, qty in bahan_pakai_rows:
                 db.session.add(PurchaseOrderBahanPakai(
                     purchase_order_id=po.id, bahan_baku_id=bahan.id, qty_pakai=qty, satuan=bahan.satuan,
                 ))
-                bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - qty
-                if bahan.stok_saat_ini < 0:
-                    stok_minus = True
-
-                produk_jadi_pcs = None
-                if produk_id_tunggal:
-                    kebutuhan = BahanBakuKebutuhan.query.filter_by(
-                        bahan_baku_id=bahan.id, produk_id=produk_id_tunggal,
-                    ).first()
-                    if kebutuhan and kebutuhan.jumlah_yard:
-                        produk_jadi_pcs = round(qty / kebutuhan.jumlah_yard)
-
-                db.session.add(BahanBakuTransaksi(
-                    bahan_baku_id=bahan.id, tanggal=tanggal_order, jenis="Keluar", jumlah_yard=qty,
-                    vendor=vendor.nama_vendor, keterangan=f"Purchase Order {nomor_po}",
-                    purchase_order_id=po.id, produk_id=produk_id_tunggal, produk_jadi_pcs=produk_jadi_pcs,
-                ))
 
             db.session.commit()
-            pesan = f"Purchase Order {nomor_po} berhasil disimpan, stok bahan sudah dikurangi."
-            kategori = "success"
-            if stok_minus:
-                pesan += " Perhatian: ada stok bahan yang jadi minus, cek lagi catatan stok masuknya."
-                kategori = "warning"
-            flash(pesan, kategori)
+            flash(
+                f"Purchase Order {nomor_po} berhasil disimpan. Stok bahan BELUM dikurangi -- "
+                "klik \"Mulai Produksi\" di halaman Produksi begitu siap, baru di situ stok kepotong.",
+                "success",
+            )
             return redirect(url_for("purchase_order_list"))
 
         q = request.args.get("q", "").strip()
@@ -2531,15 +2512,88 @@ def create_app():
     def purchase_order_hapus(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         nomor_po = po.nomor_po
-        # Kembalikan stok bahan yg kepotong PO ini, & hapus transaksi Keluar yg
-        # otomatis dibuat bareng PO -- biar catatan kartu stok gak nyisain data yatim.
-        for bp in po.bahan_pakai_list:
-            bp.bahan_baku.stok_saat_ini = (bp.bahan_baku.stok_saat_ini or 0) + bp.qty_pakai
-        BahanBakuTransaksi.query.filter_by(purchase_order_id=po.id).delete()
+        # Stok cuma perlu dikembalikan kalau PO ini SUDAH "Mulai Produksi" (baru di
+        # titik itu stok kepotong) -- kalau belum, gak ada apa2 yg perlu dibalikin.
+        if po.produksi_mulai_pada:
+            for bp in po.bahan_pakai_list:
+                bp.bahan_baku.stok_saat_ini = (bp.bahan_baku.stok_saat_ini or 0) + bp.qty_pakai
+            BahanBakuTransaksi.query.filter_by(purchase_order_id=po.id).delete()
+            pesan = f"Purchase Order {nomor_po} dihapus, stok bahan yg kepotong sudah dikembalikan."
+        else:
+            pesan = f"Purchase Order {nomor_po} dihapus (belum mulai produksi, stok belum kepotong)."
         db.session.delete(po)
         db.session.commit()
-        flash(f"Purchase Order {nomor_po} dihapus, stok bahan yg kepotong sudah dikembalikan.", "info")
+        flash(pesan, "info")
         return redirect(url_for("purchase_order_list"))
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/mulai-produksi", methods=["POST"])
+    @admin_required
+    def purchase_order_mulai_produksi(po_id):
+        """Finalisasi Size & Qty pcs tiap Item Produk + Qty Pakai final tiap Bahan,
+        BARU di titik ini stok bahan dikurangi & transaksi Keluar dicatat -- bukan pas
+        PO dibuat. Sekali jalan doang per PO (dijaga produksi_mulai_pada)."""
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        if po.produksi_mulai_pada:
+            flash(f"PO {po.nomor_po} sudah pernah Mulai Produksi sebelumnya.", "warning")
+            return redirect(url_for("progress_produksi_list"))
+
+        by_item_id = {ip.id: ip for ip in po.item_produk_list}
+        for item_id_s, size, qty_s in zip(
+            request.form.getlist("item_id[]"), request.form.getlist("size[]"), request.form.getlist("qty[]"),
+        ):
+            item = by_item_id.get(int(item_id_s)) if item_id_s else None
+            if not item:
+                continue
+            qty = max(int(parse_angka_iklan(qty_s)), 0)
+            item.size = size.strip() or None
+            item.qty = qty
+            item.total = qty * (item.produk.modal or 0)
+
+        # Kalau semua Item Produk (yg qty-nya kepakai) sama-sama 1 produk, aman
+        # ditebak itu peruntukan bahannya -- Produk Jadi kehitung otomatis dari
+        # Kebutuhan Yard per Pcs, persis pola yg sama kayak di form Buat PO dulu.
+        produk_ids_po = {ip.produk_id for ip in po.item_produk_list if ip.qty > 0}
+        produk_id_tunggal = next(iter(produk_ids_po)) if len(produk_ids_po) == 1 else None
+
+        by_bp_id = {bp.id: bp for bp in po.bahan_pakai_list}
+        stok_minus = False
+        for bp_id_s, qty_final_s in zip(request.form.getlist("bp_id[]"), request.form.getlist("qty_final[]")):
+            bp = by_bp_id.get(int(bp_id_s)) if bp_id_s else None
+            if not bp:
+                continue
+            qty_final = parse_angka_iklan(qty_final_s)
+            if qty_final > 0:
+                bp.qty_pakai = qty_final
+            bahan = bp.bahan_baku
+            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - bp.qty_pakai
+            if bahan.stok_saat_ini < 0:
+                stok_minus = True
+
+            produk_jadi_pcs = None
+            if produk_id_tunggal:
+                kebutuhan = BahanBakuKebutuhan.query.filter_by(
+                    bahan_baku_id=bahan.id, produk_id=produk_id_tunggal,
+                ).first()
+                if kebutuhan and kebutuhan.jumlah_yard:
+                    produk_jadi_pcs = round(bp.qty_pakai / kebutuhan.jumlah_yard)
+
+            db.session.add(BahanBakuTransaksi(
+                bahan_baku_id=bahan.id, tanggal=today_wib(), jenis="Keluar", jumlah_yard=bp.qty_pakai,
+                vendor=po.vendor.nama_vendor, keterangan=f"Purchase Order {po.nomor_po}",
+                purchase_order_id=po.id, produk_id=produk_id_tunggal, produk_jadi_pcs=produk_jadi_pcs,
+            ))
+
+        po.total_biaya = sum(ip.total for ip in po.item_produk_list)
+        po.produksi_mulai_pada = now_wib()
+        db.session.commit()
+
+        pesan = f"PO {po.nomor_po} mulai produksi -- stok bahan sudah dikurangi."
+        kategori = "success"
+        if stok_minus:
+            pesan += " Perhatian: ada stok bahan yang jadi minus, cek lagi catatan stok masuknya."
+            kategori = "warning"
+        flash(pesan, kategori)
+        return redirect(url_for("progress_produksi_list"))
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/status", methods=["POST"])
     @admin_required
@@ -2613,7 +2667,31 @@ def create_app():
         if q:
             query = query.filter(PurchaseOrder.nomor_po.ilike(f"%{q}%"))
         daftar = query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
-        return render_template("inventory/progress_produksi_list.html", daftar=daftar, q=q)
+
+        # Saran Qty pcs buat modal "Mulai Produksi" -- dari rumus Jumlah Yard (Qty
+        # Pakai bahan) / Kebutuhan Yard per Pcs, kalau semua Item Produk di PO itu
+        # sama-sama 1 produk & ada Kebutuhan yg cocok (kalau nggak, admin isi manual).
+        saran_qty = {}
+        for po in daftar:
+            if po.produksi_mulai_pada:
+                continue
+            produk_ids_po = {ip.produk_id for ip in po.item_produk_list}
+            if len(produk_ids_po) != 1:
+                continue
+            produk_id_tunggal = next(iter(produk_ids_po))
+            total_saran = 0
+            ada_kebutuhan = False
+            for bp in po.bahan_pakai_list:
+                kebutuhan = BahanBakuKebutuhan.query.filter_by(
+                    bahan_baku_id=bp.bahan_baku_id, produk_id=produk_id_tunggal,
+                ).first()
+                if kebutuhan and kebutuhan.jumlah_yard:
+                    total_saran += bp.qty_pakai / kebutuhan.jumlah_yard
+                    ada_kebutuhan = True
+            if ada_kebutuhan:
+                saran_qty[po.id] = round(total_saran)
+
+        return render_template("inventory/progress_produksi_list.html", daftar=daftar, q=q, saran_qty=saran_qty)
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
     @admin_required

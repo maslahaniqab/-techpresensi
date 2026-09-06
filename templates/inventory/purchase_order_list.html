@@ -5,7 +5,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <h3 class="mb-1">Purchase Order</h3>
-    <p class="text-muted small mb-0">Order produksi ke vendor/penjahit &mdash; bahan yang dipakai otomatis mengurangi stok saat PO disimpan.</p>
+    <p class="text-muted small mb-0">Order produksi ke vendor/penjahit. Stok bahan BELUM berkurang saat PO disimpan -- baru kepotong pas "Mulai Produksi" di halaman Produksi.</p>
   </div>
   {% if not daftar_vendor %}
   <span class="text-muted small">Tambah <a href="{{ url_for('vendor_list') }}">Vendor</a> dulu sebelum bisa buat PO.</span>
@@ -53,7 +53,8 @@
               {%- set ket = [] -%}
               {%- if ip.warna %}{% set _ = ket.append(ip.warna) %}{% endif -%}
               {%- if ip.size %}{% set _ = ket.append(ip.size) %}{% endif -%}
-              {%- if ket %} ({{ ket | join(", ") }}){% endif %} x {{ ip.qty }}
+              {%- if ket %} ({{ ket | join(", ") }}){% endif %}
+              {% if po.produksi_mulai_pada %} x {{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}
             </li>
             {% endfor %}
           </ul>
@@ -114,6 +115,9 @@
             <input type="text" class="form-control" value="Dibuat otomatis" disabled>
             <div class="form-text">Format: PO-tgl-kodevendor+urut, mis. PO-04/09/2026-01001</div>
           </div>
+          <div class="col-12">
+            <div class="alert alert-info small mb-0 py-2">Size &amp; Qty pcs per produk diisi belakangan pas <strong>Mulai Produksi</strong> di halaman Produksi -- di sini cukup Produk + Warna. Stok bahan juga baru kepotong pas itu, bukan sekarang.</div>
+          </div>
           <div class="col-md-3">
             <label class="form-label small mb-1">Vendor *</label>
             <select name="vendor_id" class="form-select" required>
@@ -142,7 +146,7 @@
             </div>
             <div class="table-responsive">
               <table class="table table-sm align-middle">
-                <thead><tr><th>Produk</th><th style="width:80px;">Warna</th><th style="width:70px;">Size</th><th style="width:70px;">Qty</th><th class="text-end" style="width:90px;">Total</th><th style="width:30px;"></th></tr></thead>
+                <thead><tr><th>Produk</th><th style="width:110px;">Warna</th><th style="width:30px;"></th></tr></thead>
                 <tbody id="tbodyItemProduk"></tbody>
               </table>
             </div>
@@ -161,11 +165,10 @@
           </div>
         </div>
 
-        <div class="text-end fw-semibold mt-2">Total Biaya: <span id="totalBiayaDisplay">Rp 0</span></div>
-        <div class="text-muted small mt-1">* Stok bahan akan berkurang otomatis saat PO disimpan.</div>
+        <div class="text-muted small mt-2">* Qty Pakai di sini masih perkiraan awal -- bisa dikoreksi lagi pas Mulai Produksi, baru di titik itu stok kepotong.</div>
       </div>
       <div class="modal-footer">
-        <button type="submit" class="btn btn-primary">SIMPAN PO &amp; KURANGI STOK BAHAN</button>
+        <button type="submit" class="btn btn-primary">SIMPAN PO</button>
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
       </div>
     </form>
@@ -190,37 +193,15 @@
     return html;
   }
 
-  function rupiah(n) {
-    return "Rp " + Math.round(n).toLocaleString("id-ID");
-  }
-
-  function hitungTotalBiaya() {
-    let total = 0;
-    document.querySelectorAll("#tbodyItemProduk tr").forEach(tr => {
-      const sel = tr.querySelector("select[name='ip_produk_id[]']");
-      const qty = parseFloat(tr.querySelector("input[name='ip_qty[]']").value) || 0;
-      const produk = PRODUK_DATA[sel.value];
-      const modal = produk ? produk.modal : 0;
-      const rowTotal = qty * modal;
-      tr.querySelector(".ip-total").textContent = rupiah(rowTotal);
-      total += rowTotal;
-    });
-    document.getElementById("totalBiayaDisplay").textContent = rupiah(total);
-  }
-
   function tambahBarisProduk() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><select name="ip_produk_id[]" class="form-select form-select-sm produk-search">${optionsProduk()}</select></td>
       <td><input type="text" name="ip_warna[]" class="form-control form-control-sm"></td>
-      <td><input type="text" name="ip_size[]" class="form-control form-control-sm"></td>
-      <td><input type="number" name="ip_qty[]" class="form-control form-control-sm" min="1" value="1" oninput="hitungTotalBiaya()"></td>
-      <td class="text-end ip-total small">Rp 0</td>
-      <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove(); hitungTotalBiaya();">&times;</button></td>
+      <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove();">&times;</button></td>
     `;
     document.getElementById("tbodyItemProduk").appendChild(tr);
     const sel = tr.querySelector("select[name='ip_produk_id[]']");
-    sel.addEventListener("change", hitungTotalBiaya);
     initProdukSearch(sel);
   }
 
@@ -244,7 +225,6 @@
   document.getElementById("modalBuatPO").addEventListener("show.bs.modal", function () {
     document.getElementById("tbodyItemProduk").innerHTML = "";
     document.getElementById("tbodyBahanPakai").innerHTML = "";
-    document.getElementById("totalBiayaDisplay").textContent = "Rp 0";
     tambahBarisProduk();
     tambahBarisBahan();
   });
