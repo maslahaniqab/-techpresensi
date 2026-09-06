@@ -1559,6 +1559,15 @@ def create_app():
         if "produksi_mulai_pada" not in kolom_po:
             db.session.execute(db.text("ALTER TABLE purchase_order ADD COLUMN produksi_mulai_pada DATETIME"))
             db.session.commit()
+            # PO lama (dibuat sblm fitur "Mulai Produksi" ada) sudah kepotong stoknya
+            # & punya qty asli sejak awal dibuat -- tandain sbg "sudah mulai produksi"
+            # (pakai dibuat_pada) BIAR TIDAK ke-anggap "belum mulai" (yg kalau dipencet
+            # bakal motong stok KEDUA KALINYA / dobel).
+            db.session.execute(db.text(
+                "UPDATE purchase_order SET produksi_mulai_pada = dibuat_pada WHERE id IN ("
+                "SELECT DISTINCT purchase_order_id FROM purchase_order_item_produk WHERE qty > 0)"
+            ))
+            db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
