@@ -61,7 +61,24 @@
     </div>
   </div>
 
+  <div class="mt-4" id="kebutuhanPreviewWrap" hidden>
+    <div class="fw-semibold small mb-2">Kebutuhan Bahan untuk 1 Pcs <span id="kebutuhanPreviewProduk"></span></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0" id="kebutuhanPreviewTable">
+        <thead class="table-light"><tr id="kebutuhanPreviewThead"></tr></thead>
+        <tbody id="kebutuhanPreviewBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="row g-3 mt-1">
+    <div class="col-md-4">
+      <label class="form-label">Kebutuhan Bahan per Pcs <span class="text-muted small">(yard, dari Kelola Ukuran -- boleh diedit)</span></label>
+      <div class="input-group">
+        <input type="number" min="0" step="0.01" id="kebutuhan_bahan_pcs_input" class="form-control" placeholder="Contoh: 2.5">
+        <span class="input-group-text">Yard/Pcs</span>
+      </div>
+    </div>
     <div class="col-md-4">
       <label class="form-label">Estimasi Produk Jadi</label>
       <div class="input-group">
@@ -296,13 +313,67 @@
     selKategoriSpek.addEventListener('change', renderSpekFieldsForm);
   }
 
-  // Estimasi Produk Jadi otomatis = Panjang Bahan (yard) / kebutuhan yard per pcs
-  // (dari "Kelola Ukuran & Kebutuhan Yard per Produk" di bawah, utk kombinasi Jenis
-  // Bahan + Peruntukan Produk yang dipilih). Tetap bisa ditimpa manual kalau admin
-  // ngetik sendiri di kolomnya (mis. karena ada sisa potongan/waste beda dari
-  // estimasi).
-  var KEBUTUHAN_DATA = {{ kebutuhan_map_json | tojson }};
+  // Preview "Kebutuhan Bahan untuk 1 Pcs {Produk}" -- begitu Peruntukan Produk
+  // dipilih, tampilin semua baris ukuran+kebutuhan bahan yg udah kesimpan di
+  // "Kelola Ukuran & Kebutuhan Yard per Produk" utk produk itu (persis data yg
+  // sama, biar admin nggak perlu scroll ke bawah). Juga otomatis nyaranin angka
+  // "Kebutuhan Bahan per Pcs" (diprioritaskan yg bahan-nya cocok sama Jenis Bahan
+  // yg lagi dipilih di atas).
+  var SPEK_DATA = {{ spek_per_produk_json | tojson }};
+  var previewWrap = document.getElementById('kebutuhanPreviewWrap');
+  var previewProdukLabel = document.getElementById('kebutuhanPreviewProduk');
+  var previewThead = document.getElementById('kebutuhanPreviewThead');
+  var previewBody = document.getElementById('kebutuhanPreviewBody');
+  var inputKebutuhanPcs = document.getElementById('kebutuhan_bahan_pcs_input');
+  var kebutuhanManual = false;
+  if (inputKebutuhanPcs) {
+    inputKebutuhanPcs.addEventListener('input', function () { kebutuhanManual = true; hitungEstimasi(); });
+  }
+
+  function renderKebutuhanPreview() {
+    if (!previewWrap || !selProduk) return;
+    var produkId = selProduk.value;
+    var rows = produkId ? (SPEK_DATA[produkId] || []) : [];
+    if (!rows.length) {
+      previewWrap.hidden = true;
+      return;
+    }
+    previewWrap.hidden = false;
+    previewProdukLabel.textContent = '"' + selProduk.options[selProduk.selectedIndex].text + '"';
+    var kat = rows[0].kategori || '';
+    var fields = KATEGORI_FIELDS[kat] || KATEGORI_FIELDS[''];
+    previewThead.innerHTML = '<th>Size</th>' + fields.map(function (f) { return '<th>' + f[1] + '</th>'; }).join('') + '<th>Bahan</th><th>Yard/Pcs</th>';
+    previewBody.innerHTML = '';
+    var bahanId = selBahan ? selBahan.value : '';
+    var matched = null;
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      var cells = '<td>' + r.size + '</td>';
+      fields.forEach(function (f) {
+        var val = r[f[0]];
+        cells += '<td>' + (val != null ? val + ' cm' : '-') + '</td>';
+      });
+      cells += '<td>' + (r.bahan_nama || '-') + '</td>';
+      cells += '<td>' + (r.yard_per_pcs != null ? r.yard_per_pcs : '-') + '</td>';
+      tr.innerHTML = cells;
+      previewBody.appendChild(tr);
+      if (r.yard_per_pcs != null) {
+        if (bahanId && String(r.bahan_baku_id) === bahanId) matched = r;
+        else if (!matched) matched = r;
+      }
+    });
+    if (matched && !kebutuhanManual && inputKebutuhanPcs) {
+      inputKebutuhanPcs.value = matched.yard_per_pcs;
+    }
+  }
+
+  // Estimasi Produk Jadi otomatis = (Panjang Bahan x Lebar Kain, dlm meter -- kalau
+  // Lebar Kain kosong dianggap 1 meter/standar) dibagi Kebutuhan Bahan per Pcs (yard,
+  // dari "Kelola Ukuran & Kebutuhan Yard per Produk" -- boleh ditimpa manual di kolom
+  // "Kebutuhan Bahan per Pcs" di atas). Estimasi-nya sendiri jg tetap bisa ditimpa
+  // manual (mis. karena ada sisa potongan/waste beda dari estimasi).
   var inputPanjang = document.getElementById('panjang_yard');
+  var inputLebar = document.getElementById('lebar_kain');
   var inputEstimasi = document.getElementById('produk_jadi_pcs');
   var estimasiHint = document.getElementById('estimasi-hint');
   var estimasiManual = false;
@@ -312,31 +383,30 @@
 
   function hitungEstimasi() {
     if (!inputEstimasi || !estimasiHint) return;
-    var bahanId = selBahan ? selBahan.value : '';
-    var produkId = selProduk ? selProduk.value : '';
     var panjang = parseFloat(inputPanjang ? inputPanjang.value : '');
-    if (!bahanId || !produkId) {
-      estimasiHint.textContent = 'Pilih Jenis Bahan, Peruntukan Produk, dan isi Panjang Bahan supaya kehitung otomatis.';
-      return;
-    }
-    var kebutuhan = KEBUTUHAN_DATA[bahanId + '_' + produkId];
+    var lebar = parseFloat(inputLebar ? inputLebar.value : '') || 1;
+    var kebutuhan = parseFloat(inputKebutuhanPcs ? inputKebutuhanPcs.value : '');
     if (!kebutuhan) {
-      estimasiHint.innerHTML = 'Belum ada data "yard/pcs" utk kombinasi bahan &amp; produk ini -- isi dulu di "Kelola Ukuran &amp; Kebutuhan Yard per Produk" di bawah, atau isi manual di kolom ini.';
+      estimasiHint.innerHTML = 'Belum ada "Kebutuhan Bahan per Pcs" -- pilih Peruntukan Produk (kalau sudah ada datanya di Kelola Ukuran) atau isi manual di kolom itu.';
       return;
     }
     if (!panjang || panjang <= 0) {
       estimasiHint.textContent = 'Kebutuhan bahan ini: ' + kebutuhan + ' yard/pcs. Isi Panjang Bahan supaya estimasinya kehitung.';
       return;
     }
-    var estimasi = Math.floor(panjang / kebutuhan);
-    estimasiHint.textContent = 'Estimasi otomatis: ' + estimasi + ' pcs (dari ' + panjang + ' yard ÷ ' + kebutuhan + ' yard/pcs).';
+    var panjangEfektif = panjang * lebar;
+    var estimasi = Math.floor(panjangEfektif / kebutuhan);
+    estimasiHint.textContent = lebar !== 1
+      ? 'Estimasi otomatis: ' + estimasi + ' pcs (dari ' + panjang + ' yard x ' + lebar + ' m ÷ ' + kebutuhan + ' yard/pcs).'
+      : 'Estimasi otomatis: ' + estimasi + ' pcs (dari ' + panjang + ' yard ÷ ' + kebutuhan + ' yard/pcs).';
     if (!estimasiManual) {
       inputEstimasi.value = estimasi;
     }
   }
-  if (selBahan) selBahan.addEventListener('change', hitungEstimasi);
-  if (selProduk) selProduk.addEventListener('change', hitungEstimasi);
+  if (selBahan) selBahan.addEventListener('change', function () { renderKebutuhanPreview(); hitungEstimasi(); });
+  if (selProduk) selProduk.addEventListener('change', function () { kebutuhanManual = false; renderKebutuhanPreview(); hitungEstimasi(); });
   if (inputPanjang) inputPanjang.addEventListener('input', hitungEstimasi);
+  if (inputLebar) inputLebar.addEventListener('input', hitungEstimasi);
 })();
 </script>
 

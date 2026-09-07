@@ -2875,6 +2875,20 @@ def create_app():
         for p in produk_list:
             for s in p.spek_ukuran_list:
                 spek_by_kategori.setdefault(s.kategori or "", []).append(s)
+        # produk_id -> daftar baris ukuran+kebutuhan bahannya -- dipakai JS di form
+        # Cutting buat nampilin preview "Kebutuhan Bahan utk 1 Pcs" begitu Peruntukan
+        # Produk dipilih (persis data yg sama kayak di Kelola Ukuran & Kebutuhan Yard).
+        spek_per_produk = {}
+        for p in produk_list:
+            for s in p.spek_ukuran_list:
+                spek_per_produk.setdefault(p.id, []).append({
+                    "kategori": s.kategori or "", "size": s.size,
+                    "lingkar_dada": s.lingkar_dada, "panjang_atas": s.panjang_atas,
+                    "lingkar_pinggang": s.lingkar_pinggang, "ld_lengan": s.ld_lengan, "pergelangan": s.pergelangan,
+                    "bahan_baku_id": s.bahan_baku_id,
+                    "bahan_nama": s.bahan_baku.nama_bahan if s.bahan_baku else None,
+                    "yard_per_pcs": s.yard_per_pcs,
+                })
         # "bahanId_produkId" -> yard dibutuhkan per 1 pcs -- dipakai JS di form Cutting
         # atas utk otomatis hitung Estimasi Produk Jadi begitu Jenis Bahan + Peruntukan
         # Produk + Panjang Bahan sudah diisi.
@@ -2896,7 +2910,7 @@ def create_app():
             "inventory/bahan_baku_cutting.html",
             bahan_list=bahan_list, produk_list=produk_list,
             daftar_kebutuhan=daftar_kebutuhan, kebutuhan_tanpa_ukuran=kebutuhan_tanpa_ukuran,
-            kebutuhan_map_json=kebutuhan_map,
+            kebutuhan_map_json=kebutuhan_map, spek_per_produk_json=spek_per_produk,
             spek_by_kategori=spek_by_kategori, kategori_fields=KATEGORI_SPEK_FIELDS,
             tanggal_hari_ini=today_wib().isoformat(),
         )
