@@ -14,12 +14,14 @@
 <div class="card p-4 text-center text-muted small mb-4">
   Belum ada bahan baku sama sekali. <a href="{{ url_for('bahan_baku_input') }}">Pengadaan Barang</a> dulu sebelum bisa cutting.
 </div>
-{% else %}
-<form method="post" class="card p-4 mb-4">
+{% endif %}
+
+<form method="post" id="formProduksi">
+<div class="card p-4 mb-4">
   <div class="row g-3">
     <div class="col-md-6">
       <label class="form-label">Jenis Bahan</label>
-      <select name="bahan_baku_id" id="bahan_baku_id" class="form-select" required>
+      <select name="bahan_baku_id" id="bahan_baku_id" class="form-select">
         <option value="">Pilih bahan&hellip;</option>
         {% for b in bahan_list %}
         <option value="{{ b.id }}" data-warna="{{ b.warna or '' }}" data-stok="{{ '%.2f'|format(b.stok_saat_ini) }}">
@@ -39,7 +41,7 @@
     </div>
     <div class="col-md-4">
       <label class="form-label">Panjang Bahan (Yard)</label>
-      <input type="number" min="0" step="0.01" name="panjang_yard" id="panjang_yard" class="form-control" placeholder="Contoh: 35" required>
+      <input type="number" min="0" step="0.01" name="panjang_yard" id="panjang_yard" class="form-control" placeholder="Contoh: 35">
     </div>
     <div class="col-md-4">
       <label class="form-label">Lebar Kain (Meter) <span class="text-muted small">(opsional)</span></label>
@@ -69,10 +71,7 @@
       <div class="form-text" id="estimasi-hint">Pilih Jenis Bahan, Peruntukan Produk, dan isi Panjang Bahan supaya kehitung otomatis.</div>
     </div>
   </div>
-
-  <button type="submit" class="btn btn-primary mt-4">Simpan</button>
-</form>
-{% endif %}
+</div>
 
 <div class="card p-3 mb-4">
   <div class="fw-semibold small mb-2">Kelola Ukuran &amp; Kebutuhan Yard per Produk</div>
@@ -81,27 +80,28 @@
     dibutuhkan untuk 1 pcs-nya -- 1x isi di sini kepakai buat otomatis menghitung Estimasi Produk Jadi di form
     Cutting di atas, dan Qty pcs pas "Mulai Produksi" di menu Purchase Order (Total Yard &divide; Yard per Pcs
     = Jumlah Pcs). Yard per Pcs tetap diisi manual (belum ada rumus baku konversi cm ke yard per pola).
+    Bagian ini opsional -- isi kalau memang mau nambah/update acuan ukuran.
   </p>
-  <form method="post" id="form-tambah-spek" action="{{ url_for('produk_spek_ukuran_tambah', produk_id=0) }}" class="row g-2 align-items-end">
+  <div class="row g-2 align-items-end">
     <div class="col-md-4 col-6">
       <label class="form-label small">Produk</label>
-      <select id="spek_produk_id" class="form-select form-select-sm produk-search" required>
+      <select name="spek_produk_id" id="spek_produk_id" class="form-select form-select-sm produk-search">
         <option value="">Pilih produk&hellip;</option>
         {% for p in produk_list %}
         <option value="{{ p.id }}">{{ p.nama_produk }}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-3 col-6">
+    <div class="col-md-4 col-6">
       <label class="form-label small">Kategori</label>
-      <select name="kategori" id="spek_kategori" class="form-select form-select-sm" required>
+      <select name="kategori" id="spek_kategori" class="form-select form-select-sm">
         <option value="">Pilih kategori&hellip;</option>
         {% for kat in kategori_fields if kat %}
         <option value="{{ kat }}">{{ kat }}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-2 col-6">
+    <div class="col-md-4 col-6">
       <label class="form-label small">Size</label>
       <select name="size" class="form-select form-select-sm">
         <option value="All Size">All Size</option>
@@ -109,18 +109,15 @@
         <option value="Standar">Standar</option>
       </select>
     </div>
-    <div class="col-md-3 col-6">
-      <button type="submit" class="btn btn-sm btn-primary w-100">+ Simpan</button>
-    </div>
     <div class="col-12">
       <div class="row g-2 mt-1" id="spek-fields-container">
         <div class="col-12 text-muted small">Pilih kategori dulu untuk menentukan kolom ukurannya.</div>
       </div>
     </div>
     <div class="col-12"><hr class="my-2"></div>
-    <div class="col-md-5 col-7">
+    <div class="col-md-6 col-7">
       <label class="form-label small">Bahan &amp; Yard per Pcs <span class="text-muted">(opsional)</span></label>
-      <select name="bahan_baku_id" class="form-select form-select-sm bahan-search">
+      <select name="spek_bahan_baku_id" class="form-select form-select-sm bahan-search">
         <option value="">- Nggak diisi -</option>
         {% for b in bahan_list %}
         <option value="{{ b.id }}">{{ b.nama_bahan }}</option>
@@ -133,8 +130,16 @@
         <span class="input-group-text">Yard/Pcs</span>
       </div>
     </div>
-  </form>
+  </div>
+</div>
 
+<div class="text-center mb-4">
+  <button type="submit" class="btn btn-primary btn-lg px-5">Simpan</button>
+  <div class="text-muted small mt-1">Nyimpen apapun yang sudah diisi di atas -- Cutting, Ukuran &amp; Kebutuhan, atau dua-duanya sekaligus.</div>
+</div>
+</form>
+
+<div class="card p-3 mb-4">
   {% if spek_by_kategori %}
   {% for kat, baris_list in spek_by_kategori.items() %}
   {% set fields = kategori_fields.get(kat, kategori_fields['']) %}
@@ -289,15 +294,6 @@
   }
   if (selKategoriSpek) {
     selKategoriSpek.addEventListener('change', renderSpekFieldsForm);
-  }
-
-  var formSpek = document.getElementById('form-tambah-spek');
-  var selSpekProduk = document.getElementById('spek_produk_id');
-  if (formSpek && selSpekProduk) {
-    formSpek.addEventListener('submit', function (e) {
-      if (!selSpekProduk.value) return; // biarkan validasi HTML jalan
-      formSpek.action = formSpek.action.replace(/\/0\/tambah$/, '/' + selSpekProduk.value + '/tambah');
-    });
   }
 
   // Estimasi Produk Jadi otomatis = Panjang Bahan (yard) / kebutuhan yard per pcs

@@ -2786,43 +2786,83 @@ def create_app():
     @app.route("/inventory/cutting", methods=["GET", "POST"])
     @admin_required
     def bahan_baku_cutting():
-        """Form manual "ambil bahan utk cutting" (nggak nempel ke PO manapun) --
-        dipakai buat cutting ad-hoc di luar alur Purchase Order + Mulai Produksi.
-        Tabel preview ukuran yg dulu nempel di sini (butuh pilih Peruntukan Produk
-        dulu) sudah dihapus krn dobel sama tabel per-kategori di "Kelola Ukuran &
-        Kebutuhan Yard per Produk" di bawah -- Estimasi Produk Jadi-nya sendiri
-        tetap kehitung otomatis dari Kebutuhan Yard per Pcs seperti biasa."""
+        """1 halaman, 1 form, 1 tombol Simpan di bawah -- begitu diklik, apapun yg
+        udah diisi admin di 2 bagian lembar kerja ini ikut kesimpan sekaligus:
+        (1) Cutting manual (ambil bahan dari stok, nggak nempel ke PO manapun), dan
+        (2) Kelola Ukuran & Kebutuhan Yard per Produk. Keduanya independen -- boleh
+        isi salah satu aja atau dua-duanya sekaligus."""
         if request.method == "POST":
+            pesan_list = []
+            kategori_flash = "success"
+
+            # -- Bagian 1: Cutting manual (opsional -- isi kalau Jenis Bahan+Panjang diisi) --
             bahan_id = request.form.get("bahan_baku_id", type=int)
             bahan = db.session.get(BahanBaku, bahan_id) if bahan_id else None
             panjang_yard = parse_angka_iklan(request.form.get("panjang_yard"))
-            lebar_kain = parse_angka_iklan(request.form.get("lebar_kain")) or None
-            produk_id = request.form.get("produk_id", type=int)
-            try:
-                tanggal_ambil = datetime.strptime(request.form.get("tanggal_ambil", ""), "%Y-%m-%d").date()
-            except ValueError:
-                tanggal_ambil = today_wib()
-            vendor = request.form.get("vendor", "").strip()
-            produk_jadi_pcs = request.form.get("produk_jadi_pcs", type=int)
+            if bahan and panjang_yard > 0:
+                lebar_kain = parse_angka_iklan(request.form.get("lebar_kain")) or None
+                produk_id = request.form.get("produk_id", type=int)
+                try:
+                    tanggal_ambil = datetime.strptime(request.form.get("tanggal_ambil", ""), "%Y-%m-%d").date()
+                except ValueError:
+                    tanggal_ambil = today_wib()
+                vendor = request.form.get("vendor", "").strip()
+                produk_jadi_pcs = request.form.get("produk_jadi_pcs", type=int)
 
-            if not bahan or panjang_yard <= 0:
-                flash("Pilih bahan baku dan isi panjang bahan yang diambil (yard).", "danger")
+                db.session.add(BahanBakuTransaksi(
+                    bahan_baku_id=bahan.id, tanggal=tanggal_ambil, jenis="Keluar", jumlah_yard=panjang_yard,
+                    produk_id=produk_id or None, warna=bahan.warna, vendor=vendor, lebar_kain=lebar_kain,
+                    produk_jadi_pcs=produk_jadi_pcs,
+                ))
+                bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - panjang_yard
+                pesan_list.append(f"{panjang_yard:g} Yard {bahan.nama_bahan} berhasil dicatat keluar utk cutting.")
+                if bahan.stok_saat_ini < 0:
+                    pesan_list.append("Perhatian: stok sekarang minus, cek lagi catatan stok masuknya.")
+                    kategori_flash = "warning"
+            elif bahan_id or panjang_yard:
+                pesan_list.append("Bagian Cutting: pilih Jenis Bahan DAN isi Panjang Bahan (yard) biar kesimpan.")
+                kategori_flash = "warning"
+
+            # -- Bagian 2: Kelola Ukuran & Kebutuhan Yard per Produk (opsional) --
+            spek_produk_id = request.form.get("spek_produk_id", type=int)
+            spek_produk = db.session.get(Produk, spek_produk_id) if spek_produk_id else None
+            spek_kategori = request.form.get("kategori", "").strip()
+            if spek_produk and spek_kategori in KATEGORI_SPEK_FIELDS and spek_kategori:
+                spek_size = request.form.get("size", "").strip() or "All Size"
+                spek_bahan_id = request.form.get("spek_bahan_baku_id", type=int)
+                spek_bahan = db.session.get(BahanBaku, spek_bahan_id) if spek_bahan_id else None
+                yard_per_pcs = parse_angka_iklan(request.form.get("yard_per_pcs")) or None
+                if spek_bahan and not yard_per_pcs:
+                    pesan_list.append("Sudah pilih Bahan tapi Yard per Pcs belum diisi -- kebutuhan yard nggak kesimpan.")
+                    kategori_flash = "warning"
+                if yard_per_pcs and not spek_bahan:
+                    pesan_list.append("Sudah isi Yard per Pcs tapi Bahan belum dipilih -- kebutuhan yard nggak kesimpan.")
+                    kategori_flash = "warning"
+
+                db.session.add(ProdukSpekUkuran(
+                    produk_id=spek_produk.id, size=spek_size, kategori=spek_kategori,
+                    lingkar_dada=parse_angka_iklan(request.form.get("lingkar_dada")) or None,
+                    panjang_atas=parse_angka_iklan(request.form.get("panjang_atas")) or None,
+                    lingkar_pinggang=parse_angka_iklan(request.form.get("lingkar_pinggang")) or None,
+                    ld_lengan=parse_angka_iklan(request.form.get("ld_lengan")) or None,
+                    pergelangan=parse_angka_iklan(request.form.get("pergelangan")) or None,
+                    bahan_baku_id=spek_bahan.id if (spek_bahan and yard_per_pcs) else None,
+                    yard_per_pcs=yard_per_pcs if (spek_bahan and yard_per_pcs) else None,
+                ))
+                ukuran_pesan = f"Ukuran {spek_kategori} - {spek_size} untuk {spek_produk.nama_produk} disimpan."
+                if spek_bahan and yard_per_pcs:
+                    ukuran_pesan += upsert_kebutuhan_yard(spek_bahan, spek_produk, yard_per_pcs)
+                pesan_list.append(ukuran_pesan)
+            elif spek_produk_id or spek_kategori:
+                pesan_list.append("Bagian Ukuran: pilih Produk DAN Kategori biar kesimpan.")
+                kategori_flash = "warning"
+
+            if not pesan_list:
+                flash("Belum ada yang diisi -- isi minimal salah satu bagian (Cutting atau Kelola Ukuran) sebelum Simpan.", "danger")
                 return redirect(url_for("bahan_baku_cutting"))
 
-            db.session.add(BahanBakuTransaksi(
-                bahan_baku_id=bahan.id, tanggal=tanggal_ambil, jenis="Keluar", jumlah_yard=panjang_yard,
-                produk_id=produk_id or None, warna=bahan.warna, vendor=vendor, lebar_kain=lebar_kain,
-                produk_jadi_pcs=produk_jadi_pcs,
-            ))
-            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - panjang_yard
             db.session.commit()
-
-            pesan = f"{panjang_yard:g} Yard {bahan.nama_bahan} berhasil dicatat keluar utk cutting."
-            kategori = "success"
-            if bahan.stok_saat_ini < 0:
-                pesan += " Perhatian: stok sekarang minus, cek lagi catatan stok masuknya."
-                kategori = "warning"
-            flash(pesan, kategori)
+            flash(" ".join(pesan_list), kategori_flash)
             return redirect(url_for("bahan_baku_cutting"))
 
         isi_otomatis_produk_jadi_kosong()
