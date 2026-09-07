@@ -68,6 +68,7 @@
         <th class="text-end">Jumlah</th>
         <th>Untuk Produk</th>
         <th>Detail</th>
+        <th class="text-end">Aksi</th>
       </tr>
     </thead>
     <tbody>
@@ -93,9 +94,12 @@
             {{ t.vendor or "-" }}{% if t.produk_jadi_pcs is not none %} &middot; {{ t.produk_jadi_pcs }} Pcs jadi{% endif %}{% if t.purchase_order %} &middot; <a href="{{ url_for('purchase_order_detail', po_id=t.purchase_order_id) }}">{{ t.purchase_order.nomor_po }}</a>{% endif %}
           {% endif %}
         </td>
+        <td class="text-end">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditTrx{{ t.id }}" title="Koreksi kalau ada data yang gak cocok">✎ Edit</button>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">Belum ada transaksi yang cocok dengan filter ini.</td></tr>
+      <tr><td colspan="7" class="text-center text-muted py-4">Belum ada transaksi yang cocok dengan filter ini.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -104,5 +108,55 @@
   <div class="text-muted small text-center mt-2">Menampilkan 300 transaksi terbaru. Pakai filter Jenis Bahan untuk mempersempit.</div>
   {% endif %}
 </div>
+
+{% for t in transaksi %}
+<div class="modal fade" id="modalEditTrx{{ t.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('bahan_baku_transaksi_edit_jumlah', transaksi_id=t.id) }}" class="modal-content">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Koreksi Transaksi &mdash; {{ t.bahan_baku.nama_bahan }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Superadmin bisa koreksi data di sini kalau ada yang gak cocok (mis. salah ketik jumlah/tanggal/harga). Stok Saat Ini otomatis disesuaikan pakai selisihnya.</p>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small">Tanggal</label>
+            <input type="date" name="tanggal" class="form-control form-control-sm" value="{{ t.tanggal.isoformat() }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Jumlah ({{ t.bahan_baku.satuan }})</label>
+            <input type="number" min="0.01" step="0.01" name="jumlah_yard" class="form-control form-control-sm" value="{{ t.jumlah_yard }}" required>
+          </div>
+          {% if t.jenis == 'Masuk' %}
+          <div class="col-md-6">
+            <label class="form-label small">Harga per {{ t.bahan_baku.satuan }}</label>
+            <input type="number" min="0" step="1" name="harga_per_yard" class="form-control form-control-sm" value="{{ t.harga_per_yard or '' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Suplier</label>
+            <input type="text" name="suplier" class="form-control form-control-sm" value="{{ t.suplier or '' }}">
+          </div>
+          {% else %}
+          <div class="col-md-6">
+            <label class="form-label small">Vendor</label>
+            <input type="text" name="vendor" class="form-control form-control-sm" value="{{ t.vendor or '' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Produk Jadi (Pcs)</label>
+            <input type="number" min="0" step="1" name="produk_jadi_pcs" class="form-control form-control-sm" value="{{ t.produk_jadi_pcs if t.produk_jadi_pcs is not none else '' }}">
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan Koreksi</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
 
 {% endblock %}

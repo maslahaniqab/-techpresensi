@@ -2166,24 +2166,48 @@ def create_app():
     @app.route("/inventory/bahan-baku/transaksi/<int:transaksi_id>/edit-jumlah", methods=["POST"])
     @admin_required
     def bahan_baku_transaksi_edit_jumlah(transaksi_id):
-        """Koreksi jumlah yard di 1 baris Riwayat Stok (mis. salah ketik pas input awal) --
-        Stok Saat Ini disesuaikan pakai selisih (bukan diganti mentah2), jadi transaksi
-        lain yg udah kejadian sesudahnya tetap konsisten."""
+        """Koreksi 1 baris transaksi stok (Masuk/Keluar) kalau ada ketidakcocokan data --
+        mis. salah ketik jumlah/tanggal/harga pas input awal. Stok Saat Ini disesuaikan
+        pakai SELISIH jumlah (bukan diganti mentah2), jadi transaksi lain yg udah
+        kejadian sesudahnya tetap konsisten. Dipakai dari 2 tempat: detail Bahan Baku
+        (cuma field Jumlah) & Riwayat Transaksi gabungan (field lebih lengkap) -- field
+        di luar Jumlah semuanya opsional, cuma diproses kalau memang dikirim."""
         t = db.session.get(BahanBakuTransaksi, transaksi_id) or abort_404()
+        tujuan = request.form.get("next") or url_for("bahan_baku_detail", bahan_id=t.bahan_baku_id)
         jumlah_baru = parse_angka_iklan(request.form.get("jumlah_yard"))
         if jumlah_baru <= 0:
             flash("Isi jumlah yang valid (harus lebih dari 0).", "danger")
-            return redirect(url_for("bahan_baku_detail", bahan_id=t.bahan_baku_id))
+            return redirect(tujuan)
 
         bahan = t.bahan_baku
         selisih = jumlah_baru - t.jumlah_yard
         bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) + (selisih if t.jenis == "Masuk" else -selisih)
-        if t.jenis == "Masuk" and t.harga_per_yard:
-            t.total_dibayar = round(jumlah_baru * t.harga_per_yard)
         t.jumlah_yard = jumlah_baru
+
+        if request.form.get("tanggal"):
+            try:
+                t.tanggal = datetime.strptime(request.form.get("tanggal"), "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        if t.jenis == "Masuk":
+            if request.form.get("harga_per_yard", "").strip():
+                t.harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+            if request.form.get("suplier") is not None:
+                t.suplier = request.form.get("suplier").strip()
+            if t.harga_per_yard:
+                t.total_dibayar = round(jumlah_baru * t.harga_per_yard)
+        else:
+            if request.form.get("vendor") is not None:
+                t.vendor = request.form.get("vendor").strip()
+            if request.form.get("produk_jadi_pcs", "").strip():
+                pcs = request.form.get("produk_jadi_pcs", type=int)
+                if pcs is not None and pcs >= 0:
+                    t.produk_jadi_pcs = pcs
+
         db.session.commit()
-        flash(f"Jumlah transaksi dikoreksi jadi {jumlah_baru:g} {bahan.satuan}, stok disesuaikan.", "success")
-        return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
+        flash(f"Transaksi {bahan.nama_bahan} berhasil dikoreksi, stok disesuaikan.", "success")
+        return redirect(tujuan)
 
     @app.route("/inventory/cutting/transaksi/<int:transaksi_id>/produk-jadi", methods=["POST"])
     @admin_required
