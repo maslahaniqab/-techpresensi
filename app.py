@@ -2614,7 +2614,19 @@ def create_app():
         aksi = request.form.get("aksi", "")
         if aksi == "batalkan":
             po.status = "Dibatalkan"
-            pesan = f"PO {po.nomor_po} dibatalkan."
+            # PO yg udah "Mulai Produksi" berarti stok bahannya udah kepotong beneran
+            # -- kalau dibatalkan, stok itu HARUS dikembalikan ke jumlah semula (bukan
+            # dibiarkan "kosong"/kepotong terus). Beda sama PO yg masih Menunggu
+            # Produksi (belum Mulai Produksi sama sekali) -- di situ stok emang belum
+            # kepakai sama sekali, jadi gak ada yg perlu dikembalikan.
+            if po.produksi_mulai_pada:
+                for bp in po.bahan_pakai_list:
+                    bp.bahan_baku.stok_saat_ini = (bp.bahan_baku.stok_saat_ini or 0) + bp.qty_pakai
+                BahanBakuTransaksi.query.filter_by(purchase_order_id=po.id).delete()
+                po.produksi_mulai_pada = None
+                pesan = f"PO {po.nomor_po} dibatalkan, stok bahan yg sudah kepotong (Mulai Produksi) dikembalikan ke semula."
+            else:
+                pesan = f"PO {po.nomor_po} dibatalkan."
         elif aksi == "aktifkan":
             po.status = "Menunggu Produksi"
             pesan = f"PO {po.nomor_po} diaktifkan lagi, status ngikutin progress produksi."
