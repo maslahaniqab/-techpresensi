@@ -2783,14 +2783,48 @@ def create_app():
             total_dibayar_semua=total_dibayar_semua, tanggal_hari_ini=today_wib().isoformat(),
         )
 
-    @app.route("/inventory/cutting")
+    @app.route("/inventory/cutting", methods=["GET", "POST"])
     @admin_required
     def bahan_baku_cutting():
-        """Halaman "Kelola Ukuran & Kebutuhan Yard per Produk" -- form manual "ambil
-        bahan utk cutting" (nggak nempel ke PO manapun) sudah dihapus dari sini, krn
-        produksi (dan potong stok bahan) sekarang jalan lewat Purchase Order + tombol
-        Mulai Produksi. Halaman ini tinggal ngurusin data acuan ukuran & kebutuhan
-        yard yg dipakai buat estimasi otomatis di titik itu."""
+        """Form manual "ambil bahan utk cutting" (nggak nempel ke PO manapun) --
+        dipakai buat cutting ad-hoc di luar alur Purchase Order + Mulai Produksi.
+        Tabel preview ukuran yg dulu nempel di sini (butuh pilih Peruntukan Produk
+        dulu) sudah dihapus krn dobel sama tabel per-kategori di "Kelola Ukuran &
+        Kebutuhan Yard per Produk" di bawah -- Estimasi Produk Jadi-nya sendiri
+        tetap kehitung otomatis dari Kebutuhan Yard per Pcs seperti biasa."""
+        if request.method == "POST":
+            bahan_id = request.form.get("bahan_baku_id", type=int)
+            bahan = db.session.get(BahanBaku, bahan_id) if bahan_id else None
+            panjang_yard = parse_angka_iklan(request.form.get("panjang_yard"))
+            lebar_kain = parse_angka_iklan(request.form.get("lebar_kain")) or None
+            produk_id = request.form.get("produk_id", type=int)
+            try:
+                tanggal_ambil = datetime.strptime(request.form.get("tanggal_ambil", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal_ambil = today_wib()
+            vendor = request.form.get("vendor", "").strip()
+            produk_jadi_pcs = request.form.get("produk_jadi_pcs", type=int)
+
+            if not bahan or panjang_yard <= 0:
+                flash("Pilih bahan baku dan isi panjang bahan yang diambil (yard).", "danger")
+                return redirect(url_for("bahan_baku_cutting"))
+
+            db.session.add(BahanBakuTransaksi(
+                bahan_baku_id=bahan.id, tanggal=tanggal_ambil, jenis="Keluar", jumlah_yard=panjang_yard,
+                produk_id=produk_id or None, warna=bahan.warna, vendor=vendor, lebar_kain=lebar_kain,
+                produk_jadi_pcs=produk_jadi_pcs,
+            ))
+            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - panjang_yard
+            db.session.commit()
+
+            pesan = f"{panjang_yard:g} Yard {bahan.nama_bahan} berhasil dicatat keluar utk cutting."
+            kategori = "success"
+            if bahan.stok_saat_ini < 0:
+                pesan += " Perhatian: stok sekarang minus, cek lagi catatan stok masuknya."
+                kategori = "warning"
+            flash(pesan, kategori)
+            return redirect(url_for("bahan_baku_cutting"))
+
         isi_otomatis_produk_jadi_kosong()
         bahan_list = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
         produk_list = Produk.query.order_by(Produk.nama_produk).all()
@@ -2801,7 +2835,14 @@ def create_app():
         for p in produk_list:
             for s in p.spek_ukuran_list:
                 spek_by_kategori.setdefault(s.kategori or "", []).append(s)
+        # "bahanId_produkId" -> yard dibutuhkan per 1 pcs -- dipakai JS di form Cutting
+        # atas utk otomatis hitung Estimasi Produk Jadi begitu Jenis Bahan + Peruntukan
+        # Produk + Panjang Bahan sudah diisi.
         daftar_kebutuhan = BahanBakuKebutuhan.query.join(BahanBaku).order_by(BahanBaku.nama_bahan).all()
+        kebutuhan_map = {
+            f"{k.bahan_baku_id}_{k.produk_id}": k.jumlah_yard
+            for k in daftar_kebutuhan
+        }
         # Kombinasi bahan+produk yg SUDAH ketautan ke baris ukuran (diisi lewat form
         # gabungan) -- sisanya (kebutuhan lama dari form terpisah sblm digabung, atau
         # dari halaman detail Bahan Baku) ditampilin terpisah biar nggak "hilang".
@@ -2815,7 +2856,9 @@ def create_app():
             "inventory/bahan_baku_cutting.html",
             bahan_list=bahan_list, produk_list=produk_list,
             daftar_kebutuhan=daftar_kebutuhan, kebutuhan_tanpa_ukuran=kebutuhan_tanpa_ukuran,
+            kebutuhan_map_json=kebutuhan_map,
             spek_by_kategori=spek_by_kategori, kategori_fields=KATEGORI_SPEK_FIELDS,
+            tanggal_hari_ini=today_wib().isoformat(),
         )
 
     @app.route("/inventory/spek-ukuran/<int:produk_id>/tambah", methods=["POST"])
