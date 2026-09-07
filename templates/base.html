@@ -133,8 +133,11 @@
   ('vendor_list', 'Vendor', '🤝'),
   ('gudang_list', 'Gudang', '🏬'),
   ('akun_pembayaran_list', 'Akun Pembayaran', '💳'),
+] %}
+{% set menu_produksi = [
   ('purchase_order_list', 'Purchase Order', '📝'),
   ('progress_produksi_list', 'Produksi', '✂️'),
+  ('permohonan_barang_list', 'Permohonan Barang', '📥'),
 ] %}
 {% set menu_inventory_langsung = [
   ('bahan_baku_transaksi_riwayat', 'Riwayat Transaksi', '📒'),
@@ -197,13 +200,14 @@
   {{ nav_section('navKeuangan', 'Keuangan', menu_keuangan) }}
   {{ nav_section('navProfit', 'Profitabilitas', menu_profit) }}
 
-  {% set inventory_active = (request.endpoint in menu_master_data|map('first')|list) or (request.endpoint in menu_inventory_langsung|map('first')|list) %}
+  {% set inventory_active = (request.endpoint in menu_master_data|map('first')|list) or (request.endpoint in menu_produksi|map('first')|list) or (request.endpoint in menu_inventory_langsung|map('first')|list) or request.endpoint == 'bahan_baku_cutting' %}
   <button type="button" class="nav-section-toggle" data-bs-toggle="collapse" data-bs-target="#navInventory" aria-expanded="{{ 'true' if inventory_active else 'false' }}" aria-controls="navInventory">
     <span>Inventory</span>
     <span class="chevron">▾</span>
   </button>
   <div class="collapse {{ 'show' if inventory_active }}" id="navInventory">
     {{ nav_subsection('navMasterData', 'Master Data', menu_master_data) }}
+    {{ nav_subsection('navProduksi', 'Produksi', menu_produksi) }}
     {% for endpoint, label, icon in menu_inventory_langsung %}
     <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
     {% endfor %}

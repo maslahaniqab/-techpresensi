@@ -591,6 +591,23 @@ class PendapatanPesanan(db.Model):
     )
 
 
+class PermohonanBarang(db.Model):
+    """Form Permohonan/Pengajuan Pengadaan Barang -- catatan permintaan internal buat
+    nambah stok produk tertentu, dipantau statusnya. Beda dari Purchase Order: ini
+    cuma pengajuan/approval, gak langsung ngurangin/nambahin stok atau bikin
+    transaksi keuangan apapun."""
+    id = db.Column(db.Integer, primary_key=True)
+    nomor_permohonan = db.Column(db.String(64), nullable=False, unique=True)
+    tanggal = db.Column(db.Date, nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    warna = db.Column(db.String(64))
+    qty = db.Column(db.Integer, nullable=False, default=0)
+    status = db.Column(db.String(16), nullable=False, default="Menunggu")  # Menunggu/Diproses/Selesai/Ditolak
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    produk = db.relationship("Produk")
+
+
 class PengajuanLembur(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)

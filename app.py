@@ -46,7 +46,7 @@ from models import (
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
-    PurchaseOrderBahanPakai, PurchaseOrderPembayaran,
+    PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -2783,71 +2783,25 @@ def create_app():
             total_dibayar_semua=total_dibayar_semua, tanggal_hari_ini=today_wib().isoformat(),
         )
 
-    @app.route("/inventory/cutting", methods=["GET", "POST"])
+    @app.route("/inventory/cutting")
     @admin_required
     def bahan_baku_cutting():
-        if request.method == "POST":
-            bahan_id = request.form.get("bahan_baku_id", type=int)
-            bahan = db.session.get(BahanBaku, bahan_id) if bahan_id else None
-            panjang_yard = parse_angka_iklan(request.form.get("panjang_yard"))
-            lebar_kain = parse_angka_iklan(request.form.get("lebar_kain")) or None
-            produk_id = request.form.get("produk_id", type=int)
-            try:
-                tanggal_ambil = datetime.strptime(request.form.get("tanggal_ambil", ""), "%Y-%m-%d").date()
-            except ValueError:
-                tanggal_ambil = today_wib()
-            vendor = request.form.get("vendor", "").strip()
-            produk_jadi_pcs = request.form.get("produk_jadi_pcs", type=int)
-
-            if not bahan or panjang_yard <= 0:
-                flash("Pilih bahan baku dan isi panjang bahan yang diambil (yard).", "danger")
-                return redirect(url_for("bahan_baku_cutting"))
-
-            db.session.add(BahanBakuTransaksi(
-                bahan_baku_id=bahan.id, tanggal=tanggal_ambil, jenis="Keluar", jumlah_yard=panjang_yard,
-                produk_id=produk_id or None, warna=bahan.warna, vendor=vendor, lebar_kain=lebar_kain,
-                produk_jadi_pcs=produk_jadi_pcs,
-            ))
-            bahan.stok_saat_ini = (bahan.stok_saat_ini or 0) - panjang_yard
-            db.session.commit()
-
-            pesan = f"{panjang_yard:g} Yard {bahan.nama_bahan} berhasil dicatat keluar utk cutting."
-            kategori = "success"
-            if bahan.stok_saat_ini < 0:
-                pesan += " Perhatian: stok sekarang minus, cek lagi catatan stok masuknya."
-                kategori = "warning"
-            flash(pesan, kategori)
-            return redirect(url_for("bahan_baku_cutting"))
-
+        """Halaman "Kelola Ukuran & Kebutuhan Yard per Produk" -- form manual "ambil
+        bahan utk cutting" (nggak nempel ke PO manapun) sudah dihapus dari sini, krn
+        produksi (dan potong stok bahan) sekarang jalan lewat Purchase Order + tombol
+        Mulai Produksi. Halaman ini tinggal ngurusin data acuan ukuran & kebutuhan
+        yard yg dipakai buat estimasi otomatis di titik itu."""
         isi_otomatis_produk_jadi_kosong()
         bahan_list = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
         produk_list = Produk.query.order_by(Produk.nama_produk).all()
-        spek_per_produk = {
-            p.id: [
-                {
-                    "id": s.id, "size": s.size, "kategori": s.kategori or "",
-                    "lingkar_dada": s.lingkar_dada, "panjang_atas": s.panjang_atas,
-                    "lingkar_pinggang": s.lingkar_pinggang, "ld_lengan": s.ld_lengan, "pergelangan": s.pergelangan,
-                }
-                for s in p.spek_ukuran_list
-            ]
-            for p in produk_list
-        }
         # Kelompokkan semua baris spek ukuran per kategori (bukan per produk) buat
-        # ditampilkan sbg tabel terpisah-pisah di "Kelola Spek Ukuran per Produk" --
-        # tiap kategori kolomnya beda (lihat KATEGORI_SPEK_FIELDS).
+        # ditampilkan sbg tabel terpisah-pisah -- tiap kategori kolomnya beda (lihat
+        # KATEGORI_SPEK_FIELDS).
         spek_by_kategori = {}
         for p in produk_list:
             for s in p.spek_ukuran_list:
                 spek_by_kategori.setdefault(s.kategori or "", []).append(s)
-        # "bahanId_produkId" -> yard dibutuhkan per 1 pcs (dari menu Bahan Baku > Kebutuhan
-        # per Produk) -- dipakai JS di halaman ini utk otomatis hitung Estimasi Produk Jadi
-        # begitu Jenis Bahan + Peruntukan Produk + Panjang Bahan sudah diisi.
         daftar_kebutuhan = BahanBakuKebutuhan.query.join(BahanBaku).order_by(BahanBaku.nama_bahan).all()
-        kebutuhan_map = {
-            f"{k.bahan_baku_id}_{k.produk_id}": k.jumlah_yard
-            for k in daftar_kebutuhan
-        }
         # Kombinasi bahan+produk yg SUDAH ketautan ke baris ukuran (diisi lewat form
         # gabungan) -- sisanya (kebutuhan lama dari form terpisah sblm digabung, atau
         # dari halaman detail Bahan Baku) ditampilin terpisah biar nggak "hilang".
@@ -2861,9 +2815,7 @@ def create_app():
             "inventory/bahan_baku_cutting.html",
             bahan_list=bahan_list, produk_list=produk_list,
             daftar_kebutuhan=daftar_kebutuhan, kebutuhan_tanpa_ukuran=kebutuhan_tanpa_ukuran,
-            spek_per_produk_json=spek_per_produk, kebutuhan_map_json=kebutuhan_map,
             spek_by_kategori=spek_by_kategori, kategori_fields=KATEGORI_SPEK_FIELDS,
-            tanggal_hari_ini=today_wib().isoformat(),
         )
 
     @app.route("/inventory/spek-ukuran/<int:produk_id>/tambah", methods=["POST"])
@@ -2947,6 +2899,80 @@ def create_app():
         db.session.commit()
         flash("Baris spek ukuran dihapus.", "info")
         return redirect(url_for("bahan_baku_cutting"))
+
+    # ---------- INVENTORY: PERMOHONAN PENGADAAN BARANG ----------
+    @app.route("/inventory/master-data/permohonan-barang", methods=["GET", "POST"])
+    @admin_required
+    def permohonan_barang_list():
+        if request.method == "POST":
+            produk_id = request.form.get("produk_id", type=int)
+            produk = db.session.get(Produk, produk_id) if produk_id else None
+            warna = request.form.get("warna", "").strip()
+            qty = int(parse_angka_iklan(request.form.get("qty")))
+            try:
+                tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal = today_wib()
+
+            if not produk or qty <= 0:
+                flash("Pilih Nama Produk dan isi Qty (harus lebih dari 0).", "danger")
+                return redirect(url_for("permohonan_barang_list"))
+
+            # Urutan (global) dihitung SEBELUM baris baru ini dibuat, biar nggak ikut
+            # kehitung sendiri (off-by-one).
+            urutan = PermohonanBarang.query.count()
+            p = PermohonanBarang(
+                # Nomor final (format PB-dd/mm/yyyy-NNN, urutan global) baru dibentuk di
+                # bawah -- placeholder unik dulu di sini biar kolom unique nggak bentrok
+                # sebelum di-flush.
+                nomor_permohonan=f"TEMP-{uuid.uuid4().hex}", tanggal=tanggal,
+                produk_id=produk.id, warna=warna, qty=qty,
+            )
+            db.session.add(p)
+            db.session.flush()
+            while True:
+                urutan += 1
+                nomor = f"PB-{tanggal.strftime('%d/%m/%Y')}-{urutan:03d}"
+                if not PermohonanBarang.query.filter_by(nomor_permohonan=nomor).first():
+                    break
+            p.nomor_permohonan = nomor
+            db.session.commit()
+            flash(f"Permohonan {nomor} berhasil diajukan.", "success")
+            return redirect(url_for("permohonan_barang_list"))
+
+        q = request.args.get("q", "").strip()
+        query = PermohonanBarang.query
+        if q:
+            query = query.filter(PermohonanBarang.nomor_permohonan.ilike(f"%{q}%"))
+        daftar = query.order_by(PermohonanBarang.tanggal.desc(), PermohonanBarang.id.desc()).all()
+        daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
+        return render_template(
+            "inventory/permohonan_barang_list.html",
+            daftar=daftar, daftar_produk=daftar_produk, tanggal_hari_ini=today_wib().isoformat(), q=q,
+        )
+
+    @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/status", methods=["POST"])
+    @admin_required
+    def permohonan_barang_status_update(permohonan_id):
+        p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
+        status = request.form.get("status", "")
+        if status not in ("Menunggu", "Diproses", "Selesai", "Ditolak"):
+            flash("Status tidak valid.", "danger")
+            return redirect(url_for("permohonan_barang_list"))
+        p.status = status
+        db.session.commit()
+        flash(f"Status permohonan {p.nomor_permohonan} diubah jadi {status}.", "success")
+        return redirect(url_for("permohonan_barang_list"))
+
+    @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/hapus", methods=["POST"])
+    @admin_required
+    def permohonan_barang_hapus(permohonan_id):
+        p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
+        nomor = p.nomor_permohonan
+        db.session.delete(p)
+        db.session.commit()
+        flash(f"Permohonan {nomor} dihapus.", "info")
+        return redirect(url_for("permohonan_barang_list"))
 
     # ---------- ABSENSI ----------
     @app.route("/absensi")

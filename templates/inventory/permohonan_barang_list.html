@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Permohonan Barang{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Permohonan Pengadaan Barang</h3>
+    <p class="text-muted small mb-0">Pengajuan internal buat nambah stok produk tertentu -- statusnya dipantau di sini, belum langsung ngurangin/nambahin stok.</p>
+  </div>
+  {% if not daftar_produk %}
+  <span class="text-muted small">Tambah <a href="{{ url_for('produk_list') }}">Produk</a> dulu sebelum bisa mengajukan.</span>
+  {% else %}
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalTambahPermohonan">+ Ajukan Permohonan</button>
+  {% endif %}
+</div>
+
+<form method="get" class="card p-2 mb-3">
+  <div class="input-group">
+    <input type="text" name="q" class="form-control" placeholder="Cari nomor permohonan..." value="{{ q }}">
+    <button type="submit" class="btn btn-outline-secondary">🔍</button>
+    {% if q %}<a href="{{ url_for('permohonan_barang_list') }}" class="btn btn-outline-secondary">&times;</a>{% endif %}
+  </div>
+</form>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <table class="table table-hover align-middle mb-0">
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>No Pengajuan</th>
+        <th>Produk</th>
+        <th>Warna</th>
+        <th class="text-end">Qty</th>
+        <th>Tgl Pengajuan</th>
+        <th>Status</th>
+        <th class="text-end">Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in daftar %}
+      <tr>
+        <td class="small text-muted">{{ loop.index }}</td>
+        <td class="fw-semibold small">{{ p.nomor_permohonan }}</td>
+        <td class="small">{{ p.produk.nama_produk }}</td>
+        <td class="small">{{ p.warna or "-" }}</td>
+        <td class="text-end small">{{ p.qty }}</td>
+        <td class="small text-nowrap">{{ p.tanggal.strftime("%d/%m/%Y") }}</td>
+        <td>
+          {% set status_bg = {"Menunggu": "#fff3cd", "Diproses": "#cfe2ff", "Selesai": "#d1e7dd", "Ditolak": "#e2e3e5"} %}
+          <span class="badge" style="background-color: {{ status_bg.get(p.status, '#eee') }}; color:#212529;">{{ p.status }}</span>
+        </td>
+        <td class="text-end text-nowrap">
+          <div class="dropdown d-inline-block">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">Ubah Status</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              {% for st in ["Menunggu", "Diproses", "Selesai", "Ditolak"] %}
+              <li>
+                <form method="post" action="{{ url_for('permohonan_barang_status_update', permohonan_id=p.id) }}">
+                  <input type="hidden" name="status" value="{{ st }}">
+                  <button type="submit" class="dropdown-item {{ 'fw-bold' if p.status == st }}">{{ st }}</button>
+                </form>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          <form method="post" action="{{ url_for('permohonan_barang_hapus', permohonan_id=p.id) }}" class="d-inline" onsubmit="return confirm('Hapus permohonan {{ p.nomor_permohonan }}?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">🗑️</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-center text-muted py-4">{{ "Tidak ada permohonan yang cocok dengan pencarian." if q else 'Belum ada Permohonan Barang. Klik "+ Ajukan Permohonan" untuk mulai.' }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal fade" id="modalTambahPermohonan" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('permohonan_barang_list') }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Form Permohonan Pengadaan Barang</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Tanggal *</label>
+            <input type="date" name="tanggal" class="form-control" value="{{ tanggal_hari_ini }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">No Permohonan Pengadaan Barang</label>
+            <input type="text" class="form-control" value="Dibuat otomatis" disabled>
+          </div>
+          <div class="col-12">
+            <label class="form-label small mb-1">Nama Produk *</label>
+            <select name="produk_id" class="form-select produk-search" required>
+              <option value="">Pilih produk&hellip;</option>
+              {% for pr in daftar_produk %}
+              <option value="{{ pr.id }}">{{ pr.nama_produk }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Qty *</label>
+            <input type="number" min="1" step="1" name="qty" class="form-control" placeholder="Contoh: 50" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Warna <span class="text-muted small">(opsional)</span></label>
+            <input type="text" name="warna" class="form-control" placeholder="Contoh: Hitam">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Simpan</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

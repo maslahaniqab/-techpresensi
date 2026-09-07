@@ -1,109 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Produksi{% endblock %}
+{% block title %}Kelola Ukuran & Kebutuhan Yard{% endblock %}
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
-    <h3 class="mb-1">Produksi</h3>
-    <p class="text-muted small mb-0">Catat bahan baku yang diambil dari stok untuk dipotong/diproduksi jadi produk.</p>
+    <h3 class="mb-1">Kelola Ukuran &amp; Kebutuhan Yard per Produk</h3>
+    <p class="text-muted small mb-0">Data acuan ukuran badan &amp; kebutuhan yard per produk -- dipakai buat estimasi otomatis pas "Mulai Produksi" di menu Produksi.</p>
   </div>
   <a href="{{ url_for('bahan_baku_list') }}" class="btn btn-outline-secondary btn-sm">Lihat Stok per Bahan &rarr;</a>
 </div>
 
 {% if not bahan_list %}
 <div class="card p-4 text-center text-muted small mb-4">
-  Belum ada bahan baku sama sekali. <a href="{{ url_for('bahan_baku_input') }}">Pengadaan Barang</a> dulu sebelum bisa cutting.
+  Belum ada bahan baku sama sekali. <a href="{{ url_for('bahan_baku_input') }}">Pengadaan Barang</a> dulu sebelum isi ukuran &amp; kebutuhan.
 </div>
-{% else %}
-<form method="post" class="card p-4 mb-4">
-  <div class="row g-3">
-    <div class="col-md-6">
-      <label class="form-label">Jenis Bahan</label>
-      <select name="bahan_baku_id" id="bahan_baku_id" class="form-select" required>
-        <option value="">Pilih bahan&hellip;</option>
-        {% for b in bahan_list %}
-        <option value="{{ b.id }}" data-warna="{{ b.warna or '' }}" data-stok="{{ '%.2f'|format(b.stok_saat_ini) }}">
-          {{ b.nama_bahan }} &mdash; stok {{ '%.2f'|format(b.stok_saat_ini) }} {{ b.satuan }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">Peruntukan Produk</label>
-      <select name="produk_id" id="peruntukan_produk" class="form-select produk-search">
-        <option value="">- Belum tentu -</option>
-        {% for p in produk_list %}
-        <option value="{{ p.id }}">{{ p.nama_produk }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Panjang Bahan (Yard)</label>
-      <input type="number" min="0" step="0.01" name="panjang_yard" id="panjang_yard" class="form-control" placeholder="Contoh: 35" required>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Lebar Kain (Meter) <span class="text-muted small">(opsional)</span></label>
-      <input type="number" min="0" step="0.01" name="lebar_kain" id="lebar_kain" class="form-control" placeholder="Dalam Meter">
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Tanggal Ambil</label>
-      <input type="date" name="tanggal_ambil" class="form-control" value="{{ tanggal_hari_ini }}">
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">Warna Bahan</label>
-      <input type="text" id="warna_bahan_display" class="form-control" readonly placeholder="Otomatis dari Jenis Bahan yang dipilih">
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">Vendor <span class="text-muted small">(opsional)</span></label>
-      <input type="text" name="vendor" class="form-control" placeholder="Contoh: Yuli Cigondewah">
-    </div>
-  </div>
-
-  <div class="mt-4">
-    <div class="fw-semibold small mb-2" id="spec-title">
-      Jika admin memilih Peruntukan Produk, tampil hitungan untuk 1 pcs produk jadi adalah:
-    </div>
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered mb-0" style="max-width: 640px;">
-        <thead class="table-light">
-          <tr id="spec-thead-row">
-            <th>Size</th>
-            <th>Lingkar Dada (LD)</th>
-            <th>Panjang Atas (PA)</th>
-            <th>Lingkar Pinggang</th>
-            <th>LD Lengan</th>
-            <th>Pergelangan</th>
-          </tr>
-        </thead>
-        <tbody id="spec-body">
-          <tr id="spec-empty"><td colspan="6" class="text-center text-muted small py-3">Pilih Peruntukan Produk dulu.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="row g-3 mt-1">
-    <div class="col-md-4">
-      <label class="form-label">Estimasi Produk Jadi</label>
-      <div class="input-group">
-        <input type="number" min="0" step="1" name="produk_jadi_pcs" id="produk_jadi_pcs" class="form-control" placeholder="Contoh: 17">
-        <span class="input-group-text">Pcs</span>
-      </div>
-      <div class="form-text" id="estimasi-hint">Pilih Jenis Bahan, Peruntukan Produk, dan isi Panjang Bahan supaya kehitung otomatis.</div>
-    </div>
-  </div>
-
-  <button type="submit" class="btn btn-primary mt-4">Simpan</button>
-</form>
 {% endif %}
 
 <div class="card p-3 mb-4">
-  <div class="fw-semibold small mb-2">Kelola Ukuran &amp; Kebutuhan Yard per Produk</div>
   <p class="text-muted small mb-3">
     Isi acuan ukuran badan (cm) untuk 1 pcs produk sesuai kategorinya, sekalian (opsional) berapa Yard bahan
-    dibutuhkan untuk 1 pcs-nya -- 1x isi di sini kepakai buat dua hal: tampilan acuan ukuran di form Cutting
-    di atas, DAN otomatis menghitung Estimasi/Produk Jadi (Total Yard &divide; Yard per Pcs = Jumlah Pcs).
-    Yard per Pcs tetap diisi manual (belum ada rumus baku konversi cm ke yard per pola).
+    dibutuhkan untuk 1 pcs-nya -- 1x isi di sini kepakai buat otomatis menghitung Qty pcs pas "Mulai Produksi"
+    (Total Yard &divide; Yard per Pcs = Jumlah Pcs). Yard per Pcs tetap diisi manual (belum ada rumus baku
+    konversi cm ke yard per pola).
   </p>
   <form method="post" id="form-tambah-spek" action="{{ url_for('produk_spek_ukuran_tambah', produk_id=0) }}" class="row g-2 align-items-end">
     <div class="col-md-4 col-6">
@@ -279,60 +197,10 @@
 
 <script>
 (function () {
-  var SPEK_DATA = {{ spek_per_produk_json | tojson }};
   var KATEGORI_FIELDS = {{ kategori_fields | tojson }};
 
-  var selBahan = document.getElementById('bahan_baku_id');
-  var warnaDisplay = document.getElementById('warna_bahan_display');
-  if (selBahan) {
-    selBahan.addEventListener('change', function () {
-      var opt = selBahan.options[selBahan.selectedIndex];
-      warnaDisplay.value = opt ? (opt.getAttribute('data-warna') || '') : '';
-    });
-  }
-
-  var selProduk = document.getElementById('peruntukan_produk');
-  var specBody = document.getElementById('spec-body');
-  var specTitle = document.getElementById('spec-title');
-  var specTheadRow = document.getElementById('spec-thead-row');
-
-  function renderSpec() {
-    var produkId = selProduk.value;
-    var namaProduk = produkId ? selProduk.options[selProduk.selectedIndex].text : '';
-    specBody.innerHTML = '';
-    if (!produkId) {
-      specTitle.textContent = 'Jika admin memilih Peruntukan Produk, tampil hitungan untuk 1 pcs produk jadi adalah:';
-      specBody.innerHTML = '<tr><td colspan="' + specTheadRow.children.length + '" class="text-center text-muted small py-3">Pilih Peruntukan Produk dulu.</td></tr>';
-      return;
-    }
-    specTitle.textContent = 'Hitungan untuk 1 pcs ' + namaProduk + ' jadi adalah:';
-    var rows = SPEK_DATA[produkId] || [];
-    // Kolom tabel ngikutin kategori dari baris spek yg sudah diisi utk produk ini
-    // (kategori "" = belum diisi kategorinya sama sekali -> fallback ke label generik).
-    var kat = rows.length ? (rows[0].kategori || '') : '';
-    var fields = KATEGORI_FIELDS[kat] || KATEGORI_FIELDS[''];
-    specTheadRow.innerHTML = '<th>Size</th>' + fields.map(function (f) { return '<th>' + f[1] + '</th>'; }).join('');
-    if (!rows.length) {
-      specBody.innerHTML = '<tr><td colspan="' + (fields.length + 1) + '" class="text-center text-muted small py-3">Belum ada spek ukuran utk produk ini. Isi di "Kelola Ukuran &amp; Kebutuhan Yard per Produk" di bawah.</td></tr>';
-      return;
-    }
-    rows.forEach(function (r) {
-      var tr = document.createElement('tr');
-      var cells = '<td>' + r.size + '</td>';
-      fields.forEach(function (f) {
-        var val = r[f[0]];
-        cells += '<td>' + (val != null ? val + ' cm' : '-') + '</td>';
-      });
-      tr.innerHTML = cells;
-      specBody.appendChild(tr);
-    });
-  }
-  if (selProduk) {
-    selProduk.addEventListener('change', renderSpec);
-  }
-
-  // Kelola Spek Ukuran per Produk: kolom ukuran yg ditampilkan ngikutin Kategori
-  // yg dipilih (mis. Cadar cuma butuh 3 kolom, Abaya butuh 5 kolom yg beda arti).
+  // Kolom ukuran yg ditampilkan di form ngikutin Kategori yg dipilih (mis. Cadar
+  // cuma butuh 3 kolom, Abaya butuh 5 kolom yg beda arti).
   var selKategoriSpek = document.getElementById('spek_kategori');
   var spekFieldsContainer = document.getElementById('spek-fields-container');
   function renderSpekFieldsForm() {
@@ -361,47 +229,6 @@
       formSpek.action = formSpek.action.replace(/\/0\/tambah$/, '/' + selSpekProduk.value + '/tambah');
     });
   }
-
-  // Estimasi Produk Jadi otomatis = Panjang Bahan (yard) / kebutuhan yard per pcs
-  // (dari menu Bahan Baku > Kebutuhan per Produk, utk kombinasi Jenis Bahan +
-  // Peruntukan Produk yang dipilih). Tetap bisa ditimpa manual kalau admin ngetik
-  // sendiri di kolomnya (mis. karena ada sisa potongan/waste beda dari estimasi).
-  var KEBUTUHAN_DATA = {{ kebutuhan_map_json | tojson }};
-  var inputPanjang = document.getElementById('panjang_yard');
-  var inputEstimasi = document.getElementById('produk_jadi_pcs');
-  var estimasiHint = document.getElementById('estimasi-hint');
-  var estimasiManual = false;
-  if (inputEstimasi) {
-    inputEstimasi.addEventListener('input', function () { estimasiManual = true; });
-  }
-
-  function hitungEstimasi() {
-    if (!inputEstimasi || !estimasiHint) return;
-    var bahanId = selBahan ? selBahan.value : '';
-    var produkId = selProduk ? selProduk.value : '';
-    var panjang = parseFloat(inputPanjang ? inputPanjang.value : '');
-    if (!bahanId || !produkId) {
-      estimasiHint.textContent = 'Pilih Jenis Bahan, Peruntukan Produk, dan isi Panjang Bahan supaya kehitung otomatis.';
-      return;
-    }
-    var kebutuhan = KEBUTUHAN_DATA[bahanId + '_' + produkId];
-    if (!kebutuhan) {
-      estimasiHint.innerHTML = 'Belum ada data "yard/pcs" utk kombinasi bahan &amp; produk ini -- isi dulu di halaman detail bahan (Kebutuhan per Produk), atau isi manual di kolom ini.';
-      return;
-    }
-    if (!panjang || panjang <= 0) {
-      estimasiHint.textContent = 'Kebutuhan bahan ini: ' + kebutuhan + ' yard/pcs. Isi Panjang Bahan supaya estimasinya kehitung.';
-      return;
-    }
-    var estimasi = Math.floor(panjang / kebutuhan);
-    estimasiHint.textContent = 'Estimasi otomatis: ' + estimasi + ' pcs (dari ' + panjang + ' yard ÷ ' + kebutuhan + ' yard/pcs).';
-    if (!estimasiManual) {
-      inputEstimasi.value = estimasi;
-    }
-  }
-  if (selBahan) selBahan.addEventListener('change', hitungEstimasi);
-  if (selProduk) selProduk.addEventListener('change', hitungEstimasi);
-  if (inputPanjang) inputPanjang.addEventListener('input', hitungEstimasi);
 })();
 </script>
 
