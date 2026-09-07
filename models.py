@@ -439,8 +439,27 @@ class PurchaseOrderItemProduk(db.Model):
     total = db.Column(db.Integer, nullable=False, default=0)  # snapshot qty x modal produk saat itu
     jahit_selesai = db.Column(db.Integer, nullable=False, default=0)  # progress: sdh dijahit sebanyak ini
     finish_selesai = db.Column(db.Integer, nullable=False, default=0)  # progress: sdh finishing sebanyak ini
+    # Override manual per item (beda dari status_produksi PO yg otomatis dari
+    # jahit/finish) -- null = ngikutin hitungan otomatis spt biasa, "Selesai" =
+    # ditandain kelar manual, "Revisi" = ditahan buat direvisi (ditampilin sbg
+    # "Pending" walau progress jahit/finish-nya masih ada / lagi tahap produksi).
+    status_qc = db.Column(db.String(16))
 
     produk = db.relationship("Produk")
+
+    @property
+    def status_item(self):
+        if self.status_qc == "Revisi":
+            return "Pending"
+        if self.status_qc == "Selesai":
+            return "Selesai"
+        if not self.qty:
+            return "Menunggu Produksi"
+        if self.finish_selesai >= self.qty:
+            return "Selesai Produksi"
+        if self.jahit_selesai > 0 or self.finish_selesai > 0:
+            return "Diproses"
+        return "Menunggu Produksi"
 
 
 class PurchaseOrderBahanPakai(db.Model):

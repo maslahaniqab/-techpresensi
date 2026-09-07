@@ -1552,6 +1552,9 @@ def create_app():
                     f"ALTER TABLE purchase_order_item_produk ADD COLUMN {kolom} INTEGER NOT NULL DEFAULT 0"
                 ))
                 db.session.commit()
+        if "status_qc" not in kolom_po_item:
+            db.session.execute(db.text("ALTER TABLE purchase_order_item_produk ADD COLUMN status_qc VARCHAR(16)"))
+            db.session.commit()
         kolom_vendor = {c["name"] for c in db.inspect(db.engine).get_columns("vendor")}
         if "kode" not in kolom_vendor:
             db.session.execute(db.text("ALTER TABLE vendor ADD COLUMN kode VARCHAR(4)"))
@@ -2745,15 +2748,18 @@ def create_app():
         item_ids = request.form.getlist("item_id[]")
         jahit_list = request.form.getlist("jahit[]")
         finish_list = request.form.getlist("finish[]")
+        status_qc_list = request.form.getlist("status_qc[]")
         by_id = {ip.id: ip for ip in po.item_produk_list}
-        for item_id_s, jahit_s, finish_s in zip(item_ids, jahit_list, finish_list):
+        for i, item_id_s in enumerate(item_ids):
             item = by_id.get(int(item_id_s)) if item_id_s else None
             if not item:
                 continue
-            jahit = max(0, min(int(parse_angka_iklan(jahit_s)), item.qty))
-            finish = max(0, min(int(parse_angka_iklan(finish_s)), item.qty))
+            jahit = max(0, min(int(parse_angka_iklan(jahit_list[i])), item.qty))
+            finish = max(0, min(int(parse_angka_iklan(finish_list[i])), item.qty))
             item.jahit_selesai = jahit
             item.finish_selesai = finish
+            status_qc = status_qc_list[i].strip() if i < len(status_qc_list) else ""
+            item.status_qc = status_qc if status_qc in ("Selesai", "Revisi") else None
         db.session.commit()
         flash(f"Progress produksi PO {po.nomor_po} diperbarui. Status sekarang: {po.status_produksi}.", "success")
         return redirect(url_for("progress_produksi_list"))
