@@ -1957,11 +1957,13 @@ def create_app():
             satuan = request.form.get("satuan", "Yard").strip() or "Yard"
             stok_awal = parse_angka_iklan(request.form.get("stok_awal"))
             harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
+            suplier = request.form.get("suplier", "").strip()
             if not nama_bahan:
                 flash("Nama bahan baku wajib diisi.", "danger")
                 return redirect(url_for("bahan_baku_list"))
             bahan = BahanBaku(
                 nama_bahan=nama_bahan, satuan=satuan, stok_saat_ini=stok_awal, harga_per_yard=harga_per_yard,
+                suplier=suplier or None,
             )
             db.session.add(bahan)
             db.session.flush()
@@ -2023,6 +2025,7 @@ def create_app():
         bahan.satuan = satuan_baru
         bahan.harga_per_yard = harga_input
         bahan.catatan = request.form.get("catatan", "").strip()
+        bahan.suplier = request.form.get("suplier", "").strip() or None
 
         # Tambah Stok (opsional) -- dicatat sbg transaksi Masuk baru (bukan langsung nimpa
         # stok_saat_ini) supaya Riwayat Stok tetap punya jejaknya, sama kayak input dari
