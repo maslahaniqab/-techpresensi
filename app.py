@@ -1780,9 +1780,13 @@ def create_app():
     @app.route("/produk")
     @admin_required
     def produk_list():
-        daftar = Produk.query.order_by(Produk.nama_produk).all()
+        q = request.args.get("q", "").strip()
+        query = Produk.query
+        if q:
+            query = query.filter(Produk.nama_produk.ilike(f"%{q}%"))
+        daftar = query.order_by(Produk.nama_produk).all()
         data = [_hitung_margin_produk(p) for p in daftar]
-        return render_template("produk_list.html", data=data)
+        return render_template("produk_list.html", data=data, q=q)
 
     @app.route("/produk/tambah", methods=["GET", "POST"])
     @admin_required
