@@ -2719,28 +2719,26 @@ def create_app():
             query = query.filter(PurchaseOrder.nomor_po.ilike(f"%{q}%"))
         daftar = query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
 
-        # Saran Qty pcs buat modal "Mulai Produksi" -- dari rumus Jumlah Yard (Qty
-        # Pakai bahan) / Kebutuhan Yard per Pcs, kalau semua Item Produk di PO itu
-        # sama-sama 1 produk & ada Kebutuhan yg cocok (kalau nggak, admin isi manual).
+        # Saran Qty pcs per ITEM (bukan per PO) buat modal "Mulai Produksi" -- dari
+        # rumus Jumlah Yard (Qty Pakai bahan) / Kebutuhan Yard per Pcs, dihitung per
+        # item krn 1 PO bisa punya beberapa produk/warna yg beda-beda bahan &
+        # kebutuhannya masing2 (mis. Hitam pakai Bahan A, Beige pakai Bahan B).
         saran_qty = {}
         for po in daftar:
             if po.produksi_mulai_pada:
                 continue
-            produk_ids_po = {ip.produk_id for ip in po.item_produk_list}
-            if len(produk_ids_po) != 1:
-                continue
-            produk_id_tunggal = next(iter(produk_ids_po))
-            total_saran = 0
-            ada_kebutuhan = False
-            for bp in po.bahan_pakai_list:
-                kebutuhan = BahanBakuKebutuhan.query.filter_by(
-                    bahan_baku_id=bp.bahan_baku_id, produk_id=produk_id_tunggal,
-                ).first()
-                if kebutuhan and kebutuhan.jumlah_yard:
-                    total_saran += bp.qty_pakai / kebutuhan.jumlah_yard
-                    ada_kebutuhan = True
-            if ada_kebutuhan:
-                saran_qty[po.id] = round(total_saran)
+            for ip in po.item_produk_list:
+                total_saran = 0
+                ada_kebutuhan = False
+                for bp in po.bahan_pakai_list:
+                    kebutuhan = BahanBakuKebutuhan.query.filter_by(
+                        bahan_baku_id=bp.bahan_baku_id, produk_id=ip.produk_id,
+                    ).first()
+                    if kebutuhan and kebutuhan.jumlah_yard:
+                        total_saran += bp.qty_pakai / kebutuhan.jumlah_yard
+                        ada_kebutuhan = True
+                if ada_kebutuhan:
+                    saran_qty[ip.id] = round(total_saran)
 
         return render_template("inventory/progress_produksi_list.html", daftar=daftar, q=q, saran_qty=saran_qty)
 
