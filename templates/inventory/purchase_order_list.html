@@ -113,7 +113,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="alert alert-info small mb-3">Koreksi di sini cuma ngubah detail item ini (Produk/Warna/Size/Qty) &amp; Total Biaya PO -- Pemakaian Bahan &amp; stok bahan baku TIDAK ikut berubah.</div>
+        <div class="alert alert-info small mb-3">Koreksi di sini cuma ngubah detail item ini (Produk/Warna/Size/Qty/Biaya Produksi) &amp; Total Biaya PO (Qty &times; Biaya Produksi) -- Pemakaian Bahan &amp; stok bahan baku TIDAK ikut berubah.</div>
         <div class="mb-3">
           <label class="form-label small">Produk</label>
           <select name="produk_id" class="form-select form-select-sm produk-search">
@@ -132,9 +132,16 @@
             <input type="text" name="size" class="form-control form-control-sm" value="{{ ip.size or '' }}">
           </div>
         </div>
-        <div class="mb-0 mt-3">
-          <label class="form-label small">Qty (pcs)</label>
-          <input type="number" min="0" step="1" name="qty" class="form-control form-control-sm" value="{{ ip.qty }}">
+        <div class="row g-3 mt-0">
+          <div class="col-6">
+            <label class="form-label small">Qty (pcs)</label>
+            <input type="number" min="0" step="1" name="qty" class="form-control form-control-sm" value="{{ ip.qty }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Biaya Produksi (Rp/pcs)</label>
+            <input type="number" min="0" step="1" name="biaya_produksi" class="form-control form-control-sm"
+                   value="{{ ip.biaya_produksi if ip.biaya_produksi else (ip.total // ip.qty if ip.qty else '') }}">
+          </div>
         </div>
       </div>
       <div class="modal-footer">

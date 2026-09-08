@@ -95,7 +95,7 @@
         <div class="fw-semibold small mb-1">📦 Item Produk</div>
         <div class="table-responsive mb-3">
           <table class="table table-sm align-middle">
-            <thead><tr><th>Produk</th><th>Warna</th><th style="width:110px;">Size</th><th style="width:100px;">Qty Pcs</th></tr></thead>
+            <thead><tr><th>Produk</th><th>Warna</th><th style="width:100px;">Size</th><th style="width:90px;">Qty Pcs</th><th style="width:130px;">Biaya Produksi (Rp/pcs)</th></tr></thead>
             <tbody>
               {% for ip in po.item_produk_list %}
               <tr>
@@ -108,6 +108,9 @@
                 <td>
                   <input type="number" min="0" step="1" name="qty[]" class="form-control form-control-sm" value="{{ saran_qty.get(ip.id, '') }}" placeholder="0">
                 </td>
+                <td>
+                  <input type="number" min="0" step="1" name="biaya_produksi[]" class="form-control form-control-sm" value="{{ saran_biaya.get(ip.id, '') }}" placeholder="0">
+                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -115,6 +118,9 @@
         </div>
         {% if po.item_produk_list | selectattr("id", "in", saran_qty.keys()) | list %}
         <div class="text-muted small mb-3">Qty di atas sudah keisi otomatis per item (estimasi dari Qty Pakai bahan &divide; Kebutuhan Yard per Pcs produk itu) &mdash; boleh diedit kalau ada yg beda.</div>
+        {% endif %}
+        {% if po.item_produk_list | selectattr("id", "in", saran_biaya.keys()) | list %}
+        <div class="text-muted small mb-3">Biaya Produksi di atas sudah keisi otomatis dari <a href="{{ url_for('biaya_jahit_list') }}">rate card Biaya Produksi (Menjahit)</a> &mdash; boleh diedit kalau tarif utk PO ini beda.</div>
         {% endif %}
         <div class="fw-semibold small mb-1 text-danger">✂️ Pemakaian Bahan (final)</div>
         <div class="table-responsive">

@@ -46,7 +46,7 @@ from models import (
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
-    PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang,
+    PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1555,6 +1555,9 @@ def create_app():
         if "status_qc" not in kolom_po_item:
             db.session.execute(db.text("ALTER TABLE purchase_order_item_produk ADD COLUMN status_qc VARCHAR(16)"))
             db.session.commit()
+        if "biaya_produksi" not in kolom_po_item:
+            db.session.execute(db.text("ALTER TABLE purchase_order_item_produk ADD COLUMN biaya_produksi INTEGER DEFAULT 0"))
+            db.session.commit()
         kolom_vendor = {c["name"] for c in db.inspect(db.engine).get_columns("vendor")}
         if "kode" not in kolom_vendor:
             db.session.execute(db.text("ALTER TABLE vendor ADD COLUMN kode VARCHAR(4)"))
@@ -2412,6 +2415,53 @@ def create_app():
         flash(f"Akun {nama} dihapus.", "info")
         return redirect(url_for("akun_pembayaran_list"))
 
+    # ---------- PRODUKSI: BIAYA PRODUKSI (MENJAHIT) -- RATE CARD ----------
+    @app.route("/inventory/master-data/biaya-jahit", methods=["GET", "POST"])
+    @admin_required
+    def biaya_jahit_list():
+        if request.method == "POST":
+            produk_id = request.form.get("produk_id", type=int)
+            produk = db.session.get(Produk, produk_id) if produk_id else None
+            vendor_id = request.form.get("vendor_id", type=int)
+            vendor = db.session.get(Vendor, vendor_id) if vendor_id else None
+            biaya = round(parse_angka_iklan(request.form.get("biaya_per_pcs")))
+
+            if not produk or biaya <= 0:
+                flash("Pilih Produk dan isi Biaya per Pcs (harus lebih dari 0).", "danger")
+                return redirect(url_for("biaya_jahit_list"))
+
+            sudah_ada = BiayaJahit.query.filter_by(
+                produk_id=produk.id, vendor_id=vendor.id if vendor else None,
+            ).first()
+            if sudah_ada:
+                sudah_ada.biaya_per_pcs = biaya
+                pesan = f"Tarif jahit {produk.nama_produk}{' (' + vendor.nama_vendor + ')' if vendor else ' (default, semua vendor)'} diperbarui."
+            else:
+                db.session.add(BiayaJahit(
+                    produk_id=produk.id, vendor_id=vendor.id if vendor else None, biaya_per_pcs=biaya,
+                ))
+                pesan = f"Tarif jahit {produk.nama_produk}{' (' + vendor.nama_vendor + ')' if vendor else ' (default, semua vendor)'} disimpan."
+            db.session.commit()
+            flash(pesan, "success")
+            return redirect(url_for("biaya_jahit_list"))
+
+        daftar = BiayaJahit.query.join(Produk).order_by(Produk.nama_produk).all()
+        daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
+        daftar_vendor = Vendor.query.order_by(Vendor.nama_vendor).all()
+        return render_template(
+            "inventory/biaya_jahit_list.html",
+            daftar=daftar, daftar_produk=daftar_produk, daftar_vendor=daftar_vendor,
+        )
+
+    @app.route("/inventory/master-data/biaya-jahit/<int:biaya_id>/hapus", methods=["POST"])
+    @admin_required
+    def biaya_jahit_hapus(biaya_id):
+        b = db.session.get(BiayaJahit, biaya_id) or abort_404()
+        db.session.delete(b)
+        db.session.commit()
+        flash("Tarif jahit dihapus.", "info")
+        return redirect(url_for("biaya_jahit_list"))
+
     @app.route("/inventory/master-data/purchase-order", methods=["GET", "POST"])
     @admin_required
     def purchase_order_list():
@@ -2558,11 +2608,13 @@ def create_app():
             return redirect(tujuan)
 
         qty = max(0, int(parse_angka_iklan(request.form.get("qty"))))
+        biaya = round(parse_angka_iklan(request.form.get("biaya_produksi")))
         item.produk_id = produk.id
         item.warna = request.form.get("warna", "").strip()
         item.size = request.form.get("size", "").strip() or None
         item.qty = qty
-        item.total = qty * (produk.modal or 0)
+        item.biaya_produksi = biaya
+        item.total = qty * biaya
 
         po = item.po
         po.total_biaya = sum(ip.total for ip in po.item_produk_list)
@@ -2611,16 +2663,20 @@ def create_app():
             return redirect(url_for("progress_produksi_list"))
 
         by_item_id = {ip.id: ip for ip in po.item_produk_list}
-        for item_id_s, size, qty_s in zip(
-            request.form.getlist("item_id[]"), request.form.getlist("size[]"), request.form.getlist("qty[]"),
-        ):
+        item_ids = request.form.getlist("item_id[]")
+        size_list = request.form.getlist("size[]")
+        qty_list = request.form.getlist("qty[]")
+        biaya_list = request.form.getlist("biaya_produksi[]")
+        for i, item_id_s in enumerate(item_ids):
             item = by_item_id.get(int(item_id_s)) if item_id_s else None
             if not item:
                 continue
-            qty = max(int(parse_angka_iklan(qty_s)), 0)
-            item.size = size.strip() or None
+            qty = max(int(parse_angka_iklan(qty_list[i])), 0)
+            biaya = round(parse_angka_iklan(biaya_list[i])) if i < len(biaya_list) else 0
+            item.size = size_list[i].strip() or None
             item.qty = qty
-            item.total = qty * (item.produk.modal or 0)
+            item.biaya_produksi = biaya
+            item.total = qty * biaya
 
         # Kalau semua Item Produk (yg qty-nya kepakai) sama-sama 1 produk, aman
         # ditebak itu peruntukan bahannya -- Produk Jadi kehitung otomatis dari
@@ -2774,7 +2830,24 @@ def create_app():
                 if ada_kebutuhan:
                     saran_qty[ip.id] = round(total_saran)
 
-        return render_template("inventory/progress_produksi_list.html", daftar=daftar, q=q, saran_qty=saran_qty)
+        # Saran Biaya Produksi (ongkos jahit) per ITEM -- dari rate card Biaya Jahit,
+        # diprioritaskan tarif khusus utk vendor PO ini, fallback ke tarif default
+        # (vendor_id kosong) kalau nggak ada yg khusus.
+        saran_biaya = {}
+        for po in daftar:
+            if po.produksi_mulai_pada:
+                continue
+            for ip in po.item_produk_list:
+                tarif = BiayaJahit.query.filter_by(produk_id=ip.produk_id, vendor_id=po.vendor_id).first()
+                if not tarif:
+                    tarif = BiayaJahit.query.filter_by(produk_id=ip.produk_id, vendor_id=None).first()
+                if tarif:
+                    saran_biaya[ip.id] = tarif.biaya_per_pcs
+
+        return render_template(
+            "inventory/progress_produksi_list.html", daftar=daftar, q=q,
+            saran_qty=saran_qty, saran_biaya=saran_biaya,
+        )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
     @admin_required

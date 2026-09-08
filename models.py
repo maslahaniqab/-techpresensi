@@ -444,6 +444,9 @@ class PurchaseOrderItemProduk(db.Model):
     # ditandain kelar manual, "Revisi" = ditahan buat direvisi (ditampilin sbg
     # "Pending" walau progress jahit/finish-nya masih ada / lagi tahap produksi).
     status_qc = db.Column(db.String(16))
+    # Ongkos jahit per pcs (Rupiah) -- INI yg dipakai buat `total` (qty x biaya_produksi),
+    # BUKAN Produk.modal (beda vendor bisa beda tarif jahitnya utk produk yg sama).
+    biaya_produksi = db.Column(db.Integer, default=0)
 
     produk = db.relationship("Produk")
 
@@ -488,6 +491,24 @@ class PurchaseOrderPembayaran(db.Model):
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
     akun_pembayaran = db.relationship("AkunPembayaran")
+
+
+class BiayaJahit(db.Model):
+    """Rate card ongkos jahit -- tarif per Produk (opsional dikhususkan per Vendor
+    Penjahit) dalam Rupiah per pcs. Dipakai sbg SARAN otomatis pas isi Biaya
+    Produksi di form Mulai Produksi -- boleh ditimpa manual per PO kalau beda."""
+    id = db.Column(db.Integer, primary_key=True)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    vendor_id = db.Column(db.Integer, db.ForeignKey("vendor.id"))  # null = tarif default, berlaku semua vendor
+    biaya_per_pcs = db.Column(db.Integer, nullable=False, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    produk = db.relationship("Produk")
+    vendor = db.relationship("Vendor")
+
+    __table_args__ = (
+        db.UniqueConstraint("produk_id", "vendor_id", name="uq_biaya_jahit_produk_vendor"),
+    )
 
 
 class IklanMarketplace(db.Model):
