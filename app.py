@@ -2536,6 +2536,36 @@ def create_app():
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         return render_template("inventory/purchase_order_detail.html", po=po)
 
+    @app.route("/inventory/master-data/purchase-order/item/<int:item_id>/edit", methods=["POST"])
+    @admin_required
+    def purchase_order_item_edit(item_id):
+        """Koreksi Detail Item (Produk/Warna/Size/Qty) di 1 baris PO -- SENGAJA cuma
+        nyentuh data item & Total Biaya-nya doang, SAMA SEKALI nggak nyentuh Pemakaian
+        Bahan / stok bahan baku (itu urusan terpisah, dikunci di alur Mulai Produksi).
+        Cuma admin (satu2nya role login yg ada di sistem ini) yg bisa akses, sama
+        kayak semua route inventory lain."""
+        item = db.session.get(PurchaseOrderItemProduk, item_id) or abort_404()
+        tujuan = request.form.get("next") or url_for("purchase_order_list")
+
+        produk_id = request.form.get("produk_id", type=int)
+        produk = db.session.get(Produk, produk_id) if produk_id else item.produk
+        if not produk:
+            flash("Produk tidak valid.", "danger")
+            return redirect(tujuan)
+
+        qty = max(0, int(parse_angka_iklan(request.form.get("qty"))))
+        item.produk_id = produk.id
+        item.warna = request.form.get("warna", "").strip()
+        item.size = request.form.get("size", "").strip() or None
+        item.qty = qty
+        item.total = qty * (produk.modal or 0)
+
+        po = item.po
+        po.total_biaya = sum(ip.total for ip in po.item_produk_list)
+        db.session.commit()
+        flash(f"Detail item {produk.nama_produk} di PO {po.nomor_po} dikoreksi. Pemakaian bahan/stok TIDAK ikut berubah.", "success")
+        return redirect(tujuan)
+
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/pembayaran")
     @admin_required
     def purchase_order_pembayaran(po_id):

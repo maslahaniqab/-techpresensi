@@ -55,6 +55,7 @@
               {%- if ip.size %}{% set _ = ket.append(ip.size) %}{% endif -%}
               {%- if ket %} ({{ ket | join(", ") }}){% endif %}
               {% if po.produksi_mulai_pada %} x {{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}
+              <a href="#" class="small ms-1" title="Edit detail item (gak ngubah pemakaian bahan)" data-bs-toggle="modal" data-bs-target="#modalEditItem{{ ip.id }}">✎</a>
             </li>
             {% endfor %}
           </ul>
@@ -100,6 +101,51 @@
     </tbody>
   </table>
 </div>
+
+{% for po in daftar %}
+{% for ip in po.item_produk_list %}
+<div class="modal fade" id="modalEditItem{{ ip.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" action="{{ url_for('purchase_order_item_edit', item_id=ip.id) }}" class="modal-content">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Detail Item &mdash; {{ po.nomor_po }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info small mb-3">Koreksi di sini cuma ngubah detail item ini (Produk/Warna/Size/Qty) &amp; Total Biaya PO -- Pemakaian Bahan &amp; stok bahan baku TIDAK ikut berubah.</div>
+        <div class="mb-3">
+          <label class="form-label small">Produk</label>
+          <select name="produk_id" class="form-select form-select-sm produk-search">
+            {% for p in daftar_produk %}
+            <option value="{{ p.id }}" {{ 'selected' if p.id == ip.produk_id }}>{{ p.nama_produk }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label small">Warna</label>
+            <input type="text" name="warna" class="form-control form-control-sm" value="{{ ip.warna or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Size</label>
+            <input type="text" name="size" class="form-control form-control-sm" value="{{ ip.size or '' }}">
+          </div>
+        </div>
+        <div class="mb-0 mt-3">
+          <label class="form-label small">Qty (pcs)</label>
+          <input type="number" min="0" step="1" name="qty" class="form-control form-control-sm" value="{{ ip.qty }}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan Koreksi</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endfor %}
 
 <div class="modal fade" id="modalBuatPO" tabindex="-1">
   <div class="modal-dialog modal-xl">
