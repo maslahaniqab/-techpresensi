@@ -3,9 +3,9 @@
 {% block content %}
 
 <div class="welcome-banner mb-4">
-  <div class="text-white-50 small mb-1">Selamat datang di</div>
-  <h3 class="text-white mb-1 fw-bold">Portal Maslaha</h3>
-  <div class="text-white-50 small">Kelola presensi, gaji, dan operasional Toko Maslaha lebih mudah, cepat, dan terintegrasi.</div>
+  <div class="small mb-1" style="color:#a89468;">Selamat datang di</div>
+  <h3 class="mb-1 fw-bold" style="color:#d4af37;">Portal Maslaha</h3>
+  <div class="small" style="color:#cbb98c;">Kelola presensi, gaji, dan operasional Toko Maslaha lebih mudah, cepat, dan terintegrasi.</div>
 </div>
 
 <div class="row g-3">
@@ -38,10 +38,10 @@
   </div>
   <div class="col-md-3 col-6">
     <div class="card p-3 stat-card-highlight d-flex flex-row align-items-center gap-3">
-      <div class="stat-icon" style="background:rgba(255,255,255,.2); color:#fff;">💰</div>
+      <div class="stat-icon" style="background:rgba(212,175,55,.18); color:#d4af37;">💰</div>
       <div>
-        <div class="text-white-50 small">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
-        <div class="fs-5 fw-bold text-white">{{ total_gaji_bulan_ini | rupiah }}</div>
+        <div class="small" style="color:#a89468;">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
+        <div class="fs-5 fw-bold" style="color:#d4af37;">{{ total_gaji_bulan_ini | rupiah }}</div>
       </div>
     </div>
   </div>
@@ -86,10 +86,11 @@
 
 <style>
   .welcome-banner {
-    background: linear-gradient(135deg, #1f6feb 0%, #0b4fc2 100%);
+    background: linear-gradient(135deg, #1a1712 0%, #0b0a08 100%);
     border-radius: .75rem;
     padding: 1.5rem 1.75rem;
-    box-shadow: 0 4px 14px rgba(13,110,253,.25);
+    box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    border: 1px solid rgba(212,175,55,.2);
   }
   .stat-icon {
     width: 44px; height: 44px; min-width: 44px;
@@ -98,7 +99,8 @@
     font-size: 1.2rem;
   }
   .stat-card-highlight {
-    background: linear-gradient(135deg, #1f6feb 0%, #0b4fc2 100%);
+    background: linear-gradient(135deg, #1a1712 0%, #0b0a08 100%);
+    border: 1px solid rgba(212,175,55,.2);
   }
 </style>
 {% endblock %}
