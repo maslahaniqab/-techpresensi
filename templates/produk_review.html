@@ -34,6 +34,7 @@
     <thead>
       <tr>
         <th>Nama Produk</th>
+        <th>SKU</th>
         <th class="text-end">Modal / HPP</th>
         <th class="text-end">Harga Jual (semua tingkat harga)</th>
       </tr>
@@ -42,6 +43,7 @@
       {% for p in preview %}
       <tr>
         <td>{{ p.nama_produk }}</td>
+        <td class="small">{% if p.sku %}{{ p.sku }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         <td class="text-end">{{ p.hpp | rupiah }}</td>
         <td class="text-end">{{ p.harga_jual | rupiah }}</td>
       </tr>

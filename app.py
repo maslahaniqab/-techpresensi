@@ -534,6 +534,7 @@ def deteksi_kolom_produk(headers):
 
     return {
         "nama_produk": cari(["nama produk", "product name", "nama barang"]),
+        "sku": cari(["nomor referensi sku", "seller sku", "sku"]),
         "variasi": cari(["variasi", "variant", "varian"]),
         "hpp": cari(["hpp", "harga pokok", "cost"]),
         "harga_jual": cari(["harga jual", "selling price", "price"]),
@@ -1934,6 +1935,7 @@ def create_app():
                 return redirect(url_for("produk_upload"))
 
             idx_nama = mapping["nama_produk"]
+            idx_sku = mapping.get("sku")
             idx_variasi = mapping.get("variasi")
             idx_hpp = mapping["hpp"]
             idx_harga = mapping["harga_jual"]
@@ -1950,9 +1952,12 @@ def create_app():
                 variasi = str(variasi_raw).strip() if variasi_raw not in (None, "") else ""
                 nama_final = (f"{nama} - {variasi}" if variasi else nama)[:128]
 
+                sku_raw = row[idx_sku] if idx_sku is not None and idx_sku < len(row) else None
+                sku = str(sku_raw).strip()[:64] if sku_raw not in (None, "") else ""
+
                 hpp_val = round(parse_angka_iklan(row[idx_hpp])) if idx_hpp < len(row) else 0
                 harga_val = round(parse_angka_iklan(row[idx_harga])) if idx_harga < len(row) else 0
-                preview.append({"nama_produk": nama_final, "hpp": hpp_val, "harga_jual": harga_val})
+                preview.append({"nama_produk": nama_final, "sku": sku, "hpp": hpp_val, "harga_jual": harga_val})
 
             if not preview:
                 flash("Tidak ada baris data produk yang valid di file ini (kolom Nama Produk kosong semua).", "danger")
@@ -1968,6 +1973,7 @@ def create_app():
 
             kolom_terdeteksi = [
                 ("Nama Produk", nama_kolom(idx_nama)),
+                ("SKU", nama_kolom(idx_sku)),
                 ("Variasi", nama_kolom(idx_variasi)),
                 ("HPP", nama_kolom(idx_hpp)),
                 ("Harga Jual", nama_kolom(idx_harga)),
@@ -2005,6 +2011,8 @@ def create_app():
                 jumlah_baru += 1
             else:
                 jumlah_update += 1
+            if item.get("sku"):
+                existing.sku = item["sku"]
             existing.modal = item["hpp"]
             existing.hpp = item["hpp"]
             existing.harga_dasar = item["harga_jual"]

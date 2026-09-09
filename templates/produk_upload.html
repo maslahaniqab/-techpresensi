@@ -9,10 +9,11 @@
 <div class="card p-4" style="max-width: 640px;">
   <p class="text-muted small">
     Upload file data produk (CSV/XLSX), misalnya laporan "Online Products" dari Shopee yang berisi kolom
-    Nama Produk, Variasi, HPP, dan Harga Jual. Kolom otomatis dikenali dari file &mdash; tidak perlu isi form
-    apa pun. Produk dengan variasi (warna/ukuran) akan menjadi baris tersendiri, misal
-    "Nama Produk - Hitam". Kalau nama produk sudah ada di tabel, datanya akan diperbarui; kalau belum ada,
-    akan ditambahkan sebagai produk baru &mdash; struktur tabel yang sudah ada tidak berubah.
+    Nama Produk, Nomor Referensi SKU, Variasi, HPP, dan Harga Jual. Kolom otomatis dikenali dari file &mdash;
+    tidak perlu isi form apa pun. Produk dengan variasi (warna/ukuran) akan menjadi baris tersendiri, misal
+    "Nama Produk - Hitam". Kalau nama produk sudah ada di tabel, datanya akan diperbarui (termasuk SKU-nya
+    kalau ada di file); kalau belum ada, akan ditambahkan sebagai produk baru &mdash; struktur tabel yang
+    sudah ada tidak berubah.
   </p>
   <form method="post" enctype="multipart/form-data">
     <div class="mb-3">
