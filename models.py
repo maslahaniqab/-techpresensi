@@ -212,6 +212,7 @@ class KategoriProduk(db.Model):
 class Produk(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nama_produk = db.Column(db.String(128), nullable=False)
+    sku = db.Column(db.String(64))
     kategori_id = db.Column(db.Integer, db.ForeignKey("kategori_produk.id"))
     modal = db.Column(db.Integer, nullable=False, default=0)
     hpp = db.Column(db.Integer, nullable=False, default=0)

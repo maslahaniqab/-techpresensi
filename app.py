@@ -1563,6 +1563,9 @@ def create_app():
         if "kategori_id" not in kolom_produk:
             db.session.execute(db.text("ALTER TABLE produk ADD COLUMN kategori_id INTEGER"))
             db.session.commit()
+        if "sku" not in kolom_produk:
+            db.session.execute(db.text("ALTER TABLE produk ADD COLUMN sku VARCHAR(64)"))
+            db.session.commit()
         kolom_vendor = {c["name"] for c in db.inspect(db.engine).get_columns("vendor")}
         if "kode" not in kolom_vendor:
             db.session.execute(db.text("ALTER TABLE vendor ADD COLUMN kode VARCHAR(4)"))
@@ -1792,7 +1795,7 @@ def create_app():
         kategori_id = request.args.get("kategori_id", type=int)
         query = Produk.query
         if q:
-            query = query.filter(Produk.nama_produk.ilike(f"%{q}%"))
+            query = query.filter(db.or_(Produk.nama_produk.ilike(f"%{q}%"), Produk.sku.ilike(f"%{q}%")))
         if kategori_id:
             query = query.filter(Produk.kategori_id == kategori_id)
         daftar = query.order_by(Produk.nama_produk).all()
@@ -1810,6 +1813,7 @@ def create_app():
             kategori_id = request.form.get("kategori_id", type=int)
             produk = Produk(
                 nama_produk=request.form.get("nama_produk", "").strip(),
+                sku=request.form.get("sku", "").strip() or None,
                 kategori_id=kategori_id or None,
                 modal=int(request.form.get("modal") or 0),
                 hpp=int(request.form.get("hpp") or 0),
@@ -1835,6 +1839,7 @@ def create_app():
         if request.method == "POST":
             kategori_id = request.form.get("kategori_id", type=int)
             produk.nama_produk = request.form.get("nama_produk", "").strip()
+            produk.sku = request.form.get("sku", "").strip() or None
             produk.kategori_id = kategori_id or None
             produk.modal = int(request.form.get("modal") or 0)
             produk.hpp = int(request.form.get("hpp") or 0)

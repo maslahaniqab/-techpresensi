@@ -13,6 +13,10 @@
       <input type="text" name="nama_produk" class="form-control" value="{{ produk.nama_produk if produk else '' }}" required>
     </div>
     <div class="mb-3">
+      <label class="form-label">SKU <span class="text-muted">(opsional)</span></label>
+      <input type="text" name="sku" class="form-control" value="{{ produk.sku if produk and produk.sku else '' }}" placeholder="mis. MN-KHM-001">
+    </div>
+    <div class="mb-3">
       <label class="form-label">Kategori Produk <span class="text-muted">(opsional)</span></label>
       <select name="kategori_id" class="form-select">
         <option value="">- Tanpa kategori -</option>
