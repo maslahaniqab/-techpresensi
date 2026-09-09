@@ -197,9 +197,22 @@ class LaporanPekerjaan(db.Model):
     employee = db.relationship("Employee", backref="laporan_pekerjaan")
 
 
+class KategoriProduk(db.Model):
+    """Klasifikasi produk (mis. Khimar, Gamis, Abaya, dst) -- dipakai buat
+    ngelompokin produk biar gampang input Biaya Produksi (Menjahit) per
+    kategori sekaligus (bulk), bukan satu-satu per produk/varian warna."""
+    __tablename__ = "kategori_produk"
+    id = db.Column(db.Integer, primary_key=True)
+    nama_kategori = db.Column(db.String(64), nullable=False, unique=True)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    produk_list = db.relationship("Produk", backref="kategori", order_by="Produk.nama_produk")
+
+
 class Produk(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nama_produk = db.Column(db.String(128), nullable=False)
+    kategori_id = db.Column(db.Integer, db.ForeignKey("kategori_produk.id"))
     modal = db.Column(db.Integer, nullable=False, default=0)
     hpp = db.Column(db.Integer, nullable=False, default=0)
     harga_dasar = db.Column(db.Integer, default=0)

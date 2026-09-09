@@ -47,6 +47,7 @@ from models import (
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
+    KategoriProduk,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1558,6 +1559,10 @@ def create_app():
         if "biaya_produksi" not in kolom_po_item:
             db.session.execute(db.text("ALTER TABLE purchase_order_item_produk ADD COLUMN biaya_produksi INTEGER DEFAULT 0"))
             db.session.commit()
+        kolom_produk = {c["name"] for c in db.inspect(db.engine).get_columns("produk")}
+        if "kategori_id" not in kolom_produk:
+            db.session.execute(db.text("ALTER TABLE produk ADD COLUMN kategori_id INTEGER"))
+            db.session.commit()
         kolom_vendor = {c["name"] for c in db.inspect(db.engine).get_columns("vendor")}
         if "kode" not in kolom_vendor:
             db.session.execute(db.text("ALTER TABLE vendor ADD COLUMN kode VARCHAR(4)"))
@@ -1784,19 +1789,28 @@ def create_app():
     @admin_required
     def produk_list():
         q = request.args.get("q", "").strip()
+        kategori_id = request.args.get("kategori_id", type=int)
         query = Produk.query
         if q:
             query = query.filter(Produk.nama_produk.ilike(f"%{q}%"))
+        if kategori_id:
+            query = query.filter(Produk.kategori_id == kategori_id)
         daftar = query.order_by(Produk.nama_produk).all()
         data = [_hitung_margin_produk(p) for p in daftar]
-        return render_template("produk_list.html", data=data, q=q)
+        daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
+        return render_template(
+            "produk_list.html", data=data, q=q, kategori_id=kategori_id, daftar_kategori=daftar_kategori,
+        )
 
     @app.route("/produk/tambah", methods=["GET", "POST"])
     @admin_required
     def produk_tambah():
+        daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
         if request.method == "POST":
+            kategori_id = request.form.get("kategori_id", type=int)
             produk = Produk(
                 nama_produk=request.form.get("nama_produk", "").strip(),
+                kategori_id=kategori_id or None,
                 modal=int(request.form.get("modal") or 0),
                 hpp=int(request.form.get("hpp") or 0),
                 harga_dasar=int(request.form.get("harga_dasar") or 0),
@@ -1806,19 +1820,22 @@ def create_app():
             )
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
-                return render_template("produk_form.html", produk=None)
+                return render_template("produk_form.html", produk=None, daftar_kategori=daftar_kategori)
             db.session.add(produk)
             db.session.commit()
             flash(f"Produk {produk.nama_produk} berhasil ditambahkan.", "success")
             return redirect(url_for("produk_list"))
-        return render_template("produk_form.html", produk=None)
+        return render_template("produk_form.html", produk=None, daftar_kategori=daftar_kategori)
 
     @app.route("/produk/<int:produk_id>/edit", methods=["GET", "POST"])
     @admin_required
     def produk_edit(produk_id):
         produk = db.session.get(Produk, produk_id) or abort_404()
+        daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
         if request.method == "POST":
+            kategori_id = request.form.get("kategori_id", type=int)
             produk.nama_produk = request.form.get("nama_produk", "").strip()
+            produk.kategori_id = kategori_id or None
             produk.modal = int(request.form.get("modal") or 0)
             produk.hpp = int(request.form.get("hpp") or 0)
             produk.harga_dasar = int(request.form.get("harga_dasar") or 0)
@@ -1827,11 +1844,54 @@ def create_app():
             produk.harga_big_campaign = int(request.form.get("harga_big_campaign") or 0)
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
-                return render_template("produk_form.html", produk=produk)
+                return render_template("produk_form.html", produk=produk, daftar_kategori=daftar_kategori)
             db.session.commit()
             flash(f"Produk {produk.nama_produk} berhasil diperbarui.", "success")
             return redirect(url_for("produk_list"))
-        return render_template("produk_form.html", produk=produk)
+        return render_template("produk_form.html", produk=produk, daftar_kategori=daftar_kategori)
+
+    @app.route("/produk/kategori", methods=["GET", "POST"])
+    @admin_required
+    def kategori_produk_list():
+        if request.method == "POST":
+            nama = request.form.get("nama_kategori", "").strip()
+            if not nama:
+                flash("Nama kategori wajib diisi.", "danger")
+                return redirect(url_for("kategori_produk_list"))
+            sudah_ada = KategoriProduk.query.filter(KategoriProduk.nama_kategori.ilike(nama)).first()
+            if sudah_ada:
+                flash(f"Kategori {nama} sudah ada.", "warning")
+                return redirect(url_for("kategori_produk_list"))
+            db.session.add(KategoriProduk(nama_kategori=nama))
+            db.session.commit()
+            flash(f"Kategori {nama} berhasil ditambahkan.", "success")
+            return redirect(url_for("kategori_produk_list"))
+        daftar = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
+        return render_template("kategori_produk_list.html", daftar=daftar)
+
+    @app.route("/produk/kategori/<int:kategori_id>/edit", methods=["POST"])
+    @admin_required
+    def kategori_produk_edit(kategori_id):
+        kategori = db.session.get(KategoriProduk, kategori_id) or abort_404()
+        nama = request.form.get("nama_kategori", "").strip()
+        if not nama:
+            flash("Nama kategori wajib diisi.", "danger")
+            return redirect(url_for("kategori_produk_list"))
+        kategori.nama_kategori = nama
+        db.session.commit()
+        flash(f"Kategori berhasil diperbarui jadi {nama}.", "success")
+        return redirect(url_for("kategori_produk_list"))
+
+    @app.route("/produk/kategori/<int:kategori_id>/hapus", methods=["POST"])
+    @admin_required
+    def kategori_produk_hapus(kategori_id):
+        kategori = db.session.get(KategoriProduk, kategori_id) or abort_404()
+        nama = kategori.nama_kategori
+        Produk.query.filter_by(kategori_id=kategori.id).update({"kategori_id": None})
+        db.session.delete(kategori)
+        db.session.commit()
+        flash(f"Kategori {nama} dihapus. Produk yg tadinya di kategori ini jadi tanpa kategori.", "info")
+        return redirect(url_for("kategori_produk_list"))
 
     @app.route("/produk/<int:produk_id>/hapus", methods=["POST"])
     @admin_required
@@ -2448,10 +2508,53 @@ def create_app():
         daftar = BiayaJahit.query.join(Produk).order_by(Produk.nama_produk).all()
         daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
         daftar_vendor = Vendor.query.order_by(Vendor.nama_vendor).all()
+        daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
         return render_template(
             "inventory/biaya_jahit_list.html",
             daftar=daftar, daftar_produk=daftar_produk, daftar_vendor=daftar_vendor,
+            daftar_kategori=daftar_kategori,
         )
+
+    @app.route("/inventory/master-data/biaya-jahit/bulk", methods=["POST"])
+    @admin_required
+    def biaya_jahit_bulk_kategori():
+        kategori_id = request.form.get("bulk_kategori_id", type=int)
+        kategori = db.session.get(KategoriProduk, kategori_id) if kategori_id else None
+        vendor_id = request.form.get("bulk_vendor_id", type=int)
+        vendor = db.session.get(Vendor, vendor_id) if vendor_id else None
+        biaya = round(parse_angka_iklan(request.form.get("bulk_biaya_per_pcs")))
+
+        if not kategori or biaya <= 0:
+            flash("Pilih Kategori dan isi Biaya per Pcs (harus lebih dari 0).", "danger")
+            return redirect(url_for("biaya_jahit_list"))
+
+        produk_kategori = Produk.query.filter_by(kategori_id=kategori.id).all()
+        if not produk_kategori:
+            flash(f"Belum ada produk dengan kategori {kategori.nama_kategori}. Set kategori produknya dulu di halaman Produk.", "warning")
+            return redirect(url_for("biaya_jahit_list"))
+
+        jumlah_baru = jumlah_update = 0
+        for produk in produk_kategori:
+            sudah_ada = BiayaJahit.query.filter_by(
+                produk_id=produk.id, vendor_id=vendor.id if vendor else None,
+            ).first()
+            if sudah_ada:
+                sudah_ada.biaya_per_pcs = biaya
+                jumlah_update += 1
+            else:
+                db.session.add(BiayaJahit(
+                    produk_id=produk.id, vendor_id=vendor.id if vendor else None, biaya_per_pcs=biaya,
+                ))
+                jumlah_baru += 1
+        db.session.commit()
+        target_vendor = f" ({vendor.nama_vendor})" if vendor else " (default, semua vendor)"
+        biaya_fmt = f"{biaya:,}".replace(",", ".")
+        flash(
+            f"Tarif jahit Rp {biaya_fmt} diterapkan ke {len(produk_kategori)} produk kategori "
+            f"{kategori.nama_kategori}{target_vendor} -- {jumlah_baru} baru, {jumlah_update} diperbarui.",
+            "success",
+        )
+        return redirect(url_for("biaya_jahit_list"))
 
     @app.route("/inventory/master-data/biaya-jahit/<int:biaya_id>/hapus", methods=["POST"])
     @admin_required

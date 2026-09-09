@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Kategori Produk{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <h3 class="mb-1">Kategori Produk</h3>
+  <p class="text-muted small mb-0">
+    Klasifikasi produk (mis. Khimar, Gamis, Abaya, Pashmina, dst) &mdash; set kategori tiap produk di halaman
+    <a href="{{ url_for('produk_list') }}">Produk</a>, biar gampang input <a href="{{ url_for('biaya_jahit_list') }}">Biaya Produksi (Menjahit)</a>
+    sekaligus per kategori (bulk), gak perlu satu-satu per produk.
+  </p>
+</div>
+
+<div class="card p-3 mb-4" style="max-width: 480px;">
+  <div class="fw-semibold small mb-2">+ Tambah Kategori</div>
+  <form method="post" class="input-group">
+    <input type="text" name="nama_kategori" class="form-control" placeholder="mis. Khimar" required>
+    <button type="submit" class="btn btn-primary">Simpan</button>
+  </form>
+</div>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <table class="table table-sm table-hover align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Kategori</th>
+        <th class="text-end">Jumlah Produk</th>
+        <th class="text-end">Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for k in daftar %}
+      <tr>
+        <td class="small">
+          <form method="post" action="{{ url_for('kategori_produk_edit', kategori_id=k.id) }}" class="d-flex gap-1">
+            <input type="text" name="nama_kategori" class="form-control form-control-sm" value="{{ k.nama_kategori }}" style="max-width:220px;">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Simpan</button>
+          </form>
+        </td>
+        <td class="text-end small">{{ k.produk_list | length }}</td>
+        <td class="text-end">
+          <form method="post" action="{{ url_for('kategori_produk_hapus', kategori_id=k.id) }}" class="d-inline"
+                onsubmit="return confirm('Hapus kategori {{ k.nama_kategori }}? Produk yg pakai kategori ini jadi tanpa kategori.');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="text-center text-muted py-4">Belum ada kategori produk. Isi form di atas untuk mulai.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

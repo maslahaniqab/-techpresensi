@@ -42,11 +42,51 @@
   </form>
 </div>
 
+<div class="card p-3 mb-4">
+  <div class="fw-semibold small mb-1">⚡ Terapkan ke 1 Kategori Sekaligus (bulk)</div>
+  <p class="text-muted small mb-2">
+    Set 1 tarif buat SEMUA produk dalam 1 <a href="{{ url_for('kategori_produk_list') }}">kategori</a> sekaligus &mdash;
+    gak perlu isi satu-satu per produk/varian warna. Kelola kategori tiap produk di halaman
+    <a href="{{ url_for('produk_list') }}">Produk</a>.
+  </p>
+  <form method="post" action="{{ url_for('biaya_jahit_bulk_kategori') }}" class="row g-2 align-items-end">
+    <div class="col-md-5 col-6">
+      <label class="form-label small">Kategori</label>
+      <select name="bulk_kategori_id" class="form-select form-select-sm" required>
+        <option value="">Pilih kategori&hellip;</option>
+        {% for k in daftar_kategori %}
+        <option value="{{ k.id }}">{{ k.nama_kategori }} ({{ k.produk_list | length }} produk)</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4 col-6">
+      <label class="form-label small">Vendor <span class="text-muted">(opsional)</span></label>
+      <select name="bulk_vendor_id" class="form-select form-select-sm">
+        <option value="">- Default, semua vendor -</option>
+        {% for v in daftar_vendor %}
+        <option value="{{ v.id }}">{{ v.nama_vendor }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2 col-8">
+      <label class="form-label small">Biaya / Pcs (Rp)</label>
+      <input type="number" min="0" step="1" name="bulk_biaya_per_pcs" class="form-control form-control-sm" placeholder="mis. 8000" required>
+    </div>
+    <div class="col-md-1 col-4">
+      <button type="submit" class="btn btn-sm btn-warning w-100">⚡</button>
+    </div>
+  </form>
+  {% if not daftar_kategori %}
+  <div class="text-muted small mt-2">Belum ada <a href="{{ url_for('kategori_produk_list') }}">Kategori Produk</a>. Buat dulu kategorinya, lalu set kategori tiap produk di halaman Produk.</div>
+  {% endif %}
+</div>
+
 <div class="card p-3" style="overflow-x:auto;">
   <table class="table table-sm table-hover align-middle mb-0">
     <thead>
       <tr>
         <th>Produk</th>
+        <th>Kategori</th>
         <th>Vendor</th>
         <th class="text-end">Biaya / Pcs</th>
         <th class="text-end">Aksi</th>
@@ -56,6 +96,7 @@
       {% for b in daftar %}
       <tr>
         <td class="small">{{ b.produk.nama_produk }}</td>
+        <td class="small">{% if b.produk.kategori %}{{ b.produk.kategori.nama_kategori }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         <td class="small">{% if b.vendor %}{{ b.vendor.nama_vendor }}{% else %}<span class="text-muted">- Default, semua vendor -</span>{% endif %}</td>
         <td class="text-end small">{{ b.biaya_per_pcs | rupiah }}</td>
         <td class="text-end">
@@ -65,7 +106,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="text-center text-muted py-4">Belum ada tarif jahit. Isi form di atas untuk mulai.</td></tr>
+      <tr><td colspan="5" class="text-center text-muted py-4">Belum ada tarif jahit. Isi form di atas untuk mulai.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -10,10 +10,26 @@
 </div>
 
 <form method="get" class="card p-2 mb-3">
-  <div class="input-group">
-    <input type="text" name="q" class="form-control" placeholder="Cari nama produk..." value="{{ q }}">
-    <button type="submit" class="btn btn-outline-secondary">🔍</button>
-    {% if q %}<a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary">&times;</a>{% endif %}
+  <div class="row g-2 align-items-center">
+    <div class="col-md-6">
+      <div class="input-group">
+        <input type="text" name="q" class="form-control" placeholder="Cari nama produk..." value="{{ q }}">
+        <button type="submit" class="btn btn-outline-secondary">🔍</button>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <select name="kategori_id" class="form-select" onchange="this.form.submit()">
+        <option value="">- Semua kategori -</option>
+        {% for k in daftar_kategori %}
+        <option value="{{ k.id }}" {{ 'selected' if kategori_id == k.id }}>{{ k.nama_kategori }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if q or kategori_id %}
+    <div class="col-md-2">
+      <a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary w-100">&times; Reset</a>
+    </div>
+    {% endif %}
   </div>
 </form>
 
@@ -23,6 +39,7 @@
       <thead>
         <tr>
           <th>Produk</th>
+          <th>Kategori</th>
           <th class="text-end">Modal</th>
           <th class="text-end">HPP</th>
           <th class="text-end">Harga Dasar</th>
@@ -40,6 +57,7 @@
         {% set p = d.produk %}
         <tr>
           <td>{{ p.nama_produk }}</td>
+          <td class="small">{% if p.kategori %}{{ p.kategori.nama_kategori }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
           <td class="text-end">{{ p.modal | rupiah }}</td>
           <td class="text-end">{{ p.hpp | rupiah }}</td>
           <td class="text-end">{{ p.harga_dasar | rupiah }}</td>
@@ -58,7 +76,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11" class="text-center text-muted py-4">{{ "Tidak ada produk yang cocok dengan pencarian." if q else "Belum ada data produk." }}</td></tr>
+        <tr><td colspan="12" class="text-center text-muted py-4">{{ "Tidak ada produk yang cocok dengan pencarian/filter." if (q or kategori_id) else "Belum ada data produk." }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

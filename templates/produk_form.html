@@ -12,6 +12,16 @@
       <label class="form-label">Nama Produk</label>
       <input type="text" name="nama_produk" class="form-control" value="{{ produk.nama_produk if produk else '' }}" required>
     </div>
+    <div class="mb-3">
+      <label class="form-label">Kategori Produk <span class="text-muted">(opsional)</span></label>
+      <select name="kategori_id" class="form-select">
+        <option value="">- Tanpa kategori -</option>
+        {% for k in daftar_kategori %}
+        <option value="{{ k.id }}" {{ 'selected' if produk and produk.kategori_id == k.id }}>{{ k.nama_kategori }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">Buat/kelola kategori di menu <a href="{{ url_for('kategori_produk_list') }}" target="_blank">Kategori Produk</a>. Berguna biar gampang input Biaya Produksi (Menjahit) sekaligus per kategori.</div>
+    </div>
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Modal (Rp)</label>
