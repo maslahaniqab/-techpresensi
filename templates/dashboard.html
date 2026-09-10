@@ -8,13 +8,94 @@
   <div class="small" style="color:#cbb98c;">Kelola presensi, gaji, dan operasional Toko Maslaha lebih mudah, cepat, dan terintegrasi.</div>
 </div>
 
-<div class="row g-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0">Ringkasan Profitabilitas</h5>
+    <p class="text-muted small mb-0">{{ bulan_nama }} {{ tahun_ini }} &mdash; dari data Order &amp; Income yang sudah diupload</p>
+  </div>
+  <a href="{{ url_for('profit_dashboard') }}" class="btn btn-sm btn-outline-dark">Lihat Detail Lengkap &rarr;</a>
+</div>
+
+{% macro badge_persen(persen, invert=False) %}
+  {% if persen is none %}
+    <span class="text-muted small">bulan lalu blm ada data</span>
+  {% else %}
+    {% set naik = persen >= 0 %}
+    {% set bagus = (naik and not invert) or (not naik and invert) %}
+    <span class="small fw-semibold {{ 'text-success' if bagus else 'text-danger' }}">
+      {{ '▲' if naik else '▼' }} {{ '%.1f'|format(persen if naik else -persen) }}% dari bulan lalu
+    </span>
+  {% endif %}
+{% endmacro %}
+
+{% if not ada_data_profit %}
+<div class="card p-4 text-center mb-4">
+  <div class="fs-2 mb-2">📊</div>
+  <h6>Belum Ada Data Order &amp; Income</h6>
+  <p class="text-muted small mb-3">Upload data pesanan &amp; income marketplace dulu di menu Profitabilitas biar laporan omzet, profit, dan margin bisa dihitung otomatis di sini.</p>
+  <div><a href="{{ url_for('profit_upload') }}" class="btn btn-primary btn-sm">+ Upload Order / Income</a></div>
+</div>
+{% else %}
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#e7f0ff; color:#0d6efd; width:32px; height:32px; font-size:1rem;">💵</span>
+        <span class="text-muted small">Omzet Bulan Ini</span>
+      </div>
+      <div class="fs-5 fw-bold">{{ kpi_profit.omzet.nilai | rupiah }}</div>
+      {{ badge_persen(kpi_profit.omzet.persen) }}
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#d1e7dd; color:#146c43; width:32px; height:32px; font-size:1rem;">📈</span>
+        <span class="text-muted small">Profit Real Bulan Ini</span>
+      </div>
+      <div class="fs-5 fw-bold {{ 'text-danger' if kpi_profit.profit_real.nilai < 0 else '' }}">{{ kpi_profit.profit_real.nilai | rupiah }}</div>
+      {{ badge_persen(kpi_profit.profit_real.persen) }}
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#fff3cd; color:#c8860d; width:32px; height:32px; font-size:1rem;">📐</span>
+        <span class="text-muted small">Margin Real</span>
+      </div>
+      <div class="fs-5 fw-bold">{{ "%.1f"|format(kpi_profit.margin_real.nilai) }}%</div>
+      {% set sp = kpi_profit.margin_real.selisih_poin %}
+      <span class="small fw-semibold {{ 'text-success' if sp >= 0 else 'text-danger' }}">
+        {{ '▲' if sp >= 0 else '▼' }} {{ '%.1f'|format(sp if sp >= 0 else -sp) }} poin dari bulan lalu
+      </span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#f8d7da; color:#b02a37; width:32px; height:32px; font-size:1rem;">📣</span>
+        <span class="text-muted small">Biaya Iklan Bulan Ini</span>
+      </div>
+      <div class="fs-5 fw-bold">{{ kpi_profit.biaya_iklan.nilai | rupiah }}</div>
+      {{ badge_persen(kpi_profit.biaya_iklan.persen, invert=True) }}
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="text-muted small mb-2">Tren Omzet vs Profit Real &mdash; 6 Bulan Terakhir</div>
+  <canvas id="chartTrenDashboard" height="80"></canvas>
+</div>
+{% endif %}
+
+<div class="text-muted small text-uppercase mb-2">Ringkasan Kepegawaian</div>
+<div class="row g-3 mb-1">
   <div class="col-md-3 col-6">
     <div class="card p-3 d-flex flex-row align-items-center gap-3">
       <div class="stat-icon" style="background:#e7f0ff; color:#0d6efd;">👥</div>
       <div>
         <div class="text-muted small">Karyawan Aktif</div>
-        <div class="fs-4 fw-bold">{{ total_karyawan }}</div>
+        <div class="fs-5 fw-bold">{{ total_karyawan }}</div>
       </div>
     </div>
   </div>
@@ -23,7 +104,7 @@
       <div class="stat-icon" style="background:#fff3cd; color:#c8860d;">🕒</div>
       <div>
         <div class="text-muted small">Absen Hari Ini</div>
-        <div class="fs-4 fw-bold">{{ absen_hari_ini }} / {{ total_karyawan }}</div>
+        <div class="fs-5 fw-bold">{{ absen_hari_ini }} / {{ total_karyawan }}</div>
       </div>
     </div>
   </div>
@@ -32,16 +113,16 @@
       <div class="stat-icon" style="background:#d1e7dd; color:#146c43;">✅</div>
       <div>
         <div class="text-muted small">Hadir Hari Ini</div>
-        <div class="fs-4 fw-bold text-success">{{ hadir_hari_ini }}</div>
+        <div class="fs-5 fw-bold text-success">{{ hadir_hari_ini }}</div>
       </div>
     </div>
   </div>
   <div class="col-md-3 col-6">
-    <div class="card p-3 stat-card-highlight d-flex flex-row align-items-center gap-3">
-      <div class="stat-icon" style="background:rgba(212,175,55,.18); color:#d4af37;">💰</div>
+    <div class="card p-3 d-flex flex-row align-items-center gap-3">
+      <div class="stat-icon" style="background:rgba(212,175,55,.15); color:#b8952c;">💰</div>
       <div>
-        <div class="small" style="color:#a89468;">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
-        <div class="fs-5 fw-bold" style="color:#d4af37;">{{ total_gaji_bulan_ini | rupiah }}</div>
+        <div class="text-muted small">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
+        <div class="fs-6 fw-bold">{{ total_gaji_bulan_ini | rupiah }}</div>
       </div>
     </div>
   </div>
@@ -98,9 +179,24 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 1.2rem;
   }
-  .stat-card-highlight {
-    background: linear-gradient(135deg, #1a1712 0%, #0b0a08 100%);
-    border: 1px solid rgba(212,175,55,.2);
-  }
 </style>
+{% endblock %}
+
+{% block scripts %}
+{% if ada_data_profit %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('chartTrenDashboard'), {
+  type: 'line',
+  data: {
+    labels: {{ tren_bulanan | map(attribute='label') | list | tojson }},
+    datasets: [
+      { label: 'Omzet', data: {{ tren_bulanan | map(attribute='omzet') | list | tojson }}, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,.1)', tension: .3 },
+      { label: 'Profit Real', data: {{ tren_bulanan | map(attribute='profit') | list | tojson }}, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,.1)', tension: .3 },
+    ],
+  },
+  options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+});
+</script>
+{% endif %}
 {% endblock %}

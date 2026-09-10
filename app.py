@@ -1642,6 +1642,19 @@ def create_app():
         return redirect(url_for("pegawai_login"))
 
     # ---------- DASHBOARD ----------
+    def _mundur_bulan(tahun, bulan, n):
+        """(tahun, bulan) mundur n bulan -- dipakai buat bangun rentang 6 bulan terakhir."""
+        total = tahun * 12 + (bulan - 1) - n
+        return total // 12, total % 12 + 1
+
+    def _persen_perubahan(sekarang, sebelumnya):
+        """Persen perubahan sekarang vs sebelumnya. None kalau tidak ada baseline (bulan
+        lalu 0/kosong) -- biar dashboard tampilin '-' bukan angka aneh (mis. naik tak
+        terhingga dari 0)."""
+        if not sebelumnya:
+            return None
+        return (sekarang - sebelumnya) / abs(sebelumnya) * 100
+
     @app.route("/")
     @admin_required
     def dashboard():
@@ -1654,6 +1667,43 @@ def create_app():
         payrolls_bulan_ini = Payroll.query.filter_by(bulan=bulan_ini, tahun=tahun_ini).all()
         total_gaji_bulan_ini = sum(p.gaji_bersih for p in payrolls_bulan_ini)
 
+        # ---- Profitabilitas: ringkasan bulan ini vs bulan lalu + tren 6 bulan terakhir,
+        # dipakai buat kartu KPI & grafik di Dashboard utama ----
+        ada_data_profit = PesananMarketplace.query.first() is not None
+        rentang_6bulan = [_mundur_bulan(tahun_ini, bulan_ini, i) for i in range(5, -1, -1)]
+        ringkasan_per_bulan = [
+            hitung_profit_agregat(f"{y:04d}-{m:02d}")["ringkasan"] for (y, m) in rentang_6bulan
+        ]
+        ringkasan_ini = ringkasan_per_bulan[-1]
+        ringkasan_lalu = ringkasan_per_bulan[-2]
+
+        kpi_profit = {
+            "omzet": {
+                "nilai": ringkasan_ini["total_omzet"],
+                "persen": _persen_perubahan(ringkasan_ini["total_omzet"], ringkasan_lalu["total_omzet"]),
+            },
+            "profit_real": {
+                "nilai": ringkasan_ini["total_profit_real"],
+                "persen": _persen_perubahan(ringkasan_ini["total_profit_real"], ringkasan_lalu["total_profit_real"]),
+            },
+            "margin_real": {
+                "nilai": ringkasan_ini["margin_real"],
+                "selisih_poin": ringkasan_ini["margin_real"] - ringkasan_lalu["margin_real"],
+            },
+            "biaya_iklan": {
+                "nilai": ringkasan_ini["total_biaya_iklan"],
+                "persen": _persen_perubahan(ringkasan_ini["total_biaya_iklan"], ringkasan_lalu["total_biaya_iklan"]),
+            },
+        }
+        tren_bulanan = [
+            {
+                "label": f"{BULAN_NAMA[m][:3]} {y}",
+                "omzet": ringkasan_per_bulan[i]["total_omzet"],
+                "profit": ringkasan_per_bulan[i]["total_profit_real"],
+            }
+            for i, (y, m) in enumerate(rentang_6bulan)
+        ]
+
         return render_template(
             "dashboard.html",
             total_karyawan=total_karyawan,
@@ -1662,6 +1712,9 @@ def create_app():
             total_gaji_bulan_ini=total_gaji_bulan_ini,
             bulan_nama=BULAN_NAMA[bulan_ini],
             tahun_ini=tahun_ini,
+            ada_data_profit=ada_data_profit,
+            kpi_profit=kpi_profit,
+            tren_bulanan=tren_bulanan,
         )
 
     # ---------- KARYAWAN ----------
