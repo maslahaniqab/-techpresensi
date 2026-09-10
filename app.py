@@ -1668,14 +1668,20 @@ def create_app():
         total_gaji_bulan_ini = sum(p.gaji_bersih for p in payrolls_bulan_ini)
 
         # ---- Profitabilitas: ringkasan bulan ini vs bulan lalu + tren 6 bulan terakhir,
-        # dipakai buat kartu KPI & grafik di Dashboard utama ----
+        # dipakai buat kartu KPI & diagram di Dashboard utama ----
         ada_data_profit = PesananMarketplace.query.first() is not None
         rentang_6bulan = [_mundur_bulan(tahun_ini, bulan_ini, i) for i in range(5, -1, -1)]
-        ringkasan_per_bulan = [
-            hitung_profit_agregat(f"{y:04d}-{m:02d}")["ringkasan"] for (y, m) in rentang_6bulan
+        data_per_bulan = [
+            hitung_profit_agregat(f"{y:04d}-{m:02d}") for (y, m) in rentang_6bulan
         ]
+        ringkasan_per_bulan = [d["ringkasan"] for d in data_per_bulan]
         ringkasan_ini = ringkasan_per_bulan[-1]
         ringkasan_lalu = ringkasan_per_bulan[-2]
+
+        produk_terlaris = sorted(
+            (p for p in data_per_bulan[-1]["produk"] if p["ada_income"]),
+            key=lambda p: -p["qty"],
+        )[:5]
 
         kpi_profit = {
             "omzet": {
@@ -1715,6 +1721,7 @@ def create_app():
             ada_data_profit=ada_data_profit,
             kpi_profit=kpi_profit,
             tren_bulanan=tren_bulanan,
+            produk_terlaris=produk_terlaris,
         )
 
     # ---------- KARYAWAN ----------

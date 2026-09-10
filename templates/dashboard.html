@@ -82,47 +82,77 @@
   </div>
 </div>
 
-<div class="card p-3 mb-4">
-  <div class="text-muted small mb-2">Tren Omzet vs Profit Real &mdash; 6 Bulan Terakhir</div>
-  <canvas id="chartTrenDashboard" height="80"></canvas>
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card p-3 h-100">
+      <div class="text-muted small mb-2">Diagram Omzet vs Profit Real &mdash; 6 Bulan Terakhir</div>
+      <canvas id="chartTrenDashboard" height="110"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card p-3 h-100">
+      <div class="text-muted small mb-2">🏆 Produk Terlaris Bulan Ini</div>
+      {% if produk_terlaris %}
+      <div class="list-group list-group-flush">
+        {% for p in produk_terlaris %}
+        <div class="list-group-item px-0 d-flex justify-content-between align-items-center">
+          <div>
+            <div class="small fw-semibold">{{ loop.index }}. {{ p.nama_produk }}</div>
+            <div class="text-muted small">{{ p.qty }} pcs terjual &middot; {{ p.omzet | rupiah }}</div>
+          </div>
+          <span class="badge {{ 'bg-success' if p.profit >= 0 else 'bg-danger' }}">{{ p.profit | rupiah }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-muted small py-3">Belum ada produk terjual dengan data Income bulan ini.</div>
+      {% endif %}
+    </div>
+  </div>
 </div>
 {% endif %}
 
-<div class="text-muted small text-uppercase mb-2">Ringkasan Kepegawaian</div>
-<div class="row g-3 mb-1">
-  <div class="col-md-3 col-6">
-    <div class="card p-3 d-flex flex-row align-items-center gap-3">
-      <div class="stat-icon" style="background:#e7f0ff; color:#0d6efd;">👥</div>
-      <div>
-        <div class="text-muted small">Karyawan Aktif</div>
-        <div class="fs-5 fw-bold">{{ total_karyawan }}</div>
+<div class="mb-4">
+  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#kepegawaianCollapse" aria-expanded="false" aria-controls="kepegawaianCollapse">
+    👥 Laporan Presensi &amp; Karyawan <span class="chevron-collapse">▾</span>
+  </button>
+  <div class="collapse mt-3" id="kepegawaianCollapse">
+    <div class="row g-3">
+      <div class="col-md-3 col-6">
+        <div class="card p-3 d-flex flex-row align-items-center gap-3">
+          <div class="stat-icon" style="background:#e7f0ff; color:#0d6efd;">👥</div>
+          <div>
+            <div class="text-muted small">Karyawan Aktif</div>
+            <div class="fs-5 fw-bold">{{ total_karyawan }}</div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card p-3 d-flex flex-row align-items-center gap-3">
-      <div class="stat-icon" style="background:#fff3cd; color:#c8860d;">🕒</div>
-      <div>
-        <div class="text-muted small">Absen Hari Ini</div>
-        <div class="fs-5 fw-bold">{{ absen_hari_ini }} / {{ total_karyawan }}</div>
+      <div class="col-md-3 col-6">
+        <div class="card p-3 d-flex flex-row align-items-center gap-3">
+          <div class="stat-icon" style="background:#fff3cd; color:#c8860d;">🕒</div>
+          <div>
+            <div class="text-muted small">Absen Hari Ini</div>
+            <div class="fs-5 fw-bold">{{ absen_hari_ini }} / {{ total_karyawan }}</div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card p-3 d-flex flex-row align-items-center gap-3">
-      <div class="stat-icon" style="background:#d1e7dd; color:#146c43;">✅</div>
-      <div>
-        <div class="text-muted small">Hadir Hari Ini</div>
-        <div class="fs-5 fw-bold text-success">{{ hadir_hari_ini }}</div>
+      <div class="col-md-3 col-6">
+        <div class="card p-3 d-flex flex-row align-items-center gap-3">
+          <div class="stat-icon" style="background:#d1e7dd; color:#146c43;">✅</div>
+          <div>
+            <div class="text-muted small">Hadir Hari Ini</div>
+            <div class="fs-5 fw-bold text-success">{{ hadir_hari_ini }}</div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card p-3 d-flex flex-row align-items-center gap-3">
-      <div class="stat-icon" style="background:rgba(212,175,55,.15); color:#b8952c;">💰</div>
-      <div>
-        <div class="text-muted small">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
-        <div class="fs-6 fw-bold">{{ total_gaji_bulan_ini | rupiah }}</div>
+      <div class="col-md-3 col-6">
+        <div class="card p-3 d-flex flex-row align-items-center gap-3">
+          <div class="stat-icon" style="background:rgba(212,175,55,.15); color:#b8952c;">💰</div>
+          <div>
+            <div class="text-muted small">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
+            <div class="fs-6 fw-bold">{{ total_gaji_bulan_ini | rupiah }}</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -179,6 +209,8 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 1.2rem;
   }
+  .chevron-collapse { display: inline-block; transition: transform .2s ease; }
+  [aria-expanded="true"] .chevron-collapse { transform: rotate(180deg); }
 </style>
 {% endblock %}
 
@@ -187,15 +219,23 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
 new Chart(document.getElementById('chartTrenDashboard'), {
-  type: 'line',
+  type: 'bar',
   data: {
     labels: {{ tren_bulanan | map(attribute='label') | list | tojson }},
     datasets: [
-      { label: 'Omzet', data: {{ tren_bulanan | map(attribute='omzet') | list | tojson }}, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,.1)', tension: .3 },
-      { label: 'Profit Real', data: {{ tren_bulanan | map(attribute='profit') | list | tojson }}, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,.1)', tension: .3 },
+      { label: 'Omzet', data: {{ tren_bulanan | map(attribute='omzet') | list | tojson }}, backgroundColor: '#0d6efd', borderRadius: 4 },
+      { label: 'Profit Real', data: {{ tren_bulanan | map(attribute='profit') | list | tojson }}, backgroundColor: '#198754', borderRadius: 4 },
     ],
   },
-  options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { ticks: { callback: (v) => {
+      if (Math.abs(v) >= 1000000) return 'Rp ' + (v / 1000000).toFixed(1) + 'jt';
+      if (Math.abs(v) >= 1000) return 'Rp ' + (v / 1000).toFixed(0) + 'rb';
+      return 'Rp ' + v;
+    } } } },
+  },
 });
 </script>
 {% endif %}
