@@ -6382,7 +6382,7 @@ def create_app():
                     marketplace_terdeteksi = marketplace
                     hasil["order"] = {
                         "ok": True, "nama": file_order.filename, "jumlah": len(order_item_list), "marketplace": marketplace,
-                        "preview_items": order_item_list[:8],
+                        "preview_items": order_item_list,
                     }
 
             if file_income and file_income.filename:
@@ -6397,7 +6397,7 @@ def create_app():
                     marketplace_terdeteksi = marketplace_terdeteksi or marketplace
                     hasil["income"] = {
                         "ok": True, "nama": file_income.filename, "jumlah": len(income_item_list), "marketplace": marketplace,
-                        "preview_items": income_item_list[:8],
+                        "preview_items": income_item_list,
                     }
                     if marketplace == "Shopee":
                         file_income.seek(0)
@@ -6430,7 +6430,7 @@ def create_app():
                         hasil["order_manual"] = {
                             "ok": True, "nama": file_order_manual.filename, "jumlah": len(order_manual_item_list),
                             "jumlah_income_otomatis": len(income_manual_item_list),
-                            "preview_items": order_manual_item_list[:8],
+                            "preview_items": order_manual_item_list,
                         }
 
             if file_iklan and file_iklan.filename:
@@ -6464,7 +6464,7 @@ def create_app():
                         iklan_preview_items = sorted(
                             ({"tanggal": t, **v} for t, v in agregat_i.items()),
                             key=lambda x: x["tanggal"], reverse=True,
-                        )[:8]
+                        )
                         hasil["iklan"] = {
                             "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_i),
                             "marketplace": marketplace_iklan, "preview_items": iklan_preview_items,
