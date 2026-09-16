@@ -6538,6 +6538,29 @@ def create_app():
         jumlah_sudah_cocok = len(kunci_pesanan & kunci_income)
         jumlah_belum_ada_income = len(kunci_pesanan - kunci_income)
 
+        # Breakdown pesanan yang belum ada Income-nya, per bulan tanggal pesanan -- supaya
+        # kelihatan mana yang wajar (bulan berjalan, dana memang biasanya baru cair bulan
+        # depan) vs yang perlu ditelusuri (bulan lalu, seharusnya sudah cair/terupload).
+        bulan_belum_income = {}
+        for mp, no, tgl in PesananMarketplace.query.with_entities(
+            PesananMarketplace.marketplace, PesananMarketplace.no_pesanan, PesananMarketplace.tanggal_pesanan
+        ).distinct().all():
+            if not tgl or (mp, no) in kunci_income:
+                continue
+            kunci_bulan = (tgl.year, tgl.month)
+            bulan_belum_income[kunci_bulan] = bulan_belum_income.get(kunci_bulan, 0) + 1
+
+        hari_ini_bi = today_wib()
+        bulan_ini_key = (hari_ini_bi.year, hari_ini_bi.month)
+        breakdown_belum_income = [
+            {
+                "label": f"{BULAN_NAMA[bl]} {th}",
+                "jumlah": jumlah,
+                "bulan_berjalan": (th, bl) == bulan_ini_key,
+            }
+            for (th, bl), jumlah in sorted(bulan_belum_income.items(), reverse=True)
+        ]
+
         daftar_marketplace = sorted({m for m, _ in kunci_pesanan} | {m for m, _ in kunci_income})
         daftar_status = sorted({
             r[0] for r in PesananMarketplace.query.with_entities(PesananMarketplace.status_pesanan).distinct().all() if r[0]
@@ -6638,6 +6661,7 @@ def create_app():
             jumlah_order_unik=len(kunci_pesanan),
             jumlah_sudah_cocok=jumlah_sudah_cocok,
             jumlah_belum_ada_income=jumlah_belum_ada_income,
+            breakdown_belum_income=breakdown_belum_income,
             status_filter=status_filter,
             income_status_filter=income_status_filter,
             daftar_status=daftar_status,
