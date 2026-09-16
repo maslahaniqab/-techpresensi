@@ -103,10 +103,11 @@
     <span class="badge {{ mp_badge.get(hasil.order.marketplace, 'bg-secondary') }}">{{ hasil.order.marketplace }}</span>
     <span class="text-muted small">{{ hasil.order.jumlah }} baris &middot; {{ hasil.order.nama }}</span>
   </div>
-  <div class="card p-3" style="overflow-x:auto;">
-    <div class="text-muted small mb-2">Semua {{ hasil.order.preview_items|length }} baris berhasil diimpor (sudah dibaca &amp; dirapikan, bukan tampilan mentah file):</div>
+  <div class="card p-3">
+    <div class="text-muted small mb-2">Semua {{ hasil.order.preview_items|length }} baris berhasil diimpor (sudah dibaca &amp; dirapikan, bukan tampilan mentah file). Tabelnya bisa di-scroll kalau datanya banyak, tidak perlu geser halaman.</div>
+    <div style="max-height: 620px; overflow-y: auto; overflow-x: auto;">
     <table class="table table-sm align-middle mb-0">
-      <thead>
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
         <tr>
           <th>No. Pesanan</th>
           <th>Tanggal</th>
@@ -133,6 +134,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
   <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.order.nama }}:</strong> {{ hasil.order.pesan }}</div>
@@ -150,10 +152,11 @@
     <span class="badge {{ mp_badge.get(hasil.income.marketplace, 'bg-secondary') }}">{{ hasil.income.marketplace }}</span>
     <span class="text-muted small">{{ hasil.income.jumlah }} pesanan &middot; {{ hasil.income.nama }}</span>
   </div>
-  <div class="card p-3" style="overflow-x:auto;">
-    <div class="text-muted small mb-2">Semua {{ hasil.income.preview_items|length }} pesanan berhasil diimpor (sudah dibaca &amp; dirapikan):</div>
+  <div class="card p-3">
+    <div class="text-muted small mb-2">Semua {{ hasil.income.preview_items|length }} pesanan berhasil diimpor (sudah dibaca &amp; dirapikan). Tabelnya bisa di-scroll kalau datanya banyak, tidak perlu geser halaman.</div>
+    <div style="max-height: 620px; overflow-y: auto; overflow-x: auto;">
     <table class="table table-sm align-middle mb-0">
-      <thead>
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
         <tr>
           <th>No. Pesanan</th>
           <th>Tanggal Dana Dilepas</th>
@@ -176,6 +179,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
   <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.income.nama }}:</strong> {{ hasil.income.pesan }}</div>
@@ -193,9 +197,11 @@
     <span class="badge {{ mp_badge.get(hasil.iklan.marketplace, 'bg-secondary') }}">{{ hasil.iklan.marketplace }}</span>
     <span class="text-muted small">{{ hasil.iklan.jumlah }} hari &middot; {{ hasil.iklan.nama }}</span>
   </div>
-  <div class="card p-3" style="overflow-x:auto;">
+  <div class="card p-3">
+    <div class="text-muted small mb-2">Semua {{ hasil.iklan.preview_items|length }} hari berhasil diimpor. Tabelnya bisa di-scroll kalau datanya banyak, tidak perlu geser halaman.</div>
+    <div style="max-height: 620px; overflow-y: auto; overflow-x: auto;">
     <table class="table table-sm align-middle mb-0">
-      <thead>
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
         <tr>
           <th>Tanggal</th>
           <th class="text-end">Biaya Iklan</th>
@@ -218,6 +224,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
   <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.iklan.nama }}:</strong> {{ hasil.iklan.pesan }}</div>
@@ -239,10 +246,11 @@
     Data Income buat {{ hasil.order_manual.jumlah_income_otomatis }} pesanan (di luar yang Batal) sudah otomatis
     dibuatkan sistem &mdash; tidak ada potongan biaya platform, jadi Total Penghasilan = Subtotal Pesanan.
   </div>
-  <div class="card p-3" style="overflow-x:auto;">
-    <div class="text-muted small mb-2">Semua {{ hasil.order_manual.preview_items|length }} baris berhasil diimpor:</div>
+  <div class="card p-3">
+    <div class="text-muted small mb-2">Semua {{ hasil.order_manual.preview_items|length }} baris berhasil diimpor. Tabelnya bisa di-scroll kalau datanya banyak, tidak perlu geser halaman.</div>
+    <div style="max-height: 620px; overflow-y: auto; overflow-x: auto;">
     <table class="table table-sm align-middle mb-0">
-      <thead>
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
         <tr>
           <th>No. Pesanan</th>
           <th>Tanggal</th>
@@ -269,6 +277,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
   <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.order_manual.nama }}:</strong> {{ hasil.order_manual.pesan }}</div>
