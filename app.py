@@ -47,7 +47,7 @@ from models import (
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
-    KategoriProduk,
+    KategoriProduk, AksesKaryawan,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -137,6 +137,42 @@ JABATAN_LIST = [
     "Human Resource",
     "Supervisor",
 ]
+
+# Daftar menu aplikasi yang aksesnya bisa didelegasikan ke karyawan tertentu (di luar
+# akses_marketing yang sudah ada duluan sbg kolom Boolean sendiri). Dikelompokkan per
+# bagian sidebar supaya gampang ditampilkan sbg matriks di halaman "Akses Karyawan".
+DAFTAR_MODUL_AKSES = [
+    ("Kepegawaian", [
+        ("karyawan", "Data Karyawan"),
+        ("absensi", "Absensi"),
+        ("pengajuan_izin", "Pengajuan Izin"),
+        ("pengajuan_lembur", "Pengajuan Lembur"),
+        ("laporan_pekerjaan", "Laporan Pekerjaan"),
+        ("hari_libur", "Hari Libur"),
+    ]),
+    ("Keuangan", [
+        ("penggajian", "Penggajian"),
+        ("pengeluaran", "Laporan Pengeluaran"),
+        ("laba_rugi", "Laporan Laba/Rugi"),
+        ("laba_rugi_input", "Input Pendapatan & HPP"),
+    ]),
+    ("Inventory", [
+        ("bahan_baku", "Bahan Baku"),
+        ("produk", "Produk"),
+        ("kategori_produk", "Kategori Produk"),
+        ("vendor", "Vendor"),
+        ("gudang", "Gudang"),
+        ("akun_pembayaran", "Akun Pembayaran"),
+        ("purchase_order", "Purchase Order"),
+        ("produksi", "Produksi"),
+        ("permohonan_barang", "Permohonan Barang"),
+        ("biaya_jahit", "Biaya Produksi (Menjahit)"),
+    ]),
+    ("Pendapatan", [
+        ("pendapatan_penjualan", "Penjualan"),
+    ]),
+]
+MODUL_LABEL = {key: label for _, daftar in DAFTAR_MODUL_AKSES for key, label in daftar}
 
 # Skema BPJS Kesehatan sesuai Perpres 82/2018: total iuran 5% dari gaji (gaji pokok +
 # tunjangan tetap), dibagi 4% ditanggung perusahaan dan 1% dipotong dari gaji karyawan,
@@ -1359,6 +1395,25 @@ def create_app():
             return redirect(url_for("login"))
         return wrapper
 
+    def modul_required(modul_key):
+        def decorator(f):
+            @wraps(f)
+            def wrapper(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    return redirect(url_for("login"))
+                role = getattr(current_user, "role", None)
+                if role == "admin":
+                    return f(*args, **kwargs)
+                if role == "pegawai" and AksesKaryawan.query.filter_by(
+                    employee_id=current_user.id, modul=modul_key
+                ).first():
+                    return f(*args, **kwargs)
+                if role == "pegawai":
+                    return redirect(url_for("pegawai_dashboard"))
+                return redirect(url_for("login"))
+            return wrapper
+        return decorator
+
     def rupiah(value):
         try:
             value = int(value or 0)
@@ -1726,13 +1781,13 @@ def create_app():
 
     # ---------- KARYAWAN ----------
     @app.route("/karyawan")
-    @admin_required
+    @modul_required("karyawan")
     def karyawan_list():
         karyawan = Employee.query.order_by(Employee.nama).all()
         return render_template("employees_list.html", karyawan=karyawan)
 
     @app.route("/karyawan/tambah", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("karyawan")
     def karyawan_tambah():
         if request.method == "POST":
             no_hp = request.form.get("no_hp", "").strip()
@@ -1771,7 +1826,7 @@ def create_app():
         return render_template("employee_form.html", karyawan=None, jabatan_list=JABATAN_LIST)
 
     @app.route("/karyawan/<int:emp_id>/edit", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("karyawan")
     def karyawan_edit(emp_id):
         emp = db.session.get(Employee, emp_id) or abort_404()
         hari_ini = today_wib()
@@ -1821,7 +1876,7 @@ def create_app():
         )
 
     @app.route("/karyawan/<int:emp_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("karyawan")
     def karyawan_hapus(emp_id):
         emp = db.session.get(Employee, emp_id) or abort_404()
         nama = emp.nama
@@ -1850,7 +1905,7 @@ def create_app():
         }
 
     @app.route("/produk")
-    @admin_required
+    @modul_required("produk")
     def produk_list():
         q = request.args.get("q", "").strip()
         kategori_id = request.args.get("kategori_id", type=int)
@@ -1867,7 +1922,7 @@ def create_app():
         )
 
     @app.route("/produk/tambah", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_tambah():
         daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
         if request.method == "POST":
@@ -1893,7 +1948,7 @@ def create_app():
         return render_template("produk_form.html", produk=None, daftar_kategori=daftar_kategori)
 
     @app.route("/produk/<int:produk_id>/edit", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_edit(produk_id):
         produk = db.session.get(Produk, produk_id) or abort_404()
         daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
@@ -1917,7 +1972,7 @@ def create_app():
         return render_template("produk_form.html", produk=produk, daftar_kategori=daftar_kategori)
 
     @app.route("/produk/kategori", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("kategori_produk")
     def kategori_produk_list():
         if request.method == "POST":
             nama = request.form.get("nama_kategori", "").strip()
@@ -1936,7 +1991,7 @@ def create_app():
         return render_template("kategori_produk_list.html", daftar=daftar)
 
     @app.route("/produk/kategori/<int:kategori_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("kategori_produk")
     def kategori_produk_edit(kategori_id):
         kategori = db.session.get(KategoriProduk, kategori_id) or abort_404()
         nama = request.form.get("nama_kategori", "").strip()
@@ -1949,7 +2004,7 @@ def create_app():
         return redirect(url_for("kategori_produk_list"))
 
     @app.route("/produk/kategori/<int:kategori_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("kategori_produk")
     def kategori_produk_hapus(kategori_id):
         kategori = db.session.get(KategoriProduk, kategori_id) or abort_404()
         nama = kategori.nama_kategori
@@ -1960,7 +2015,7 @@ def create_app():
         return redirect(url_for("kategori_produk_list"))
 
     @app.route("/produk/<int:produk_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_hapus(produk_id):
         produk = db.session.get(Produk, produk_id) or abort_404()
         nama = produk.nama_produk
@@ -1970,7 +2025,7 @@ def create_app():
         return redirect(url_for("produk_list"))
 
     @app.route("/produk/upload", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_upload():
         bersihkan_tmp_iklan_lama()
         if request.method == "POST":
@@ -2050,7 +2105,7 @@ def create_app():
         return render_template("produk_upload.html")
 
     @app.route("/produk/upload/konfirmasi", methods=["POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_upload_konfirmasi():
         token = request.form.get("token", "")
         path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produkharga_{token}.json")
@@ -2090,7 +2145,7 @@ def create_app():
 
     # ---------- INVENTORY: BAHAN BAKU ----------
     @app.route("/inventory/bahan-baku", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_list():
         if request.method == "POST":
             nama_bahan = request.form.get("nama_bahan", "").strip()
@@ -2120,7 +2175,7 @@ def create_app():
         return render_template("inventory/bahan_baku_list.html", daftar=daftar)
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>")
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_detail(bahan_id):
         bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
         produk_list_semua = Produk.query.order_by(Produk.nama_produk).all()
@@ -2133,7 +2188,7 @@ def create_app():
         )
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_edit(bahan_id):
         bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
         nama_bahan = request.form.get("nama_bahan", "").strip()
@@ -2192,7 +2247,7 @@ def create_app():
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_hapus(bahan_id):
         bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
         nama = bahan.nama_bahan
@@ -2202,7 +2257,7 @@ def create_app():
         return redirect(url_for("bahan_baku_list"))
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/kebutuhan/tambah", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_kebutuhan_tambah(bahan_id):
         bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
         # Formnya juga dipakai dari halaman Cutting & Produksi (bukan cuma detail Bahan
@@ -2238,7 +2293,7 @@ def create_app():
         return redirect(tujuan)
 
     @app.route("/inventory/bahan-baku/kebutuhan/<int:kebutuhan_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_kebutuhan_hapus(kebutuhan_id):
         k = db.session.get(BahanBakuKebutuhan, kebutuhan_id) or abort_404()
         bahan_id = k.bahan_baku_id
@@ -2249,7 +2304,7 @@ def create_app():
         return redirect(tujuan)
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/transaksi/tambah", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_transaksi_tambah(bahan_id):
         bahan = db.session.get(BahanBaku, bahan_id) or abort_404()
         jenis = request.form.get("jenis")
@@ -2299,7 +2354,7 @@ def create_app():
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
     @app.route("/inventory/bahan-baku/transaksi/<int:transaksi_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_transaksi_hapus(transaksi_id):
         t = db.session.get(BahanBakuTransaksi, transaksi_id) or abort_404()
         bahan = t.bahan_baku
@@ -2310,7 +2365,7 @@ def create_app():
         return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
     @app.route("/inventory/bahan-baku/transaksi/<int:transaksi_id>/edit-jumlah", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_transaksi_edit_jumlah(transaksi_id):
         """Koreksi 1 baris transaksi stok (Masuk/Keluar) kalau ada ketidakcocokan data --
         mis. salah ketik jumlah/tanggal/harga pas input awal. Stok Saat Ini disesuaikan
@@ -2356,7 +2411,7 @@ def create_app():
         return redirect(tujuan)
 
     @app.route("/inventory/cutting/transaksi/<int:transaksi_id>/produk-jadi", methods=["POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_transaksi_isi_produk_jadi(transaksi_id):
         """Isi/koreksi Produk Jadi (pcs) langsung dari baris Riwayat Cutting di halaman
         Cutting & Produksi -- dipakai buat backfill transaksi lama yang belum kehitung
@@ -2372,7 +2427,7 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     @app.route("/inventory/transaksi")
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_transaksi_riwayat():
         """Kartu stok gabungan: semua pergerakan bahan baku (Masuk dari Pengadaan +
         Keluar dari Cutting & Produksi) dalam satu tabel, bisa difilter per bahan & jenis --
@@ -2405,7 +2460,7 @@ def create_app():
 
     # ---------- INVENTORY: MASTER DATA (VENDOR / GUDANG / AKUN PEMBAYARAN) ----------
     @app.route("/inventory/master-data/vendor", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("vendor")
     def vendor_list():
         if request.method == "POST":
             nama_vendor = request.form.get("nama_vendor", "").strip()
@@ -2427,7 +2482,7 @@ def create_app():
         return render_template("inventory/vendor_list.html", daftar=daftar)
 
     @app.route("/inventory/master-data/vendor/<int:vendor_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("vendor")
     def vendor_edit(vendor_id):
         v = db.session.get(Vendor, vendor_id) or abort_404()
         nama_vendor = request.form.get("nama_vendor", "").strip()
@@ -2445,7 +2500,7 @@ def create_app():
         return redirect(url_for("vendor_list"))
 
     @app.route("/inventory/master-data/vendor/<int:vendor_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("vendor")
     def vendor_hapus(vendor_id):
         v = db.session.get(Vendor, vendor_id) or abort_404()
         nama = v.nama_vendor
@@ -2455,7 +2510,7 @@ def create_app():
         return redirect(url_for("vendor_list"))
 
     @app.route("/inventory/master-data/gudang", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("gudang")
     def gudang_list():
         if request.method == "POST":
             nama_gudang = request.form.get("nama_gudang", "").strip()
@@ -2476,7 +2531,7 @@ def create_app():
         return render_template("inventory/gudang_list.html", daftar=daftar)
 
     @app.route("/inventory/master-data/gudang/<int:gudang_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("gudang")
     def gudang_edit(gudang_id):
         g = db.session.get(Gudang, gudang_id) or abort_404()
         nama_gudang = request.form.get("nama_gudang", "").strip()
@@ -2493,7 +2548,7 @@ def create_app():
         return redirect(url_for("gudang_list"))
 
     @app.route("/inventory/master-data/gudang/<int:gudang_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("gudang")
     def gudang_hapus(gudang_id):
         g = db.session.get(Gudang, gudang_id) or abort_404()
         nama = g.nama_gudang
@@ -2503,7 +2558,7 @@ def create_app():
         return redirect(url_for("gudang_list"))
 
     @app.route("/inventory/master-data/akun-pembayaran", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("akun_pembayaran")
     def akun_pembayaran_list():
         if request.method == "POST":
             nama_akun = request.form.get("nama_akun", "").strip()
@@ -2523,7 +2578,7 @@ def create_app():
         return render_template("inventory/akun_pembayaran_list.html", daftar=daftar)
 
     @app.route("/inventory/master-data/akun-pembayaran/<int:akun_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("akun_pembayaran")
     def akun_pembayaran_edit(akun_id):
         a = db.session.get(AkunPembayaran, akun_id) or abort_404()
         nama_akun = request.form.get("nama_akun", "").strip()
@@ -2539,7 +2594,7 @@ def create_app():
         return redirect(url_for("akun_pembayaran_list"))
 
     @app.route("/inventory/master-data/akun-pembayaran/<int:akun_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("akun_pembayaran")
     def akun_pembayaran_hapus(akun_id):
         a = db.session.get(AkunPembayaran, akun_id) or abort_404()
         nama = a.nama_akun
@@ -2550,7 +2605,7 @@ def create_app():
 
     # ---------- PRODUKSI: BIAYA PRODUKSI (MENJAHIT) -- RATE CARD ----------
     @app.route("/inventory/master-data/biaya-jahit", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("biaya_jahit")
     def biaya_jahit_list():
         if request.method == "POST":
             produk_id = request.form.get("produk_id", type=int)
@@ -2589,7 +2644,7 @@ def create_app():
         )
 
     @app.route("/inventory/master-data/biaya-jahit/bulk", methods=["POST"])
-    @admin_required
+    @modul_required("biaya_jahit")
     def biaya_jahit_bulk_kategori():
         kategori_id = request.form.get("bulk_kategori_id", type=int)
         kategori = db.session.get(KategoriProduk, kategori_id) if kategori_id else None
@@ -2630,7 +2685,7 @@ def create_app():
         return redirect(url_for("biaya_jahit_list"))
 
     @app.route("/inventory/master-data/biaya-jahit/<int:biaya_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("biaya_jahit")
     def biaya_jahit_hapus(biaya_id):
         b = db.session.get(BiayaJahit, biaya_id) or abort_404()
         db.session.delete(b)
@@ -2639,7 +2694,7 @@ def create_app():
         return redirect(url_for("biaya_jahit_list"))
 
     @app.route("/inventory/master-data/purchase-order", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_list():
         if request.method == "POST":
             vendor_id = request.form.get("vendor_id", type=int)
@@ -2761,13 +2816,13 @@ def create_app():
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>")
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_detail(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         return render_template("inventory/purchase_order_detail.html", po=po)
 
     @app.route("/inventory/master-data/purchase-order/item/<int:item_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_item_edit(item_id):
         """Koreksi Detail Item (Produk/Warna/Size/Qty) di 1 baris PO -- SENGAJA cuma
         nyentuh data item & Total Biaya-nya doang, SAMA SEKALI nggak nyentuh Pemakaian
@@ -2799,7 +2854,7 @@ def create_app():
         return redirect(tujuan)
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/pembayaran")
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_pembayaran(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         daftar_akun = AkunPembayaran.query.order_by(AkunPembayaran.nama_akun).all()
@@ -2809,7 +2864,7 @@ def create_app():
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_hapus(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         nomor_po = po.nomor_po
@@ -2828,7 +2883,7 @@ def create_app():
         return redirect(url_for("purchase_order_list"))
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/mulai-produksi", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_mulai_produksi(po_id):
         """Finalisasi Size & Qty pcs tiap Item Produk + Qty Pakai final tiap Bahan,
         BARU di titik ini stok bahan dikurangi & transaksi Keluar dicatat -- bukan pas
@@ -2901,7 +2956,7 @@ def create_app():
         return redirect(url_for("progress_produksi_list"))
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/status", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_status_update(po_id):
         """Status Menunggu Produksi/Diproses/Selesai Produksi sekarang OTOMATIS dari
         progress Jahit & Finish (lihat menu Progress Produksi) -- route ini cuma buat
@@ -2934,7 +2989,7 @@ def create_app():
         return redirect(url_for("purchase_order_list"))
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/pembayaran/tambah", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_pembayaran_tambah(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         jumlah = round(parse_angka_iklan(request.form.get("jumlah")))
@@ -2967,7 +3022,7 @@ def create_app():
         return redirect(url_for("purchase_order_pembayaran", po_id=po.id))
 
     @app.route("/inventory/master-data/purchase-order/pembayaran/<int:pembayaran_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def purchase_order_pembayaran_hapus(pembayaran_id):
         p = db.session.get(PurchaseOrderPembayaran, pembayaran_id) or abort_404()
         po_id = p.purchase_order_id
@@ -2977,7 +3032,7 @@ def create_app():
         return redirect(url_for("purchase_order_pembayaran", po_id=po_id))
 
     @app.route("/inventory/master-data/purchase-order/progress-produksi")
-    @admin_required
+    @modul_required("produksi")
     def progress_produksi_list():
         q = request.args.get("q", "").strip()
         query = PurchaseOrder.query
@@ -3026,7 +3081,7 @@ def create_app():
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
-    @admin_required
+    @modul_required("purchase_order")
     def progress_produksi_update(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         item_ids = request.form.getlist("item_id[]")
@@ -3049,7 +3104,7 @@ def create_app():
         return redirect(url_for("progress_produksi_list"))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_input():
         if request.method == "POST":
             jenis_bahan = request.form.get("jenis_bahan", "").strip()
@@ -3110,7 +3165,7 @@ def create_app():
         )
 
     @app.route("/inventory/cutting", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("bahan_baku")
     def bahan_baku_cutting():
         """1 halaman, 1 form, 1 tombol Simpan di bawah -- begitu diklik, apapun yg
         udah diisi admin di 2 bagian lembar kerja ini ikut kesimpan sekaligus:
@@ -3242,7 +3297,7 @@ def create_app():
         )
 
     @app.route("/inventory/spek-ukuran/<int:produk_id>/tambah", methods=["POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_spek_ukuran_tambah(produk_id):
         """Form gabungan "Kelola Ukuran & Kebutuhan Yard per Produk" -- 1x pilih Produk +
         Kategori, isi ukuran badan (cm) DAN (opsional) Bahan + Yard per Pcs sekaligus.
@@ -3283,7 +3338,7 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     @app.route("/inventory/spek-ukuran/<int:spek_id>/edit", methods=["POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_spek_ukuran_edit(spek_id):
         """Edit baris ukuran (+ opsional Bahan/Yard per Pcs-nya) yang sudah ada --
         kategori-nya tetap (nentuin kolom ukuran mana yg berlaku), yg bisa diubah:
@@ -3315,7 +3370,7 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     @app.route("/inventory/spek-ukuran/<int:spek_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_spek_ukuran_hapus(spek_id):
         s = db.session.get(ProdukSpekUkuran, spek_id) or abort_404()
         db.session.delete(s)
@@ -3325,7 +3380,7 @@ def create_app():
 
     # ---------- INVENTORY: PERMOHONAN PENGADAAN BARANG ----------
     @app.route("/inventory/master-data/permohonan-barang", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("permohonan_barang")
     def permohonan_barang_list():
         if request.method == "POST":
             produk_id = request.form.get("produk_id", type=int)
@@ -3375,7 +3430,7 @@ def create_app():
         )
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/status", methods=["POST"])
-    @admin_required
+    @modul_required("permohonan_barang")
     def permohonan_barang_status_update(permohonan_id):
         p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
         status = request.form.get("status", "")
@@ -3388,7 +3443,7 @@ def create_app():
         return redirect(url_for("permohonan_barang_list"))
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("permohonan_barang")
     def permohonan_barang_hapus(permohonan_id):
         p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
         nomor = p.nomor_permohonan
@@ -3399,7 +3454,7 @@ def create_app():
 
     # ---------- ABSENSI ----------
     @app.route("/absensi")
-    @admin_required
+    @modul_required("absensi")
     def absensi_list():
         tanggal_str = request.args.get("tanggal", today_wib().isoformat())
         try:
@@ -3427,7 +3482,7 @@ def create_app():
 
     @app.route("/absensi/koreksi", methods=["GET", "POST"], defaults={"att_id": None})
     @app.route("/absensi/<int:att_id>/koreksi", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("absensi")
     def absensi_koreksi(att_id):
         settings = get_settings()
         att = db.session.get(Attendance, att_id) if att_id else None
@@ -3479,7 +3534,7 @@ def create_app():
         )
 
     @app.route("/absensi/<int:att_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("absensi")
     def absensi_hapus(att_id):
         att = db.session.get(Attendance, att_id) or abort_404()
         tanggal = att.tanggal
@@ -3490,7 +3545,7 @@ def create_app():
 
     # ---------- HARI LIBUR ----------
     @app.route("/hari-libur")
-    @admin_required
+    @modul_required("hari_libur")
     def hari_libur_list():
         tahun = int(request.args.get("tahun", today_wib().year))
         daftar = (
@@ -3501,7 +3556,7 @@ def create_app():
         return render_template("hari_libur_list.html", daftar=daftar, tahun=tahun)
 
     @app.route("/hari-libur/tambah", methods=["POST"])
-    @admin_required
+    @modul_required("hari_libur")
     def hari_libur_tambah():
         try:
             tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
@@ -3523,7 +3578,7 @@ def create_app():
         return redirect(url_for("hari_libur_list", tahun=tanggal.year))
 
     @app.route("/hari-libur/<int:hl_id>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("hari_libur")
     def hari_libur_hapus(hl_id):
         hl = db.session.get(HariLibur, hl_id) or abort_404()
         tahun = hl.tanggal.year
@@ -3534,7 +3589,7 @@ def create_app():
 
     # ---------- PENGAJUAN IZIN (ADMIN) ----------
     @app.route("/pengajuan-izin")
-    @admin_required
+    @modul_required("pengajuan_izin")
     def pengajuan_izin_list():
         status_filter = request.args.get("status", "Menunggu")
         q = PengajuanIzin.query.join(Employee)
@@ -3555,7 +3610,7 @@ def create_app():
         )
 
     @app.route("/pengajuan-izin/<int:pid>/setujui", methods=["POST"])
-    @admin_required
+    @modul_required("pengajuan_izin")
     def pengajuan_izin_setujui(pid):
         p = db.session.get(PengajuanIzin, pid) or abort_404()
         p.status = "Disetujui"
@@ -3589,7 +3644,7 @@ def create_app():
         return redirect(url_for("pengajuan_izin_list"))
 
     @app.route("/pengajuan-izin/<int:pid>/tolak", methods=["POST"])
-    @admin_required
+    @modul_required("pengajuan_izin")
     def pengajuan_izin_tolak(pid):
         p = db.session.get(PengajuanIzin, pid) or abort_404()
         p.status = "Ditolak"
@@ -3878,7 +3933,7 @@ def create_app():
 
     # ---------- LAPORAN PEKERJAAN (ADMIN) ----------
     @app.route("/laporan-pekerjaan")
-    @admin_required
+    @modul_required("laporan_pekerjaan")
     def laporan_pekerjaan_list():
         employee_id = request.args.get("employee_id", type=int)
         query = LaporanPekerjaan.query.join(Employee)
@@ -3892,7 +3947,7 @@ def create_app():
 
     # ---------- PENGAJUAN LEMBUR (ADMIN) ----------
     @app.route("/pengajuan-lembur")
-    @admin_required
+    @modul_required("pengajuan_lembur")
     def pengajuan_lembur_list():
         status_filter = request.args.get("status", "Menunggu")
         query = PengajuanLembur.query.join(Employee)
@@ -3910,7 +3965,7 @@ def create_app():
         )
 
     @app.route("/pengajuan-lembur/<int:pid>/setujui", methods=["POST"])
-    @admin_required
+    @modul_required("pengajuan_lembur")
     def pengajuan_lembur_setujui(pid):
         p = db.session.get(PengajuanLembur, pid) or abort_404()
         p.status = "Disetujui"
@@ -3943,7 +3998,7 @@ def create_app():
         return redirect(url_for("pengajuan_lembur_list"))
 
     @app.route("/pengajuan-lembur/<int:pid>/tolak", methods=["POST"])
-    @admin_required
+    @modul_required("pengajuan_lembur")
     def pengajuan_lembur_tolak(pid):
         p = db.session.get(PengajuanLembur, pid) or abort_404()
         p.status = "Ditolak"
@@ -4157,7 +4212,7 @@ def create_app():
         return diperbarui
 
     @app.route("/penggajian")
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_list():
         bulan = int(request.args.get("bulan", today_wib().month))
         tahun = int(request.args.get("tahun", today_wib().year))
@@ -4181,7 +4236,7 @@ def create_app():
         )
 
     @app.route("/penggajian/generate", methods=["POST"])
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_generate():
         bulan = int(request.form["bulan"])
         tahun = int(request.form["tahun"])
@@ -4198,7 +4253,7 @@ def create_app():
         return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
     @app.route("/penggajian/freelance-review")
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_freelance_review():
         bulan = int(request.args.get("bulan", today_wib().month))
         tahun = int(request.args.get("tahun", today_wib().year))
@@ -4234,7 +4289,7 @@ def create_app():
         )
 
     @app.route("/penggajian/freelance-generate", methods=["POST"])
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_freelance_generate():
         bulan = int(request.form["bulan"])
         tahun = int(request.form["tahun"])
@@ -4249,7 +4304,7 @@ def create_app():
         return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
     @app.route("/penggajian/<int:payroll_id>")
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_detail(payroll_id):
         payroll = db.session.get(Payroll, payroll_id) or abort_404()
         settings = get_settings()
@@ -4270,7 +4325,7 @@ def create_app():
         )
 
     @app.route("/penggajian/<int:payroll_id>/lembur", methods=["POST"])
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_simpan_lembur(payroll_id):
         payroll = db.session.get(Payroll, payroll_id) or abort_404()
         if payroll.status == "Dibayar":
@@ -4467,7 +4522,7 @@ def create_app():
         return f"https://wa.me/{nomor}?text={quote(pesan)}"
 
     @app.route("/penggajian/<int:payroll_id>/pdf")
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_pdf(payroll_id):
         payroll = db.session.get(Payroll, payroll_id) or abort_404()
         settings = get_settings()
@@ -4479,7 +4534,7 @@ def create_app():
         )
 
     @app.route("/penggajian/<int:payroll_id>/kirim-email", methods=["POST"])
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_kirim_email(payroll_id):
         payroll = db.session.get(Payroll, payroll_id) or abort_404()
         settings = get_settings()
@@ -4491,7 +4546,7 @@ def create_app():
         return redirect(url_for("penggajian_detail", payroll_id=payroll.id))
 
     @app.route("/penggajian/kirim-email-massal", methods=["POST"])
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_kirim_email_massal():
         bulan = int(request.form.get("bulan", today_wib().month))
         tahun = int(request.form.get("tahun", today_wib().year))
@@ -4522,7 +4577,7 @@ def create_app():
         return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
     @app.route("/penggajian/<int:payroll_id>/bayar", methods=["POST"])
-    @admin_required
+    @modul_required("penggajian")
     def penggajian_bayar(payroll_id):
         payroll = db.session.get(Payroll, payroll_id) or abort_404()
         payroll.status = "Dibayar"
@@ -4547,7 +4602,7 @@ def create_app():
 
     # ---------- KEUANGAN: LAPORAN PENGELUARAN ----------
     @app.route("/keuangan/pengeluaran", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("pengeluaran")
     def pengeluaran_list():
         if request.method == "POST":
             try:
@@ -4617,7 +4672,7 @@ def create_app():
         )
 
     @app.route("/keuangan/pengeluaran/<int:pid>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("pengeluaran")
     def pengeluaran_hapus(pid):
         p = db.session.get(PengeluaranOperasional, pid) or abort_404()
         bulan, tahun = p.tanggal.month, p.tanggal.year
@@ -4750,7 +4805,7 @@ def create_app():
         return 0
 
     @app.route("/keuangan/laba-rugi")
-    @admin_required
+    @modul_required("laba_rugi")
     def laba_rugi():
         dari_bulan = int(request.args.get("dari_bulan", today_wib().month))
         dari_tahun = int(request.args.get("dari_tahun", today_wib().year))
@@ -4815,7 +4870,7 @@ def create_app():
         )
 
     @app.route("/keuangan/laba-rugi/input", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("laba_rugi_input")
     def laba_rugi_input():
         if request.method == "POST":
             try:
@@ -4862,7 +4917,7 @@ def create_app():
         )
 
     @app.route("/keuangan/laba-rugi/input/<int:iid>/hapus", methods=["POST"])
-    @admin_required
+    @modul_required("laba_rugi_input")
     def laba_rugi_hapus(iid):
         i = db.session.get(ItemLabaRugi, iid) or abort_404()
         bulan, tahun = i.bulan, i.tahun
@@ -4947,7 +5002,7 @@ def create_app():
         return total, breakdown
 
     @app.route("/pendapatan/penjualan")
-    @admin_required
+    @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_dashboard():
         bulan = int(request.args.get("bulan", today_wib().month))
         tahun = int(request.args.get("tahun", today_wib().year))
@@ -5060,7 +5115,7 @@ def create_app():
         return True, (pesan, tgl_min)
 
     @app.route("/pendapatan/penjualan/upload", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_upload():
         bersihkan_tmp_iklan_lama()
         if request.method == "POST":
@@ -5115,7 +5170,7 @@ def create_app():
         return render_template("pendapatan/penjualan_upload.html", marketplace_list=MARKETPLACE_LIST)
 
     @app.route("/pendapatan/penjualan/manual", methods=["POST"])
-    @admin_required
+    @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_manual():
         marketplace = request.form.get("marketplace", "")
         try:
@@ -5141,7 +5196,7 @@ def create_app():
         return redirect(url_for("pendapatan_penjualan_dashboard", bulan=tanggal.month, tahun=tanggal.year))
 
     @app.route("/pendapatan/penjualan/hapus/<int:pid>", methods=["POST"])
-    @admin_required
+    @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_hapus(pid):
         data = db.session.get(PenjualanMarketplace, pid)
         if data:
@@ -5199,6 +5254,45 @@ def create_app():
             flash("Pengaturan berhasil disimpan.", "success")
             return redirect(url_for("pengaturan"))
         return render_template("settings.html", settings=settings)
+
+    @app.route("/pengaturan/akses-karyawan")
+    @admin_required
+    def akses_karyawan_list():
+        karyawan = Employee.query.filter_by(status="Aktif").order_by(Employee.nama).all()
+        akses_map = {}
+        for row in AksesKaryawan.query.all():
+            akses_map.setdefault(row.employee_id, set()).add(row.modul)
+        return render_template(
+            "akses_karyawan_list.html",
+            karyawan=karyawan,
+            daftar_modul=DAFTAR_MODUL_AKSES,
+            akses_map=akses_map,
+        )
+
+    @app.route("/pengaturan/akses-karyawan/simpan", methods=["POST"])
+    @admin_required
+    def akses_karyawan_simpan():
+        karyawan = Employee.query.filter_by(status="Aktif").all()
+        semua_modul_key = [key for _, daftar in DAFTAR_MODUL_AKSES for key, _ in daftar]
+
+        for emp in karyawan:
+            emp.akses_marketing = request.form.get(f"marketing_{emp.id}") == "on"
+
+            dicentang = {
+                key for key in semua_modul_key
+                if request.form.get(f"{key}_{emp.id}") == "on"
+            }
+            sudah_ada = {
+                row.modul for row in AksesKaryawan.query.filter_by(employee_id=emp.id).all()
+            }
+            for key in dicentang - sudah_ada:
+                db.session.add(AksesKaryawan(employee_id=emp.id, modul=key))
+            for key in sudah_ada - dicentang:
+                AksesKaryawan.query.filter_by(employee_id=emp.id, modul=key).delete()
+
+        db.session.commit()
+        flash("Akses karyawan berhasil disimpan.", "success")
+        return redirect(url_for("akses_karyawan_list"))
 
     # ---------- MARKETING: ANALISA IKLAN PER MARKETPLACE ----------
     def bersihkan_tmp_iklan_lama():
@@ -6849,14 +6943,20 @@ def create_app():
     def inject_globals():
         pending_izin = 0
         pending_lembur = 0
+        akses_pegawai = set()
         if current_user.is_authenticated and getattr(current_user, "role", None) == "admin":
             pending_izin = PengajuanIzin.query.filter_by(status="Menunggu").count()
             pending_lembur = PengajuanLembur.query.filter_by(status="Menunggu").count()
+        if current_user.is_authenticated and getattr(current_user, "role", None) == "pegawai":
+            akses_pegawai = {
+                row.modul for row in AksesKaryawan.query.filter_by(employee_id=current_user.id).all()
+            }
         return {
             "bulan_nama_list": BULAN_NAMA,
             "pending_izin_count": pending_izin,
             "pending_lembur_count": pending_lembur,
             "site_settings": get_settings(),
+            "akses_pegawai": akses_pegawai,
         }
 
     return app

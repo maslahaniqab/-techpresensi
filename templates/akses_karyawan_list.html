@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Akses Karyawan{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">List Menu Aplikasi</h3>
+  <a href="{{ url_for('pengaturan') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Pengaturan</a>
+</div>
+
+<div class="alert alert-info small">
+  Centang menu yang boleh dibuka tiap karyawan sesuai posisinya. Karyawan tanpa centang di suatu menu tidak akan bisa membuka
+  menu itu sama sekali (langsung diarahkan kembali ke halaman absennya kalau mencoba lewat link langsung).
+</div>
+
+<form method="post" action="{{ url_for('akses_karyawan_simpan') }}">
+  <div class="card p-0">
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle mb-0 text-center" style="min-width: 1400px;">
+        <thead>
+          <tr>
+            <th rowspan="2" class="text-start align-middle bg-white" style="position: sticky; left: 0; z-index: 2; min-width: 180px;">
+              Karyawan
+            </th>
+            <th class="align-middle">Marketing</th>
+            {% for kelompok, daftar in daftar_modul %}
+            <th colspan="{{ daftar|length }}">{{ kelompok }}</th>
+            {% endfor %}
+          </tr>
+          <tr>
+            <th class="small">Marketing &amp; Profitabilitas</th>
+            {% for kelompok, daftar in daftar_modul %}
+              {% for key, label in daftar %}
+              <th class="small fw-normal">{{ label }}</th>
+              {% endfor %}
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for k in karyawan %}
+          <tr>
+            <td class="text-start bg-white" style="position: sticky; left: 0; z-index: 1;">
+              <div class="d-flex align-items-center gap-2">
+                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold"
+                     style="width:36px;height:36px;flex-shrink:0;">
+                  {{ k.nama[0]|upper }}
+                </div>
+                <div>
+                  <div class="fw-semibold">{{ k.nama }}</div>
+                  <div class="text-muted small">{{ k.jabatan or '-' }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <input type="checkbox" class="form-check-input" role="switch" name="marketing_{{ k.id }}"
+                     {{ 'checked' if k.akses_marketing else '' }}>
+            </td>
+            {% for kelompok, daftar in daftar_modul %}
+              {% for key, label in daftar %}
+              <td>
+                <input type="checkbox" class="form-check-input" role="switch" name="{{ key }}_{{ k.id }}"
+                       {{ 'checked' if key in akses_map.get(k.id, []) else '' }}>
+              </td>
+              {% endfor %}
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr><td colspan="30" class="text-center text-muted py-4">Belum ada karyawan aktif.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if karyawan %}
+  <button type="submit" class="btn btn-primary mt-3">Simpan Semua Akses</button>
+  {% endif %}
+</form>
+{% endblock %}

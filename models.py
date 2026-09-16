@@ -170,6 +170,18 @@ class HariLibur(db.Model):
     keterangan = db.Column(db.String(128), nullable=False)
 
 
+class AksesKaryawan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    modul = db.Column(db.String(64), nullable=False)
+
+    employee = db.relationship("Employee", backref="daftar_akses")
+
+    __table_args__ = (
+        db.UniqueConstraint("employee_id", "modul", name="uq_akses_employee_modul"),
+    )
+
+
 class PengajuanIzin(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
