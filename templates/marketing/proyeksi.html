@@ -40,10 +40,11 @@
       <label class="form-label small">Marketplace</label>
       <select name="target_marketplace" class="form-select">
         <option value="" disabled {% if not target_marketplace %}selected{% endif %}>Pilih marketplace...</option>
-        <option value="Semua" {% if target_marketplace == 'Semua' %}selected{% endif %}>Semua Marketplace (gabungan)</option>
+        <option value="Semua" {% if target_marketplace == 'Semua' %}selected{% endif %}>Semua (gabungan, termasuk Meta Ads)</option>
         {% for mp in marketplace_list %}
         <option value="{{ mp }}" {% if target_marketplace == mp %}selected{% endif %}>{{ mp }}</option>
         {% endfor %}
+        <option value="Meta Ads" {% if target_marketplace == 'Meta Ads' %}selected{% endif %}>Meta Ads</option>
       </select>
     </div>
     <div class="col-md-6">

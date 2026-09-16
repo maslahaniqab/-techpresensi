@@ -6165,6 +6165,9 @@ def create_app():
         data = IklanMarketplace.query.filter(
             IklanMarketplace.tanggal >= dari, IklanMarketplace.tanggal <= hari_ini
         ).all()
+        data_meta = IklanMeta.query.filter(
+            IklanMeta.tanggal >= dari, IklanMeta.tanggal <= hari_ini
+        ).all()
 
         bulan_depan = hari_ini.month + 1
         tahun_depan = hari_ini.year
@@ -6173,24 +6176,31 @@ def create_app():
             tahun_depan += 1
         jumlah_hari_bulan_depan = calendar.monthrange(tahun_depan, bulan_depan)[1]
 
-        proyeksi = []
-        for mp in MARKETPLACE_LIST:
-            item = [d for d in data if d.marketplace == mp]
+        def hitung_proyeksi_channel(nama, item):
             if not item:
-                continue
+                return None
             jumlah_hari_data = len(set(d.tanggal for d in item))
             total_biaya = sum(d.biaya or 0 for d in item)
             total_omzet = sum(d.omzet or 0 for d in item)
             avg_biaya_harian = (total_biaya / jumlah_hari_data) if jumlah_hari_data else 0
             roas_historis = (total_omzet / total_biaya) if total_biaya else 0
             proyeksi_budget = avg_biaya_harian * jumlah_hari_bulan_depan
-            proyeksi.append({
-                "marketplace": mp,
+            return {
+                "marketplace": nama,
                 "avg_biaya_harian": avg_biaya_harian,
                 "roas_historis": roas_historis,
                 "proyeksi_budget": proyeksi_budget,
                 "proyeksi_omzet": proyeksi_budget * roas_historis,
-            })
+            }
+
+        proyeksi = []
+        for mp in MARKETPLACE_LIST:
+            hasil = hitung_proyeksi_channel(mp, [d for d in data if d.marketplace == mp])
+            if hasil:
+                proyeksi.append(hasil)
+        hasil_meta = hitung_proyeksi_channel("Meta Ads", data_meta)
+        if hasil_meta:
+            proyeksi.append(hasil_meta)
 
         target_marketplace = request.args.get("target_marketplace", "")
         try:
@@ -6201,11 +6211,15 @@ def create_app():
         hasil_target = None
         if target_marketplace and target_omzet > 0:
             if target_marketplace == "Semua":
-                item = data
+                total_biaya_t = sum(d.biaya or 0 for d in data) + sum(d.biaya or 0 for d in data_meta)
+                total_omzet_t = sum(d.omzet or 0 for d in data) + sum(d.omzet or 0 for d in data_meta)
+            elif target_marketplace == "Meta Ads":
+                total_biaya_t = sum(d.biaya or 0 for d in data_meta)
+                total_omzet_t = sum(d.omzet or 0 for d in data_meta)
             else:
                 item = [d for d in data if d.marketplace == target_marketplace]
-            total_biaya_t = sum(d.biaya or 0 for d in item)
-            total_omzet_t = sum(d.omzet or 0 for d in item)
+                total_biaya_t = sum(d.biaya or 0 for d in item)
+                total_omzet_t = sum(d.omzet or 0 for d in item)
             roas_pakai = (total_omzet_t / total_biaya_t) if total_biaya_t else 0
             if roas_pakai > 0:
                 hasil_target = {
