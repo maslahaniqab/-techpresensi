@@ -246,9 +246,7 @@
     MASLAHA PORTAL
   </a>
 
-  {% for endpoint, label, icon in menu_pegawai_utama %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
-  {% endfor %}
+  {{ nav_section('navPresensiP', 'Presensi', menu_pegawai_utama) }}
 
   {% set ns_kepeg = namespace(list=[]) %}
   {% for item in menu_kepegawaian %}{% if item[3] in akses_pegawai %}{% set ns_kepeg.list = ns_kepeg.list + [item] %}{% endif %}{% endfor %}
