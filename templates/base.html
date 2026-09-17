@@ -112,58 +112,57 @@
   </style>
 </head>
 <body>
-{% if current_user.is_authenticated and current_user.role == 'admin' %}
 {% set menu_kepegawaian = [
-  ('karyawan_list', 'Data Karyawan', '👥'),
-  ('absensi_list', 'Absensi', '🕒'),
-  ('pengajuan_izin_list', 'Pengajuan Izin', '📄'),
-  ('pengajuan_lembur_list', 'Pengajuan Lembur', '⏱️'),
-  ('laporan_pekerjaan_list', 'Laporan Pekerjaan', '📝'),
-  ('hari_libur_list', 'Hari Libur', '📅'),
+  ('karyawan_list', 'Data Karyawan', '👥', 'karyawan'),
+  ('absensi_list', 'Absensi', '🕒', 'absensi'),
+  ('pengajuan_izin_list', 'Pengajuan Izin', '📄', 'pengajuan_izin'),
+  ('pengajuan_lembur_list', 'Pengajuan Lembur', '⏱️', 'pengajuan_lembur'),
+  ('laporan_pekerjaan_list', 'Laporan Pekerjaan', '📝', 'laporan_pekerjaan'),
+  ('hari_libur_list', 'Hari Libur', '📅', 'hari_libur'),
 ] %}
 {% set menu_keuangan = [
-  ('penggajian_list', 'Penggajian', '💰'),
-  ('pengeluaran_list', 'Laporan Pengeluaran', '💸'),
-  ('laba_rugi', 'Laporan Laba/Rugi', '📊'),
-  ('laba_rugi_input', 'Input Pendapatan & HPP', '➕'),
+  ('penggajian_list', 'Penggajian', '💰', 'penggajian'),
+  ('pengeluaran_list', 'Laporan Pengeluaran', '💸', 'pengeluaran'),
+  ('laba_rugi', 'Laporan Laba/Rugi', '📊', 'laba_rugi'),
+  ('laba_rugi_input', 'Input Pendapatan & HPP', '➕', 'laba_rugi_input'),
 ] %}
 {% set menu_master_data = [
-  ('bahan_baku_list', 'Bahan Baku', '🧵'),
-  ('produk_list', 'Produk', '🏷️'),
-  ('kategori_produk_list', 'Kategori Produk', '🗂️'),
-  ('vendor_list', 'Vendor', '🤝'),
-  ('gudang_list', 'Gudang', '🏬'),
-  ('akun_pembayaran_list', 'Akun Pembayaran', '💳'),
+  ('bahan_baku_list', 'Bahan Baku', '🧵', 'bahan_baku'),
+  ('produk_list', 'Produk', '🏷️', 'produk'),
+  ('kategori_produk_list', 'Kategori Produk', '🗂️', 'kategori_produk'),
+  ('vendor_list', 'Vendor', '🤝', 'vendor'),
+  ('gudang_list', 'Gudang', '🏬', 'gudang'),
+  ('akun_pembayaran_list', 'Akun Pembayaran', '💳', 'akun_pembayaran'),
 ] %}
 {% set menu_produksi = [
-  ('purchase_order_list', 'Purchase Order', '📝'),
-  ('progress_produksi_list', 'Produksi', '✂️'),
-  ('permohonan_barang_list', 'Permohonan Barang', '📥'),
-  ('biaya_jahit_list', 'Biaya Produksi (Menjahit)', '💵'),
+  ('purchase_order_list', 'Purchase Order', '📝', 'purchase_order'),
+  ('progress_produksi_list', 'Produksi', '✂️', 'produksi'),
+  ('permohonan_barang_list', 'Permohonan Barang', '📥', 'permohonan_barang'),
+  ('biaya_jahit_list', 'Biaya Produksi (Menjahit)', '💵', 'biaya_jahit'),
 ] %}
 {% set menu_inventory_langsung = [
-  ('bahan_baku_transaksi_riwayat', 'Riwayat Transaksi', '📒'),
+  ('bahan_baku_transaksi_riwayat', 'Riwayat Transaksi', '📒', 'bahan_baku'),
 ] %}
 {% set menu_marketing = [
-  ('marketing_iklan_dashboard', 'Analisa Iklan per Marketplace', '📣'),
-  ('marketing_produk_dashboard', 'Performa Produk', '🎯'),
-  ('marketing_meta_dashboard', 'Iklan Meta', '📘'),
-  ('marketing_proyeksi', 'Proyeksi Budget Iklan', '🔮'),
-  ('produk_list', 'Data Produk & Harga Jual', '🏷️'),
+  ('marketing_iklan_dashboard', 'Analisa Iklan per Marketplace', '📣', 'marketing'),
+  ('marketing_produk_dashboard', 'Performa Produk', '🎯', 'marketing'),
+  ('marketing_meta_dashboard', 'Iklan Meta', '📘', 'marketing'),
+  ('marketing_proyeksi', 'Proyeksi Budget Iklan', '🔮', 'marketing'),
+  ('produk_list', 'Data Produk & Harga Jual', '🏷️', 'marketing'),
 ] %}
 {% set menu_profit = [
-  ('profit_upload', '1. Upload Data', '📤'),
-  ('profit_order_income', '2. Order & Income', '📋'),
-  ('profit_hpp', '3. Data Produk & HPP', '🧮'),
-  ('profit_dashboard', '4. Dashboard Profit', '📈'),
-  ('profit_insight', '5. Insight & Rekomendasi', '💡'),
+  ('profit_upload', '1. Upload Data', '📤', 'marketing'),
+  ('profit_order_income', '2. Order & Income', '📋', 'marketing'),
+  ('profit_hpp', '3. Data Produk & HPP', '🧮', 'marketing'),
+  ('profit_dashboard', '4. Dashboard Profit', '📈', 'marketing'),
+  ('profit_insight', '5. Insight & Rekomendasi', '💡', 'marketing'),
 ] %}
 {% set menu_pendapatan = [
-  ('pendapatan_penjualan_dashboard', 'Penjualan', '🛒'),
+  ('pendapatan_penjualan_dashboard', 'Penjualan', '🛒', 'pendapatan_penjualan'),
 ] %}
 {% set menu_pengaturan = [
-  ('pengaturan', 'Pengaturan Umum', '⚙️'),
-  ('akses_karyawan_list', 'Akses Karyawan', '🔐'),
+  ('pengaturan', 'Pengaturan Umum', '⚙️', none),
+  ('akses_karyawan_list', 'Akses Karyawan', '🔐', none),
 ] %}
 {% macro nav_section(section_id, title, menu_list) %}
 {% set is_active = request.endpoint in menu_list|map('first')|list %}
@@ -172,11 +171,11 @@
   <span class="chevron">▾</span>
 </button>
 <div class="collapse {{ 'show' if is_active }}" id="{{ section_id }}">
-  {% for endpoint, label, icon in menu_list %}
-  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">
-    {{ icon }} {{ label }}
-    {% if endpoint == 'pengajuan_izin_list' and pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
-    {% if endpoint == 'pengajuan_lembur_list' and pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
+  {% for item in menu_list %}
+  <a class="nav-link {{ 'active' if request.endpoint == item[0] }}" href="{{ url_for(item[0]) }}">
+    {{ item[2] }} {{ item[1] }}
+    {% if item[0] == 'pengajuan_izin_list' and pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
+    {% if item[0] == 'pengajuan_lembur_list' and pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
   </a>
   {% endfor %}
 </div>
@@ -188,11 +187,13 @@
   <span class="chevron">▾</span>
 </button>
 <div class="collapse {{ 'show' if is_active }}" id="{{ section_id }}">
-  {% for endpoint, label, icon in menu_list %}
-  <a class="nav-link nav-sublink {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
+  {% for item in menu_list %}
+  <a class="nav-link nav-sublink {{ 'active' if request.endpoint == item[0] }}" href="{{ url_for(item[0]) }}">{{ item[2] }} {{ item[1] }}</a>
   {% endfor %}
 </div>
 {% endmacro %}
+
+{% if current_user.is_authenticated and current_user.role == 'admin' %}
 <button type="button" class="btn btn-dark btn-sm sidebar-toggle-btn no-print" onclick="document.getElementById('sidebar').classList.add('show'); document.getElementById('sidebarBackdrop').classList.add('show');">☰</button>
 <div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="document.getElementById('sidebar').classList.remove('show'); this.classList.remove('show');"></div>
 <nav class="sidebar no-print" id="sidebar">
@@ -214,8 +215,8 @@
   <div class="collapse {{ 'show' if inventory_active }}" id="navInventory">
     {{ nav_subsection('navMasterData', 'Master Data', menu_master_data) }}
     {{ nav_subsection('navProduksi', 'Produksi', menu_produksi) }}
-    {% for endpoint, label, icon in menu_inventory_langsung %}
-    <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
+    {% for item in menu_inventory_langsung %}
+    <a class="nav-link {{ 'active' if request.endpoint == item[0] }}" href="{{ url_for(item[0]) }}">{{ item[2] }} {{ item[1] }}</a>
     {% endfor %}
   </div>
 
@@ -230,95 +231,71 @@
 </nav>
 
 {% elif current_user.is_authenticated and current_user.role == 'pegawai' %}
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark no-print">
-  <div class="container-fluid">
-    <a class="navbar-brand" href="{{ url_for('pegawai_dashboard') }}">
-      {% if site_settings.logo_filename %}<img src="{{ url_for('static', filename='uploads/' + site_settings.logo_filename) }}" alt="Logo" style="height:32px;width:32px;object-fit:cover;border-radius:6px;">{% else %}📋{% endif %}
-      MASLAHA PORTAL
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navMenu">
-      <ul class="navbar-nav me-auto">
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_dashboard') }}">Absen Sekarang</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_riwayat') }}">Riwayat Absensi</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_izin') }}">Ajukan Izin/Sakit/Cuti</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_lembur') }}">Pengajuan Lembur</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_laporan') }}">Laporan Pekerjaan</a></li>
-        {% if current_user.akses_marketing %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Marketing</a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('profit_dashboard') }}">Profitabilitas</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('marketing_iklan_dashboard') }}">Analisa Iklan per Marketplace</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('marketing_produk_dashboard') }}">Performa Produk</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('marketing_meta_dashboard') }}">Iklan Meta</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('marketing_proyeksi') }}">Proyeksi Budget Iklan</a></li>
-          </ul>
-        </li>
-        {% endif %}
-        {% if akses_pegawai.intersection(['karyawan','absensi','pengajuan_izin','pengajuan_lembur','laporan_pekerjaan','hari_libur']) %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Kepegawaian</a>
-          <ul class="dropdown-menu">
-            {% if 'karyawan' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('karyawan_list') }}">Data Karyawan</a></li>{% endif %}
-            {% if 'absensi' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('absensi_list') }}">Absensi</a></li>{% endif %}
-            {% if 'pengajuan_izin' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('pengajuan_izin_list') }}">Pengajuan Izin</a></li>{% endif %}
-            {% if 'pengajuan_lembur' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('pengajuan_lembur_list') }}">Pengajuan Lembur</a></li>{% endif %}
-            {% if 'laporan_pekerjaan' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('laporan_pekerjaan_list') }}">Laporan Pekerjaan</a></li>{% endif %}
-            {% if 'hari_libur' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('hari_libur_list') }}">Hari Libur</a></li>{% endif %}
-          </ul>
-        </li>
-        {% endif %}
-        {% if akses_pegawai.intersection(['penggajian','pengeluaran','laba_rugi','laba_rugi_input']) %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Keuangan</a>
-          <ul class="dropdown-menu">
-            {% if 'penggajian' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('penggajian_list') }}">Penggajian</a></li>{% endif %}
-            {% if 'pengeluaran' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('pengeluaran_list') }}">Laporan Pengeluaran</a></li>{% endif %}
-            {% if 'laba_rugi' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('laba_rugi') }}">Laporan Laba/Rugi</a></li>{% endif %}
-            {% if 'laba_rugi_input' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('laba_rugi_input') }}">Input Pendapatan &amp; HPP</a></li>{% endif %}
-          </ul>
-        </li>
-        {% endif %}
-        {% if akses_pegawai.intersection(['bahan_baku','produk','kategori_produk','vendor','gudang','akun_pembayaran','purchase_order','produksi','permohonan_barang','biaya_jahit']) %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Inventory</a>
-          <ul class="dropdown-menu">
-            {% if 'bahan_baku' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('bahan_baku_list') }}">Bahan Baku</a></li>{% endif %}
-            {% if 'produk' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('produk_list') }}">Produk</a></li>{% endif %}
-            {% if 'kategori_produk' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('kategori_produk_list') }}">Kategori Produk</a></li>{% endif %}
-            {% if 'vendor' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('vendor_list') }}">Vendor</a></li>{% endif %}
-            {% if 'gudang' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('gudang_list') }}">Gudang</a></li>{% endif %}
-            {% if 'akun_pembayaran' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('akun_pembayaran_list') }}">Akun Pembayaran</a></li>{% endif %}
-            {% if 'purchase_order' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('purchase_order_list') }}">Purchase Order</a></li>{% endif %}
-            {% if 'produksi' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('progress_produksi_list') }}">Produksi</a></li>{% endif %}
-            {% if 'permohonan_barang' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('permohonan_barang_list') }}">Permohonan Barang</a></li>{% endif %}
-            {% if 'biaya_jahit' in akses_pegawai %}<li><a class="dropdown-item" href="{{ url_for('biaya_jahit_list') }}">Biaya Produksi (Menjahit)</a></li>{% endif %}
-          </ul>
-        </li>
-        {% endif %}
-        {% if 'pendapatan_penjualan' in akses_pegawai %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Pendapatan</a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('pendapatan_penjualan_dashboard') }}">Penjualan</a></li>
-          </ul>
-        </li>
-        {% endif %}
-      </ul>
-      <ul class="navbar-nav">
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_akun') }}">👤 {{ current_user.nama }}</a></li>
-        <li class="nav-item"><a class="nav-link" href="{{ url_for('pegawai_logout') }}">Keluar</a></li>
-      </ul>
-    </div>
+{% set menu_pegawai_utama = [
+  ('pegawai_dashboard', 'Absen Sekarang', '🏠'),
+  ('pegawai_riwayat', 'Riwayat Absensi', '📅'),
+  ('pegawai_izin', 'Ajukan Izin/Sakit/Cuti', '📄'),
+  ('pegawai_lembur', 'Pengajuan Lembur', '⏱️'),
+  ('pegawai_laporan', 'Laporan Pekerjaan', '📝'),
+] %}
+<button type="button" class="btn btn-dark btn-sm sidebar-toggle-btn no-print" onclick="document.getElementById('sidebar').classList.add('show'); document.getElementById('sidebarBackdrop').classList.add('show');">☰</button>
+<div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="document.getElementById('sidebar').classList.remove('show'); this.classList.remove('show');"></div>
+<nav class="sidebar no-print" id="sidebar">
+  <a class="brand" href="{{ url_for('pegawai_dashboard') }}">
+    {% if site_settings.logo_filename %}<img src="{{ url_for('static', filename='uploads/' + site_settings.logo_filename) }}" alt="Logo">{% else %}📋{% endif %}
+    MASLAHA PORTAL
+  </a>
+
+  {% for endpoint, label, icon in menu_pegawai_utama %}
+  <a class="nav-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint) }}">{{ icon }} {{ label }}</a>
+  {% endfor %}
+
+  {% set ns_kepeg = namespace(list=[]) %}
+  {% for item in menu_kepegawaian %}{% if item[3] in akses_pegawai %}{% set ns_kepeg.list = ns_kepeg.list + [item] %}{% endif %}{% endfor %}
+  {% if ns_kepeg.list %}{{ nav_section('navKepegawaianP', 'Kepegawaian', ns_kepeg.list) }}{% endif %}
+
+  {% set ns_keu = namespace(list=[]) %}
+  {% for item in menu_keuangan %}{% if item[3] in akses_pegawai %}{% set ns_keu.list = ns_keu.list + [item] %}{% endif %}{% endfor %}
+  {% if ns_keu.list %}{{ nav_section('navKeuanganP', 'Keuangan', ns_keu.list) }}{% endif %}
+
+  {% if current_user.akses_marketing %}{{ nav_section('navProfitP', 'Profitabilitas', menu_profit) }}{% endif %}
+
+  {% set ns_md = namespace(list=[]) %}
+  {% for item in menu_master_data %}{% if item[3] in akses_pegawai %}{% set ns_md.list = ns_md.list + [item] %}{% endif %}{% endfor %}
+  {% set ns_pr = namespace(list=[]) %}
+  {% for item in menu_produksi %}{% if item[3] in akses_pegawai %}{% set ns_pr.list = ns_pr.list + [item] %}{% endif %}{% endfor %}
+  {% set ns_inv = namespace(list=[]) %}
+  {% for item in menu_inventory_langsung %}{% if item[3] in akses_pegawai %}{% set ns_inv.list = ns_inv.list + [item] %}{% endif %}{% endfor %}
+  {% if ns_md.list or ns_pr.list or ns_inv.list %}
+  {% set inventory_active_p = (request.endpoint in ns_md.list|map('first')|list) or (request.endpoint in ns_pr.list|map('first')|list) or (request.endpoint in ns_inv.list|map('first')|list) %}
+  <button type="button" class="nav-section-toggle" data-bs-toggle="collapse" data-bs-target="#navInventoryP" aria-expanded="{{ 'true' if inventory_active_p else 'false' }}" aria-controls="navInventoryP">
+    <span>Inventory</span>
+    <span class="chevron">▾</span>
+  </button>
+  <div class="collapse {{ 'show' if inventory_active_p }}" id="navInventoryP">
+    {% if ns_md.list %}{{ nav_subsection('navMasterDataP', 'Master Data', ns_md.list) }}{% endif %}
+    {% if ns_pr.list %}{{ nav_subsection('navProduksiP', 'Produksi', ns_pr.list) }}{% endif %}
+    {% for item in ns_inv.list %}
+    <a class="nav-link {{ 'active' if request.endpoint == item[0] }}" href="{{ url_for(item[0]) }}">{{ item[2] }} {{ item[1] }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if current_user.akses_marketing %}{{ nav_section('navMarketingP', 'Marketing', menu_marketing) }}{% endif %}
+
+  {% set ns_pen = namespace(list=[]) %}
+  {% for item in menu_pendapatan %}{% if item[3] in akses_pegawai %}{% set ns_pen.list = ns_pen.list + [item] %}{% endif %}{% endfor %}
+  {% if ns_pen.list %}{{ nav_section('navPendapatanP', 'Pendapatan', ns_pen.list) }}{% endif %}
+
+  <div class="sidebar-bottom">
+    <a class="nav-link {{ 'active' if request.endpoint == 'pegawai_akun' }}" href="{{ url_for('pegawai_akun') }}">👤 {{ current_user.nama }}</a>
+    <a class="nav-link" href="{{ url_for('pegawai_logout') }}">🚪 Keluar</a>
   </div>
 </nav>
 {% endif %}
 
-<div class="{{ 'main-with-sidebar' if (current_user.is_authenticated and current_user.role == 'admin') }}">
-  <div class="container{{ '-fluid' if (current_user.is_authenticated and current_user.role == 'admin') }} my-4">
+<div class="{{ 'main-with-sidebar' if (current_user.is_authenticated and current_user.role in ('admin', 'pegawai')) }}">
+  <div class="container{{ '-fluid' if (current_user.is_authenticated and current_user.role in ('admin', 'pegawai')) }} my-4">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
