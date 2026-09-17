@@ -215,7 +215,12 @@
 </div>
 
 <div class="card p-3 mb-4" style="overflow-x:auto;" id="tabel-produk">
-  <div class="text-muted small mb-2">Profit per Produk (diurutkan dari yang paling rugi/tipis dulu)</div>
+  <div class="text-muted small mb-1">Profit per Produk (diurutkan dari yang paling rugi/tipis dulu)</div>
+  <div class="text-muted small mb-2">
+    Cara baca: <strong>Profit = Income &minus; HPP Total</strong>. <strong>Margin = Profit &divide; Omzet</strong>
+    (persentase untung terhadap nilai jual). Income bisa minus kalau potongan platform (fee, iklan, dll) lebih
+    besar dari harga jual bersih pesanan itu.
+  </div>
   <table class="table table-sm align-middle mb-0">
     <thead>
       <tr>
@@ -237,10 +242,10 @@
         </td>
         <td class="text-end">{{ p.qty }}</td>
         <td class="text-end">{{ p.omzet | rupiah }}</td>
-        <td class="text-end">{{ p.income | rupiah }}</td>
+        <td class="text-end {{ 'text-danger' if p.income < 0 }}">{{ p.income | rupiah }}</td>
         <td class="text-end">{{ p.hpp_total | rupiah }}</td>
         <td class="text-end fw-semibold {{ 'text-success' if p.profit >= 0 else 'text-danger' }}">{{ p.profit | rupiah }}</td>
-        <td class="text-end">{{ "%.1f"|format(p.margin) }}%</td>
+        <td class="text-end {{ 'text-success' if p.margin >= 0 else 'text-danger' }}">{{ "%.1f"|format(p.margin) }}%</td>
       </tr>
       {% endfor %}
     </tbody>

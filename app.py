@@ -910,7 +910,11 @@ def hitung_profit_agregat(bulan=None):
 
     daftar_produk = list(agregat_produk.values())
     for p in daftar_produk:
-        p["margin"] = (p["profit"] / p["income"] * 100) if p["income"] else 0
+        # Margin dihitung dari Omzet (sales), bukan Income -- Income bisa kecil atau
+        # bahkan minus (kalau potongan platform lebih besar dari harga jualnya), jadi
+        # profit/income bisa menghasilkan angka yang salah arah (dua minus jadi persen
+        # besar positif, padahal produknya rugi). Omzet jauh lebih stabil sbg pembagi.
+        p["margin"] = (p["profit"] / p["omzet"] * 100) if p["omzet"] else 0
 
     # Rincian biaya per ORDER (bukan per baris produk, biar tidak dobel-hitung kalau
     # 1 pesanan berisi beberapa produk) -- dipakai buat breakdown "Profit Kamu Bocor
@@ -948,7 +952,7 @@ def hitung_profit_agregat(bulan=None):
         "total_biaya_lainnya": total_biaya_lainnya,
         "total_biaya_iklan": total_biaya_iklan,
     }
-    ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_income"] * 100) if ringkasan["total_income"] else 0
+    ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_omzet"] * 100) if ringkasan["total_omzet"] else 0
     ringkasan["total_potongan"] = ringkasan["total_omzet"] - ringkasan["total_income"]
     ringkasan["total_profit_real"] = ringkasan["total_income"] - ringkasan["total_hpp"] - total_biaya_iklan
     ringkasan["margin_real"] = (
