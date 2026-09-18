@@ -2908,7 +2908,7 @@ def create_app():
         return redirect(url_for("purchase_order_list"))
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/mulai-produksi", methods=["POST"])
-    @modul_required("purchase_order")
+    @modul_required("produksi")
     def purchase_order_mulai_produksi(po_id):
         """Finalisasi Size & Qty pcs tiap Item Produk + Qty Pakai final tiap Bahan,
         BARU di titik ini stok bahan dikurangi & transaksi Keluar dicatat -- bukan pas
@@ -3106,7 +3106,7 @@ def create_app():
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
-    @modul_required("purchase_order")
+    @modul_required("produksi")
     def progress_produksi_update(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         item_ids = request.form.getlist("item_id[]")
