@@ -2197,7 +2197,8 @@ def create_app():
             return redirect(url_for("bahan_baku_detail", bahan_id=bahan.id))
 
         daftar = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
-        return render_template("inventory/bahan_baku_list.html", daftar=daftar)
+        daftar_vendor = Vendor.query.order_by(Vendor.nama_vendor).all()
+        return render_template("inventory/bahan_baku_list.html", daftar=daftar, daftar_vendor=daftar_vendor)
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>")
     @modul_required("bahan_baku")
@@ -2206,10 +2207,11 @@ def create_app():
         produk_list_semua = Produk.query.order_by(Produk.nama_produk).all()
         produk_sudah_dipetakan = {k.produk_id for k in bahan.kebutuhan_list}
         produk_pilihan = [p for p in produk_list_semua if p.id not in produk_sudah_dipetakan]
+        daftar_vendor = Vendor.query.order_by(Vendor.nama_vendor).all()
         return render_template(
             "inventory/bahan_baku_detail.html",
             bahan=bahan, produk_pilihan=produk_pilihan, produk_list_semua=produk_list_semua,
-            tanggal_hari_ini=today_wib().isoformat(),
+            daftar_vendor=daftar_vendor, tanggal_hari_ini=today_wib().isoformat(),
         )
 
     @app.route("/inventory/bahan-baku/<int:bahan_id>/edit", methods=["POST"])

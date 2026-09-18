@@ -84,7 +84,15 @@
         </div>
         <div class="mb-3">
           <label class="form-label">Suplier / Vendor Kain <span class="text-muted small">(opsional)</span></label>
-          <input type="text" name="suplier" class="form-control" placeholder="mis. 46 Textile Soreang">
+          <select name="suplier" class="form-select">
+            <option value="">- Pilih Vendor -</option>
+            {% for v in daftar_vendor %}
+            <option value="{{ v.nama_vendor }}">{{ v.nama_vendor }}</option>
+            {% endfor %}
+          </select>
+          {% if not daftar_vendor %}
+          <div class="form-text">Belum ada data Vendor. Tambah dulu di menu <a href="{{ url_for('vendor_list') }}">Vendor</a>.</div>
+          {% endif %}
         </div>
       </div>
       <div class="modal-footer">
