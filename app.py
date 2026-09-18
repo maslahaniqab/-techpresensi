@@ -6731,17 +6731,7 @@ def create_app():
             total_jumlah_batal=total_jumlah_batal,
         )
 
-    @app.route("/marketing/profit/data/belum-income")
-    @marketing_required
-    def profit_belum_income_detail():
-        """Halaman khusus rincian pesanan yang belum ketemu data Income-nya -- dipisah
-        dari tab Order & Income (yang isinya banyak angka lain) supaya statusnya jelas
-        per pesanan: dibatalkan, belum diterima pembeli/masih dikirim, atau memang
-        sudah selesai tapi belum tercatat income-nya (perlu ditelusuri)."""
-        kategori_filter = request.args.get("kategori", "")
-        marketplace_filter = request.args.get("marketplace", "")
-        cari = request.args.get("cari", "").strip()
-
+    def _susun_belum_income(kategori_filter, marketplace_filter, cari):
         kunci_income = {
             (p.marketplace, p.no_pesanan)
             for p in PendapatanPesanan.query.with_entities(PendapatanPesanan.marketplace, PendapatanPesanan.no_pesanan).all()
@@ -6797,6 +6787,26 @@ def create_app():
             ]
 
         daftar.sort(key=lambda d: d["tanggal_pesanan"] or date.min, reverse=True)
+        return daftar, ringkasan, daftar_marketplace
+
+    LABEL_KATEGORI_BELUM_INCOME = {
+        "batal": "Dibatalkan",
+        "proses": "Belum Diterima / Diproses",
+        "wajar": "Wajar (Bulan Berjalan)",
+        "perlu_ditelusuri": "Perlu Ditelusuri",
+    }
+
+    @app.route("/marketing/profit/data/belum-income")
+    @marketing_required
+    def profit_belum_income_detail():
+        """Halaman khusus rincian pesanan yang belum ketemu data Income-nya -- dipisah
+        dari tab Order & Income (yang isinya banyak angka lain) supaya statusnya jelas
+        per pesanan: dibatalkan, belum diterima pembeli/masih dikirim, atau memang
+        sudah selesai tapi belum tercatat income-nya (perlu ditelusuri)."""
+        kategori_filter = request.args.get("kategori", "")
+        marketplace_filter = request.args.get("marketplace", "")
+        cari = request.args.get("cari", "").strip()
+        daftar, ringkasan, daftar_marketplace = _susun_belum_income(kategori_filter, marketplace_filter, cari)
 
         return render_template(
             "marketing/profit_belum_income.html",
@@ -6807,6 +6817,41 @@ def create_app():
             marketplace_filter=marketplace_filter,
             daftar_marketplace=daftar_marketplace,
             cari=cari,
+        )
+
+    @app.route("/marketing/profit/data/belum-income/download")
+    @marketing_required
+    def profit_belum_income_download():
+        kategori_filter = request.args.get("kategori", "")
+        marketplace_filter = request.args.get("marketplace", "")
+        cari = request.args.get("cari", "").strip()
+        daftar, _ringkasan, _mp = _susun_belum_income(kategori_filter, marketplace_filter, cari)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Belum Ada Income"
+        ws.append([
+            "Marketplace", "No. Pesanan", "Tanggal Pesanan", "Status Asli", "Kategori",
+            "Produk", "Jumlah Produk", "Subtotal",
+        ])
+        for d in daftar:
+            ws.append([
+                d["marketplace"], d["no_pesanan"],
+                d["tanggal_pesanan"].strftime("%d/%m/%Y") if d["tanggal_pesanan"] else "",
+                d["status_pesanan"], LABEL_KATEGORI_BELUM_INCOME[d["kategori"]],
+                " | ".join(d["produk_list"]), d["jumlah_produk"], d["subtotal"],
+            ])
+        for kolom, lebar in zip("ABCDEFGH", (14, 24, 16, 24, 26, 60, 14, 14)):
+            ws.column_dimensions[kolom].width = lebar
+        ws.freeze_panes = "A2"
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf, as_attachment=True,
+            download_name=f"pesanan_belum_income_{today_wib().strftime('%Y%m%d')}.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     def _daftar_produk_untuk_hpp():
