@@ -1,127 +1,96 @@
 {% extends "base.html" %}
-{% block title %}Penjualan per Marketplace{% endblock %}
+{% block title %}Penjualan Manual{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Penjualan per Marketplace</h3>
-  <a href="{{ url_for('profit_upload') }}" class="btn btn-primary btn-sm">+ Upload Data di Profitabilitas</a>
+<div class="mb-3">
+  <h3 class="mb-0">Penjualan Manual</h3>
+  <p class="text-muted small mb-0">Untuk order/pesanan yang masuk di luar marketplace (mis. WhatsApp, COD, langsung). Order dari marketplace tetap lewat menu <a href="{{ url_for('profit_order_income') }}">Profitabilitas</a>.</p>
 </div>
 
-<div class="alert alert-dark small">
-  Data di halaman ini otomatis diambil dari data Order &amp; Income yang diupload di menu
-  <a href="{{ url_for('profit_order_income') }}" class="alert-link">Profitabilitas</a> &mdash; tidak perlu upload
-  terpisah lagi di sini. Untuk bulan yang belum ada data Profitabilitas-nya, sistem memakai data Penjualan lama
-  (kalau ada) supaya laporan bulan lalu tidak hilang.
-</div>
-
-<div class="card p-3 mb-3">
-  <form method="get" class="row g-2 align-items-end">
-    <div class="col-auto">
-      <label class="form-label">Bulan</label>
-      <select name="bulan" class="form-select">
-        {% for i in range(1, 13) %}
-        <option value="{{ i }}" {{ 'selected' if i == bulan else '' }}>{{ bulan_nama_list[i] }}</option>
-        {% endfor %}
-      </select>
+<div class="card p-3 mb-4">
+  <h5 class="mb-3">Form Penjualan Manual</h5>
+  <form method="post" action="{{ url_for('pendapatan_penjualan_manual_tambah') }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">No Invoice</label>
+        <input type="text" class="form-control" value="Otomatis saat disimpan" disabled>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Nama Pembeli</label>
+        <input type="text" name="nama_pembeli" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Alamat</label>
+        <input type="text" name="alamat" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">No Telepon</label>
+        <input type="text" name="no_telepon" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">SKU Produk</label>
+        <input type="text" name="sku" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Nama Produk</label>
+        <input type="text" name="nama_produk" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Warna</label>
+        <input type="text" name="warna" class="form-control">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Harga</label>
+        <input type="number" min="0" step="1" name="harga" class="form-control" placeholder="Contoh: 150000">
+      </div>
     </div>
-    <div class="col-auto">
-      <label class="form-label">Tahun</label>
-      <input type="number" name="tahun" class="form-control" value="{{ tahun }}" style="width: 110px;">
-    </div>
-    <div class="col-auto">
-      <button type="submit" class="btn btn-outline-primary">Tampilkan</button>
-    </div>
-    <div class="col-auto ms-auto">
-      <a href="{{ url_for('laba_rugi', dari_bulan=bulan, dari_tahun=tahun, sampai_bulan=bulan, sampai_tahun=tahun) }}" class="btn btn-outline-secondary">Lihat Laporan Laba/Rugi</a>
+    <div class="text-center mt-4">
+      <button type="submit" class="btn btn-primary px-5">Simpan</button>
     </div>
   </form>
 </div>
 
-<h6 class="text-muted mb-2">Ringkasan Penjualan — {{ bulan_nama_list[bulan] }} {{ tahun }}</h6>
-<div class="row g-3 mb-3">
-  <div class="col-6 col-md-4">
-    <div class="card p-3 h-100">
-      <div class="text-muted small">Jumlah Pesanan</div>
-      <div class="fs-5 fw-bold">{{ total.jumlah_pesanan }}</div>
-    </div>
+<div class="card p-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">List Order Manual</h5>
+    <a href="{{ url_for('pendapatan_penjualan_manual_download') }}" class="btn btn-outline-primary btn-sm">⬇️ Download File</a>
   </div>
-  <div class="col-6 col-md-4">
-    <div class="card p-3 h-100">
-      <div class="text-muted small">Total Pendapatan (Omzet Kotor)</div>
-      <div class="fs-5 fw-bold text-primary">{{ total.pendapatan | rupiah }}</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4">
-    <div class="card p-3 h-100 {{ 'border border-danger' if laba_bersih_operasional < 0 else '' }}">
-      <div class="text-muted small">Laba Bersih (setelah Beban Operasional)</div>
-      <div class="fs-5 fw-bold {{ 'text-danger' if laba_bersih_operasional < 0 else 'text-success' }}">{{ laba_bersih_operasional | rupiah }}</div>
-    </div>
-  </div>
-</div>
-
-<div class="card p-3 mb-3">
-  <h6 class="mb-3">Rincian per Marketplace</h6>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
+  <div class="table-responsive" style="max-height: 620px; overflow-y: auto;">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead style="position: sticky; top: 0; background: #eef1f6;">
         <tr>
-          <th>Marketplace</th>
-          <th class="text-end">Jumlah Pesanan</th>
-          <th class="text-end">Total Pendapatan</th>
-          <th>Sumber Data</th>
+          <th>No Invoice</th>
+          <th>Nama</th>
+          <th>WA</th>
+          <th>Alamat</th>
+          <th>SKU</th>
+          <th>Produk</th>
+          <th>Warna</th>
+          <th class="text-end">Harga</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
-        {% for b in breakdown %}
+        {% for p in daftar %}
         <tr>
-          <td>{{ b.marketplace }}</td>
-          <td class="text-end">{{ b.jumlah_pesanan }}</td>
-          <td class="text-end fw-bold">{{ b.pendapatan | rupiah }}</td>
-          <td>
-            {% if b.sumber == 'profitabilitas' %}
-            <span class="badge bg-success">Profitabilitas</span>
-            {% else %}
-            <span class="badge bg-secondary">Data lama</span>
-            {% endif %}
+          <td class="small text-nowrap">{{ p.no_invoice }}</td>
+          <td class="small">{{ p.nama_pembeli }}</td>
+          <td class="small">{{ p.no_telepon or "-" }}</td>
+          <td class="small">{{ p.alamat or "-" }}</td>
+          <td class="small">{{ p.sku or "-" }}</td>
+          <td class="small">{{ p.nama_produk }}</td>
+          <td class="small">{{ p.warna or "-" }}</td>
+          <td class="text-end small">{{ p.harga | rupiah }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('pendapatan_penjualan_manual_hapus', pesanan_id=p.id) }}" onsubmit="return confirm('Hapus order {{ p.no_invoice }}?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+            </form>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="text-center text-muted py-4">Belum ada data untuk periode ini. Upload Order &amp; Income di menu Profitabilitas dulu.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">Belum ada order manual. Isi form di atas untuk mulai.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
-
-<div class="card p-3">
-  <h6 class="mb-3">Beban Operasional — {{ bulan_nama_list[bulan] }} {{ tahun }}</h6>
-  <div class="table-responsive">
-    <table class="table table-sm align-middle mb-0">
-      <tbody>
-        {% for mp, biaya in iklan_by_mp.items() %}
-        <tr>
-          <td>Iklan {{ mp }}</td>
-          <td class="text-end">{{ biaya | rupiah }}</td>
-        </tr>
-        {% endfor %}
-        <tr>
-          <td>Gaji Karyawan</td>
-          <td class="text-end">{{ gaji_total | rupiah }}</td>
-        </tr>
-        {% for kategori, jumlah in opex_by_kategori.items() %}
-        <tr>
-          <td>{{ kategori }}</td>
-          <td class="text-end">{{ jumlah | rupiah }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr class="fw-bold">
-          <td>Total Beban Operasional</td>
-          <td class="text-end">{{ total_beban_operasional | rupiah }}</td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-  <div class="form-text mt-2">Data iklan dari menu Marketing, gaji dari Penggajian, dan beban lain dari Laporan Pengeluaran — semua otomatis mengikuti periode di atas.</div>
 </div>
 {% endblock %}

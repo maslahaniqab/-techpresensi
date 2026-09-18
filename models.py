@@ -620,6 +620,22 @@ class PenjualanMarketplace(db.Model):
     )
 
 
+class PesananManual(db.Model):
+    """Orderan manual (mis. dari WhatsApp/COD, bukan dari marketplace) -- diinput
+    satu per satu lewat form, beda dari PenjualanMarketplace yang agregat harian."""
+    id = db.Column(db.Integer, primary_key=True)
+    no_invoice = db.Column(db.String(64), nullable=False, unique=True)
+    tanggal = db.Column(db.Date, nullable=False)
+    nama_pembeli = db.Column(db.String(128), nullable=False)
+    no_telepon = db.Column(db.String(32))
+    alamat = db.Column(db.String(256))
+    sku = db.Column(db.String(128))
+    nama_produk = db.Column(db.String(256), nullable=False)
+    warna = db.Column(db.String(64))
+    harga = db.Column(db.Integer, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class PesananMarketplace(db.Model):
     """Baris per item produk dari laporan Order marketplace (Shopee dkk)."""
     id = db.Column(db.Integer, primary_key=True)

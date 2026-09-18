@@ -47,7 +47,7 @@ from models import (
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
-    KategoriProduk, AksesKaryawan,
+    KategoriProduk, AksesKaryawan, PesananManual,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -4993,41 +4993,74 @@ def create_app():
 
         return agregat, dilewati, contoh_gagal_tanggal, dilewati_angka_tidak_wajar, contoh_angka_tidak_wajar
 
-    def hitung_ringkasan_penjualan(bulan, tahun):
-        pendapatan_marketplace = hitung_pendapatan_gross_marketplace(bulan, tahun)
-        total = {
-            "jumlah_pesanan": sum(a["jumlah_pesanan"] for a in pendapatan_marketplace.values()),
-            "pendapatan": sum(a["pendapatan"] for a in pendapatan_marketplace.values()),
-        }
-        breakdown = [
-            {"marketplace": mp, **pendapatan_marketplace[mp]}
-            for mp in MARKETPLACE_LIST if mp in pendapatan_marketplace
-        ]
-        return total, breakdown
-
     @app.route("/pendapatan/penjualan")
     @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_dashboard():
-        bulan = int(request.args.get("bulan", today_wib().month))
-        tahun = int(request.args.get("tahun", today_wib().year))
+        daftar = PesananManual.query.order_by(PesananManual.id.desc()).all()
+        return render_template("pendapatan/penjualan_dashboard.html", daftar=daftar)
 
-        total, breakdown = hitung_ringkasan_penjualan(bulan, tahun)
-        labarugi = hitung_labarugi_periode(bulan, tahun)
+    @app.route("/pendapatan/penjualan/manual/tambah", methods=["POST"])
+    @modul_required("pendapatan_penjualan")
+    def pendapatan_penjualan_manual_tambah():
+        nama_pembeli = request.form.get("nama_pembeli", "").strip()
+        nama_produk = request.form.get("nama_produk", "").strip()
+        if not nama_pembeli or not nama_produk:
+            flash("Nama Pembeli dan Nama Produk wajib diisi.", "danger")
+            return redirect(url_for("pendapatan_penjualan_dashboard"))
 
-        laba_bersih_operasional = total["pendapatan"] - labarugi["total_beban_operasional"]
+        tanggal = today_wib()
+        urutan = 0
+        while True:
+            urutan += 1
+            no_invoice = f"INV-{tanggal.strftime('%d/%m/%Y')}-{urutan:03d}"
+            if not PesananManual.query.filter_by(no_invoice=no_invoice).first():
+                break
 
-        return render_template(
-            "pendapatan/penjualan_dashboard.html",
-            marketplace_list=MARKETPLACE_LIST,
-            bulan=bulan,
-            tahun=tahun,
-            total=total,
-            breakdown=breakdown,
-            iklan_by_mp=labarugi["iklan_by_mp"],
-            gaji_total=labarugi["gaji_total"],
-            opex_by_kategori=labarugi["opex_by_kategori"],
-            total_beban_operasional=labarugi["total_beban_operasional"],
-            laba_bersih_operasional=laba_bersih_operasional,
+        pesanan = PesananManual(
+            no_invoice=no_invoice,
+            tanggal=tanggal,
+            nama_pembeli=nama_pembeli,
+            no_telepon=request.form.get("no_telepon", "").strip(),
+            alamat=request.form.get("alamat", "").strip(),
+            sku=request.form.get("sku", "").strip(),
+            nama_produk=nama_produk,
+            warna=request.form.get("warna", "").strip(),
+            harga=round(parse_angka_iklan(request.form.get("harga", "0"))),
+        )
+        db.session.add(pesanan)
+        db.session.commit()
+        flash(f"Order manual {no_invoice} berhasil disimpan.", "success")
+        return redirect(url_for("pendapatan_penjualan_dashboard"))
+
+    @app.route("/pendapatan/penjualan/manual/<int:pesanan_id>/hapus", methods=["POST"])
+    @modul_required("pendapatan_penjualan")
+    def pendapatan_penjualan_manual_hapus(pesanan_id):
+        pesanan = db.session.get(PesananManual, pesanan_id) or abort_404()
+        no_invoice = pesanan.no_invoice
+        db.session.delete(pesanan)
+        db.session.commit()
+        flash(f"Order manual {no_invoice} dihapus.", "info")
+        return redirect(url_for("pendapatan_penjualan_dashboard"))
+
+    @app.route("/pendapatan/penjualan/manual/download")
+    @modul_required("pendapatan_penjualan")
+    def pendapatan_penjualan_manual_download():
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Order Manual"
+        ws.append(["No Invoice", "Nama", "WA", "Alamat", "SKU", "Produk", "Warna", "Harga"])
+        for p in PesananManual.query.order_by(PesananManual.id).all():
+            ws.append([
+                p.no_invoice, p.nama_pembeli, p.no_telepon or "", p.alamat or "",
+                p.sku or "", p.nama_produk, p.warna or "", p.harga or 0,
+            ])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf, as_attachment=True,
+            download_name=f"order_manual_{today_wib().strftime('%Y%m%d')}.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     def _finalisasi_import_penjualan(data_tmp, mapping):
