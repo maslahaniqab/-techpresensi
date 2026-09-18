@@ -72,11 +72,15 @@
           <td class="text-end">{{ p.harga_big_campaign | rupiah }}</td>
           <td class="text-end small text-muted">{{ d.margin_hc | rupiah }}<br>{{ '%.1f'|format(d.persen_hc) }}%</td>
           <td class="text-end">
+            {% if current_user.role == 'admin' %}
             <a href="{{ url_for('produk_edit', produk_id=p.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
             <form method="post" action="{{ url_for('produk_hapus', produk_id=p.id) }}" class="d-inline"
                   onsubmit="return confirm('Hapus produk {{ p.nama_produk }}?');">
               <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
             </form>
+            {% else %}
+            <span class="text-muted small">-</span>
+            {% endif %}
           </td>
         </tr>
         {% else %}

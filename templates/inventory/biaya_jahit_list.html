@@ -100,9 +100,13 @@
         <td class="small">{% if b.vendor %}{{ b.vendor.nama_vendor }}{% else %}<span class="text-muted">- Default, semua vendor -</span>{% endif %}</td>
         <td class="text-end small">{{ b.biaya_per_pcs | rupiah }}</td>
         <td class="text-end">
+          {% if current_user.role == 'admin' %}
           <form method="post" action="{{ url_for('biaya_jahit_hapus', biaya_id=b.id) }}" class="d-inline" onsubmit="return confirm('Hapus tarif ini?');">
             <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
           </form>
+          {% else %}
+          <span class="text-muted small">-</span>
+          {% endif %}
         </td>
       </tr>
       {% else %}

@@ -34,10 +34,14 @@
           <td class="small">{{ v.alamat or "-" }}</td>
           <td class="small text-muted">{{ v.catatan or "-" }}</td>
           <td class="text-end">
+            {% if current_user.role == 'admin' %}
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditVendor{{ v.id }}">Edit</button>
             <form method="post" action="{{ url_for('vendor_hapus', vendor_id=v.id) }}" class="d-inline" onsubmit="return confirm('Hapus vendor {{ v.nama_vendor }}?');">
               <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
             </form>
+            {% else %}
+            <span class="text-muted small">-</span>
+            {% endif %}
           </td>
         </tr>
         {% else %}

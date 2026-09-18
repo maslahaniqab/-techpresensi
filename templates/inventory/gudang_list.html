@@ -32,10 +32,14 @@
           <td class="small">{{ g.kontak or "-" }}</td>
           <td class="small text-muted">{{ g.catatan or "-" }}</td>
           <td class="text-end">
+            {% if current_user.role == 'admin' %}
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditGudang{{ g.id }}">Edit</button>
             <form method="post" action="{{ url_for('gudang_hapus', gudang_id=g.id) }}" class="d-inline" onsubmit="return confirm('Hapus gudang {{ g.nama_gudang }}?');">
               <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
             </form>
+            {% else %}
+            <span class="text-muted small">-</span>
+            {% endif %}
           </td>
         </tr>
         {% else %}

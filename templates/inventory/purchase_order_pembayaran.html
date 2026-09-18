@@ -67,9 +67,13 @@
           <td class="small">{{ p.akun_pembayaran.nama_akun if p.akun_pembayaran else "-" }}</td>
           <td class="small text-muted">{{ p.catatan or "-" }}</td>
           <td class="text-end">
+            {% if current_user.role == 'admin' %}
             <form method="post" action="{{ url_for('purchase_order_pembayaran_hapus', pembayaran_id=p.id) }}" onsubmit="return confirm('Hapus catatan pembayaran ini?');">
               <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
             </form>
+            {% else %}
+            <span class="text-muted small">-</span>
+            {% endif %}
           </td>
         </tr>
         {% else %}

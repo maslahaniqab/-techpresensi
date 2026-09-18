@@ -181,12 +181,16 @@
             <td class="small">{{ s.bahan_baku.nama_bahan if s.bahan_baku else "-" }}</td>
             <td class="text-end small">{{ "%.2f"|format(s.yard_per_pcs) if s.yard_per_pcs else "-" }}</td>
             <td class="text-end">
+              {% if current_user.role == 'admin' %}
               <div class="d-flex flex-column gap-1 align-items-end">
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditSpek{{ s.id }}">✎</button>
                 <form method="post" action="{{ url_for('produk_spek_ukuran_hapus', spek_id=s.id) }}" onsubmit="return confirm('Hapus baris ukuran ini?');">
                   <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
                 </form>
               </div>
+              {% else %}
+              <span class="text-muted small">-</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -195,6 +199,7 @@
     </div>
   </div>
   {% for s in baris_list %}
+  {% if current_user.role == 'admin' %}
   <div class="modal fade" id="modalEditSpek{{ s.id }}" tabindex="-1">
     <div class="modal-dialog">
       <form method="post" action="{{ url_for('produk_spek_ukuran_edit', spek_id=s.id) }}" class="modal-content">
@@ -245,6 +250,7 @@
       </form>
     </div>
   </div>
+  {% endif %}
   {% endfor %}
   {% endfor %}
   {% endif %}
@@ -262,10 +268,14 @@
             <td class="small">{{ k.produk.nama_produk }}</td>
             <td class="text-end small">{{ "%.2f"|format(k.jumlah_yard) }}</td>
             <td class="text-end">
+              {% if current_user.role == 'admin' %}
               <form method="post" action="{{ url_for('bahan_baku_kebutuhan_hapus', kebutuhan_id=k.id) }}" onsubmit="return confirm('Hapus kebutuhan ini?');">
                 <input type="hidden" name="next" value="{{ url_for('bahan_baku_cutting') }}">
                 <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
               </form>
+              {% else %}
+              <span class="text-muted small">-</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

@@ -32,17 +32,25 @@
       {% for k in daftar %}
       <tr>
         <td class="small">
+          {% if current_user.role == 'admin' %}
           <form method="post" action="{{ url_for('kategori_produk_edit', kategori_id=k.id) }}" class="d-flex gap-1">
             <input type="text" name="nama_kategori" class="form-control form-control-sm" value="{{ k.nama_kategori }}" style="max-width:220px;">
             <button type="submit" class="btn btn-sm btn-outline-secondary">Simpan</button>
           </form>
+          {% else %}
+          {{ k.nama_kategori }}
+          {% endif %}
         </td>
         <td class="text-end small">{{ k.produk_list | length }}</td>
         <td class="text-end">
+          {% if current_user.role == 'admin' %}
           <form method="post" action="{{ url_for('kategori_produk_hapus', kategori_id=k.id) }}" class="d-inline"
                 onsubmit="return confirm('Hapus kategori {{ k.nama_kategori }}? Produk yg pakai kategori ini jadi tanpa kategori.');">
             <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
           </form>
+          {% else %}
+          <span class="text-muted">-</span>
+          {% endif %}
         </td>
       </tr>
       {% else %}

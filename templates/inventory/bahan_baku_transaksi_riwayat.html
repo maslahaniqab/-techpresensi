@@ -95,7 +95,11 @@
           {% endif %}
         </td>
         <td class="text-end">
+          {% if current_user.role == 'admin' %}
           <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditTrx{{ t.id }}" title="Koreksi kalau ada data yang gak cocok">✎ Edit</button>
+          {% else %}
+          <span class="text-muted small">-</span>
+          {% endif %}
         </td>
       </tr>
       {% else %}
