@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Pesanan Belum Ada Income{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <a href="{{ url_for('profit_order_income') }}" class="text-muted small text-decoration-none">&larr; Order &amp; Income</a>
+  <h3 class="mb-1">Pesanan Belum Ada Income</h3>
+  <p class="text-muted small mb-0">
+    Rincian tiap pesanan yang belum ketemu data Income-nya, dikelompokkan berdasarkan status aslinya di marketplace
+    supaya jelas mana yang memang dibatalkan, mana yang barangnya belum diterima pembeli, dan mana yang benar-benar
+    perlu ditelusuri.
+  </p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <a href="{{ url_for('profit_belum_income_detail', kategori='perlu_ditelusuri', marketplace=marketplace_filter, cari=cari) }}"
+       class="card p-3 text-decoration-none h-100 {{ 'border-danger' if kategori_filter == 'perlu_ditelusuri' }}">
+      <div class="text-muted small">Perlu Ditelusuri</div>
+      <div class="fs-4 fw-bold text-danger">{{ ringkasan.perlu_ditelusuri }}</div>
+      <div class="text-muted small">Sudah Selesai tapi belum ada Income</div>
+    </a>
+  </div>
+  <div class="col-md-3 col-6">
+    <a href="{{ url_for('profit_belum_income_detail', kategori='proses', marketplace=marketplace_filter, cari=cari) }}"
+       class="card p-3 text-decoration-none h-100 {{ 'border-info' if kategori_filter == 'proses' }}">
+      <div class="text-muted small">Belum Diterima / Diproses</div>
+      <div class="fs-4 fw-bold text-info">{{ ringkasan.proses }}</div>
+      <div class="text-muted small">Masih dikirim, belum dikonfirmasi pembeli</div>
+    </a>
+  </div>
+  <div class="col-md-3 col-6">
+    <a href="{{ url_for('profit_belum_income_detail', kategori='wajar', marketplace=marketplace_filter, cari=cari) }}"
+       class="card p-3 text-decoration-none h-100 {{ 'border-secondary' if kategori_filter == 'wajar' }}">
+      <div class="text-muted small">Wajar (Bulan Berjalan)</div>
+      <div class="fs-4 fw-bold text-muted">{{ ringkasan.wajar }}</div>
+      <div class="text-muted small">Baru Selesai bulan ini, dana biasanya baru cair bulan depan</div>
+    </a>
+  </div>
+  <div class="col-md-3 col-6">
+    <a href="{{ url_for('profit_belum_income_detail', kategori='batal', marketplace=marketplace_filter, cari=cari) }}"
+       class="card p-3 text-decoration-none h-100 {{ 'border-dark' if kategori_filter == 'batal' }}">
+      <div class="text-muted small">Dibatalkan</div>
+      <div class="fs-4 fw-bold">{{ ringkasan.batal }}</div>
+      <div class="text-muted small">Wajar tidak ada Income</div>
+    </a>
+  </div>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small">Cari No. Pesanan / Nama Produk</label>
+      <input type="text" name="cari" class="form-control" value="{{ cari }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small">Marketplace</label>
+      <select name="marketplace" class="form-select">
+        <option value="">Semua Marketplace</option>
+        {% for m in daftar_marketplace %}
+        <option value="{{ m }}" {{ 'selected' if marketplace_filter == m }}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small">Kategori</label>
+      <select name="kategori" class="form-select">
+        <option value="">Semua Kategori</option>
+        <option value="perlu_ditelusuri" {{ 'selected' if kategori_filter == 'perlu_ditelusuri' }}>Perlu Ditelusuri</option>
+        <option value="proses" {{ 'selected' if kategori_filter == 'proses' }}>Belum Diterima / Diproses</option>
+        <option value="wajar" {{ 'selected' if kategori_filter == 'wajar' }}>Wajar (Bulan Berjalan)</option>
+        <option value="batal" {{ 'selected' if kategori_filter == 'batal' }}>Dibatalkan</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary w-100">Filter</button>
+    </div>
+  </div>
+  {% if cari or marketplace_filter or kategori_filter %}
+  <div class="mt-2"><a href="{{ url_for('profit_belum_income_detail') }}" class="small">&times; Bersihkan semua filter</a></div>
+  {% endif %}
+</form>
+
+<div class="card p-3">
+  <div class="text-muted small mb-2">Menampilkan {{ daftar | length }} pesanan</div>
+  <div class="table-responsive" style="max-height: 620px; overflow-y: auto;">
+    <table class="table table-sm align-middle mb-0">
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
+        <tr>
+          <th>Marketplace</th>
+          <th>No. Pesanan</th>
+          <th>Tanggal</th>
+          <th>Status Asli</th>
+          <th>Kategori</th>
+          <th>Produk</th>
+          <th class="text-end">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in daftar %}
+        <tr>
+          <td class="small">{{ d.marketplace }}</td>
+          <td class="small">{{ d.no_pesanan }}</td>
+          <td class="small text-nowrap">{{ d.tanggal_pesanan.strftime("%d/%m/%Y") if d.tanggal_pesanan else "-" }}</td>
+          <td>
+            {% if d.kategori == 'batal' %}<span class="badge bg-secondary">{{ d.status_pesanan }}</span>
+            {% elif d.kategori == 'proses' %}<span class="badge bg-info-subtle text-info-emphasis">{{ d.status_pesanan }}</span>
+            {% else %}<span class="badge bg-success-subtle text-success-emphasis">{{ d.status_pesanan }}</span>{% endif %}
+          </td>
+          <td>
+            {% if d.kategori == 'batal' %}<span class="badge bg-secondary">Dibatalkan</span>
+            {% elif d.kategori == 'proses' %}<span class="badge bg-info-subtle text-info-emphasis">Belum Diterima</span>
+            {% elif d.kategori == 'wajar' %}<span class="badge bg-secondary-subtle text-secondary-emphasis">Wajar</span>
+            {% else %}<span class="badge bg-danger-subtle text-danger-emphasis">Perlu Ditelusuri</span>{% endif %}
+          </td>
+          <td class="small">
+            {{ d.produk_list[0] }}{% if d.jumlah_produk > 1 %} <span class="text-muted">(+{{ d.jumlah_produk - 1 }} produk lain)</span>{% endif %}
+          </td>
+          <td class="text-end small">{{ d.subtotal | rupiah }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Tidak ada pesanan yang cocok dengan filter ini.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

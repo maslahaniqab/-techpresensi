@@ -670,6 +670,20 @@ def baca_laporan_marketplace(file_storage):
     return marketplace_ditemukan, tipe_ditemukan, headers, baris_data, None
 
 
+def tanggal_dari_no_pesanan_shopee(no_pesanan):
+    """No. Pesanan Shopee selalu diawali YYMMDD (tanggal pesanan dibuat, dijamin oleh
+    Shopee sendiri) -- dipakai sebagai patokan yang gak ambigu buat mengoreksi kolom
+    'Waktu Pesanan Dibuat' yang kadang keekspor dalam format MM/DD (bukan DD/MM) di
+    sebagian file, yang bikin tanggal & bulan ketuker tanpa ada error (mis. 10/06 --
+    harusnya 10 Juni -- kebaca 6 Oktober)."""
+    if not no_pesanan or len(no_pesanan) < 6 or not no_pesanan[:6].isdigit():
+        return None
+    try:
+        return date(2000 + int(no_pesanan[0:2]), int(no_pesanan[2:4]), int(no_pesanan[4:6]))
+    except ValueError:
+        return None
+
+
 def parse_order_shopee(headers, rows_data):
     idx = {str(h).strip().lower(): i for i, h in enumerate(headers)}
 
@@ -694,6 +708,12 @@ def parse_order_shopee(headers, rows_data):
         tanggal = parse_tanggal_iklan(ambil(row, "Waktu Pesanan Dibuat"))
         if not tanggal:
             continue
+        tanggal_dari_no = tanggal_dari_no_pesanan_shopee(no_pesanan)
+        if tanggal_dari_no and abs((tanggal - tanggal_dari_no).days) > 2:
+            # Beda lebih dari 2 hari dari tanggal yg tersirat di No. Pesanan itu sendiri --
+            # hampir pasti bulan/tanggalnya ketuker pas parsing, No. Pesanan Shopee lebih
+            # bisa dipercaya karena formatnya baku (YYMMDD), gak tergantung format file.
+            tanggal = tanggal_dari_no
         nama_produk = str(ambil(row, "Nama Produk") or "").strip()
         variasi = str(ambil(row, "Nama Variasi") or "").strip()
         nama_final = f"{nama_produk} - {variasi}" if variasi and variasi != "-" else nama_produk
@@ -820,6 +840,7 @@ PARSER_INCOME_MARKETPLACE = {
 
 
 STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel")
+STATUS_SELESAI_MARKETPLACE = ("Selesai", "Selesai Pesanan")
 
 
 def hitung_profit_agregat(bulan=None):
@@ -6706,6 +6727,84 @@ def create_app():
             total_omzet_bersih=total_omzet_bersih,
             total_nilai_batal=total_nilai_batal,
             total_jumlah_batal=total_jumlah_batal,
+        )
+
+    @app.route("/marketing/profit/data/belum-income")
+    @marketing_required
+    def profit_belum_income_detail():
+        """Halaman khusus rincian pesanan yang belum ketemu data Income-nya -- dipisah
+        dari tab Order & Income (yang isinya banyak angka lain) supaya statusnya jelas
+        per pesanan: dibatalkan, belum diterima pembeli/masih dikirim, atau memang
+        sudah selesai tapi belum tercatat income-nya (perlu ditelusuri)."""
+        kategori_filter = request.args.get("kategori", "")
+        marketplace_filter = request.args.get("marketplace", "")
+        cari = request.args.get("cari", "").strip()
+
+        kunci_income = {
+            (p.marketplace, p.no_pesanan)
+            for p in PendapatanPesanan.query.with_entities(PendapatanPesanan.marketplace, PendapatanPesanan.no_pesanan).all()
+        }
+
+        agregat = {}
+        for p in PesananMarketplace.query.all():
+            kunci = (p.marketplace, p.no_pesanan)
+            if kunci in kunci_income:
+                continue
+            d = agregat.setdefault(kunci, {
+                "marketplace": p.marketplace, "no_pesanan": p.no_pesanan,
+                "tanggal_pesanan": p.tanggal_pesanan, "status_pesanan": p.status_pesanan,
+                "produk_list": [], "subtotal": 0,
+            })
+            d["produk_list"].append(p.nama_produk)
+            d["subtotal"] += p.subtotal or 0
+            if p.tanggal_pesanan and (not d["tanggal_pesanan"] or p.tanggal_pesanan < d["tanggal_pesanan"]):
+                d["tanggal_pesanan"] = p.tanggal_pesanan
+
+        hari_ini_bi = today_wib()
+        bulan_ini_key = (hari_ini_bi.year, hari_ini_bi.month)
+
+        def klasifikasi(status, tgl):
+            if status in STATUS_BATAL_MARKETPLACE:
+                return "batal"
+            if status in STATUS_SELESAI_MARKETPLACE:
+                if tgl and (tgl.year, tgl.month) == bulan_ini_key:
+                    return "wajar"
+                return "perlu_ditelusuri"
+            return "proses"
+
+        daftar = []
+        for d in agregat.values():
+            kategori = klasifikasi(d["status_pesanan"], d["tanggal_pesanan"])
+            daftar.append({**d, "kategori": kategori, "jumlah_produk": len(d["produk_list"])})
+
+        ringkasan = {k: 0 for k in ("batal", "proses", "perlu_ditelusuri", "wajar")}
+        for d in daftar:
+            ringkasan[d["kategori"]] += 1
+
+        daftar_marketplace = sorted({d["marketplace"] for d in daftar})
+
+        if kategori_filter:
+            daftar = [d for d in daftar if d["kategori"] == kategori_filter]
+        if marketplace_filter:
+            daftar = [d for d in daftar if d["marketplace"] == marketplace_filter]
+        if cari:
+            c = cari.lower()
+            daftar = [
+                d for d in daftar
+                if c in d["no_pesanan"].lower() or any(c in prod.lower() for prod in d["produk_list"])
+            ]
+
+        daftar.sort(key=lambda d: d["tanggal_pesanan"] or date.min, reverse=True)
+
+        return render_template(
+            "marketing/profit_belum_income.html",
+            aktif="data",
+            daftar=daftar,
+            ringkasan=ringkasan,
+            kategori_filter=kategori_filter,
+            marketplace_filter=marketplace_filter,
+            daftar_marketplace=daftar_marketplace,
+            cari=cari,
         )
 
     def _daftar_produk_untuk_hpp():

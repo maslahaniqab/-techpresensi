@@ -35,8 +35,8 @@
     </div>
   </div>
   <div class="col-md-3 col-6">
-    <a href="{{ url_for('profit_order_income', cari=cari, marketplace=marketplace_filter, bulan=bulan_filter, status=status_filter, income_status='belum') }}"
-       class="card p-3 text-decoration-none {{ 'border-warning' if income_status_filter == 'belum' }}">
+    <a href="{{ url_for('profit_belum_income_detail') }}"
+       class="card p-3 text-decoration-none">
       <div class="text-muted small">Belum Ada Data Income</div>
       <div class="fs-5 fw-bold text-warning">{{ jumlah_belum_ada_income }}</div>
       <div class="text-muted small">klik untuk telusuri &rarr;</div>
@@ -51,9 +51,7 @@
       Ada {{ jumlah_belum_ada_income }} pesanan yang belum ketemu data Income-nya &mdash; biasanya karena dana belum
       dilepaskan platform, pesanan dibatalkan, atau file Income untuk periode itu belum diupload.
     </div>
-    {% if income_status_filter != 'belum' %}
-    <a href="{{ url_for('profit_order_income', cari=cari, marketplace=marketplace_filter, bulan=bulan_filter, status=status_filter, income_status='belum') }}" class="btn btn-sm btn-warning">Telusuri Pesanan Ini</a>
-    {% endif %}
+    <a href="{{ url_for('profit_belum_income_detail') }}" class="btn btn-sm btn-warning">Telusuri Pesanan Ini</a>
   </div>
   {% if breakdown_belum_income %}
   <div class="border-top pt-2 mt-1">
