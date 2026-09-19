@@ -642,7 +642,7 @@ class PesananMarketplace(db.Model):
     marketplace = db.Column(db.String(32), nullable=False)
     no_pesanan = db.Column(db.String(64), nullable=False)
     tanggal_pesanan = db.Column(db.Date, nullable=False)
-    status_pesanan = db.Column(db.String(32), default="")
+    status_pesanan = db.Column(db.String(80), default="")
     nama_produk = db.Column(db.String(256), default="")
     sku = db.Column(db.String(128), default="")
     jumlah = db.Column(db.Integer, default=0)

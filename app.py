@@ -720,7 +720,7 @@ def parse_order_shopee(headers, rows_data):
         hasil.append({
             "no_pesanan": no_pesanan,
             "tanggal_pesanan": tanggal,
-            "status_pesanan": str(ambil(row, "Status Pesanan") or "").strip()[:32],
+            "status_pesanan": str(ambil(row, "Status Pesanan") or "").strip()[:80],
             "nama_produk": nama_final.strip()[:256],
             "sku": str(ambil(row, "Nomor Referensi SKU") or "").strip()[:128],
             "jumlah": round(parse_angka_iklan(ambil(row, "Jumlah"))),
@@ -6731,6 +6731,8 @@ def create_app():
             total_jumlah_batal=total_jumlah_batal,
         )
 
+    BATAS_HARI_FOLLOWUP_KONFIRMASI = 7
+
     def _susun_belum_income(kategori_filter, marketplace_filter, cari):
         kunci_income = {
             (p.marketplace, p.no_pesanan)
@@ -6762,20 +6764,30 @@ def create_app():
                 if tgl and (tgl.year, tgl.month) == bulan_ini_key:
                     return "wajar"
                 return "perlu_ditelusuri"
+            if (status or "").lower().startswith("pesanan diterima"):
+                return "menunggu_konfirmasi"
             return "proses"
 
         daftar = []
         for d in agregat.values():
             kategori = klasifikasi(d["status_pesanan"], d["tanggal_pesanan"])
-            daftar.append({**d, "kategori": kategori, "jumlah_produk": len(d["produk_list"])})
+            umur = (hari_ini_bi - d["tanggal_pesanan"]).days if d["tanggal_pesanan"] else None
+            daftar.append({
+                **d, "kategori": kategori, "jumlah_produk": len(d["produk_list"]),
+                "umur_hari": umur,
+                "followup": kategori == "menunggu_konfirmasi" and umur is not None and umur > BATAS_HARI_FOLLOWUP_KONFIRMASI,
+            })
 
-        ringkasan = {k: 0 for k in ("batal", "proses", "perlu_ditelusuri", "wajar")}
+        ringkasan = {k: 0 for k in ("batal", "proses", "menunggu_konfirmasi", "perlu_ditelusuri", "wajar")}
+        ringkasan["followup"] = sum(1 for d in daftar if d["followup"])
         for d in daftar:
             ringkasan[d["kategori"]] += 1
 
         daftar_marketplace = sorted({d["marketplace"] for d in daftar})
 
-        if kategori_filter:
+        if kategori_filter == "followup":
+            daftar = [d for d in daftar if d["followup"]]
+        elif kategori_filter:
             daftar = [d for d in daftar if d["kategori"] == kategori_filter]
         if marketplace_filter:
             daftar = [d for d in daftar if d["marketplace"] == marketplace_filter]
@@ -6786,12 +6798,13 @@ def create_app():
                 if c in d["no_pesanan"].lower() or any(c in prod.lower() for prod in d["produk_list"])
             ]
 
-        daftar.sort(key=lambda d: d["tanggal_pesanan"] or date.min, reverse=True)
+        daftar.sort(key=lambda d: d["tanggal_pesanan"] or date.min, reverse=(kategori_filter != "followup"))
         return daftar, ringkasan, daftar_marketplace
 
     LABEL_KATEGORI_BELUM_INCOME = {
         "batal": "Dibatalkan",
-        "proses": "Belum Diterima / Diproses",
+        "proses": "Masih Dikirim / Diproses",
+        "menunggu_konfirmasi": "Sudah Sampai, Menunggu Konfirmasi Pembeli",
         "wajar": "Wajar (Bulan Berjalan)",
         "perlu_ditelusuri": "Perlu Ditelusuri",
     }
@@ -6817,6 +6830,7 @@ def create_app():
             marketplace_filter=marketplace_filter,
             daftar_marketplace=daftar_marketplace,
             cari=cari,
+            batas_hari_followup=BATAS_HARI_FOLLOWUP_KONFIRMASI,
         )
 
     @app.route("/marketing/profit/data/belum-income/download")
@@ -6832,7 +6846,7 @@ def create_app():
         ws.title = "Belum Ada Income"
         ws.append([
             "Marketplace", "No. Pesanan", "Tanggal Pesanan", "Status Asli", "Kategori",
-            "Produk", "Jumlah Produk", "Subtotal",
+            "Produk", "Jumlah Produk", "Subtotal", "Umur Pesanan (hari)", "Perlu Follow-up Pembeli",
         ])
         for d in daftar:
             ws.append([
@@ -6840,8 +6854,9 @@ def create_app():
                 d["tanggal_pesanan"].strftime("%d/%m/%Y") if d["tanggal_pesanan"] else "",
                 d["status_pesanan"], LABEL_KATEGORI_BELUM_INCOME[d["kategori"]],
                 " | ".join(d["produk_list"]), d["jumlah_produk"], d["subtotal"],
+                d["umur_hari"] if d["umur_hari"] is not None else "", "Ya" if d["followup"] else "",
             ])
-        for kolom, lebar in zip("ABCDEFGH", (14, 24, 16, 24, 26, 60, 14, 14)):
+        for kolom, lebar in zip("ABCDEFGHIJ", (14, 24, 16, 34, 40, 60, 14, 14, 18, 22)):
             ws.column_dimensions[kolom].width = lebar
         ws.freeze_panes = "A2"
 
