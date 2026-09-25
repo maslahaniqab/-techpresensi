@@ -3446,6 +3446,34 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     # ---------- INVENTORY: PERMOHONAN PENGADAAN BARANG ----------
+    def baca_item_permohonan_form():
+        items = []
+        warna_list = request.form.getlist("warna[]")
+        qty_list = request.form.getlist("qty[]")
+        for i, pid in enumerate(request.form.getlist("produk_id[]")):
+            produk = db.session.get(Produk, int(pid)) if pid.isdigit() else None
+            qty = max(int(parse_angka_iklan(qty_list[i])), 0) if i < len(qty_list) else 0
+            if not produk or qty <= 0:
+                continue
+            items.append({
+                "produk_id": produk.id, "qty": qty,
+                "warna": warna_list[i].strip() if i < len(warna_list) else "",
+            })
+        return items
+
+    def wa_link_permohonan(p):
+        """Link WhatsApp berisi pesan siap kirim; nomor tujuan dikosongkan supaya pengirim
+        bisa memilih grup sendiri (WhatsApp tidak menyediakan link langsung ke grup)."""
+        pesan = (
+            "*PENTING - PERMOHONAN PRODUK*\n"
+            f"No: {p.nomor_permohonan}\nTanggal: {p.tanggal.strftime('%d/%m/%Y')}\n"
+            f"PIC: {p.pemohon_nama or '-'}\n\n"
+            f"Produk ({len(p.item_list)} item, total {p.total_qty} pcs):\n{teks_item_permohonan(p)}\n\n"
+            f"Status: {p.status}"
+            + (f"\nCatatan: {p.catatan}" if p.catatan and p.status in STATUS_PERMOHONAN_BUTUH_CATATAN else "")
+        )
+        return f"https://wa.me/?text={quote(pesan)}"
+
     def teks_item_permohonan(p):
         return "\n".join(
             f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}"
@@ -3521,18 +3549,7 @@ def create_app():
             except ValueError:
                 tanggal = today_wib()
 
-            items = []
-            warna_list = request.form.getlist("warna[]")
-            qty_list = request.form.getlist("qty[]")
-            for i, pid in enumerate(request.form.getlist("produk_id[]")):
-                produk = db.session.get(Produk, int(pid)) if pid.isdigit() else None
-                qty = max(int(parse_angka_iklan(qty_list[i])), 0) if i < len(qty_list) else 0
-                if not produk or qty <= 0:
-                    continue
-                items.append({
-                    "produk_id": produk.id, "qty": qty,
-                    "warna": warna_list[i].strip() if i < len(warna_list) else "",
-                })
+            items = baca_item_permohonan_form()
             if not items:
                 flash("Pilih minimal 1 Produk dan isi Qty (harus lebih dari 0).", "danger")
                 return redirect(url_for("permohonan_barang_list"))
@@ -3571,7 +3588,7 @@ def create_app():
                         f"Permohonan masuk ke Kotak Masuk {jumlah_sv} Supervisor, tetapi email gagal dikirim: "
                         f"{hasil_email[1] if hasil_email else 'tidak diketahui'}", "warning",
                     )
-            return redirect(url_for("permohonan_barang_list"))
+            return redirect(url_for("permohonan_barang_list", wa=p.id))
 
         q = request.args.get("q", "").strip()
         query = PermohonanBarang.query
@@ -3579,11 +3596,41 @@ def create_app():
             query = query.filter(PermohonanBarang.nomor_permohonan.ilike(f"%{q}%"))
         daftar = query.order_by(PermohonanBarang.tanggal.desc(), PermohonanBarang.id.desc()).all()
         daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
+        wa_links = {p.id: wa_link_permohonan(p) for p in daftar}
+        wa_baru_id = request.args.get("wa", type=int)
+        data_edit = {
+            p.id: {
+                "nomor": p.nomor_permohonan, "tanggal": p.tanggal.isoformat(),
+                "items": [{"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty} for it in p.item_list],
+            }
+            for p in daftar
+        } if current_user.role == "admin" else {}
         return render_template(
             "inventory/permohonan_barang_list.html",
             daftar=daftar, daftar_produk=daftar_produk, tanggal_hari_ini=today_wib().isoformat(), q=q,
             status_list=STATUS_PERMOHONAN, status_butuh_catatan=STATUS_PERMOHONAN_BUTUH_CATATAN,
+            wa_links=wa_links, wa_baru=next((p for p in daftar if p.id == wa_baru_id), None), data_edit=data_edit,
         )
+
+    @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/edit", methods=["POST"])
+    @admin_required
+    def permohonan_barang_edit(permohonan_id):
+        p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
+        items = baca_item_permohonan_form()
+        if not items:
+            flash("Pilih minimal 1 Produk dan isi Qty (harus lebih dari 0).", "danger")
+            return redirect(url_for("permohonan_barang_list"))
+        try:
+            p.tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            pass
+        p.item_list = [PermohonanBarangItem(**it) for it in items]
+        p.produk_id = items[0]["produk_id"]
+        p.warna = items[0]["warna"]
+        p.qty = sum(it["qty"] for it in items)
+        db.session.commit()
+        flash(f"Permohonan {p.nomor_permohonan} berhasil diubah.", "success")
+        return redirect(url_for("permohonan_barang_list"))
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/status", methods=["POST"])
     @modul_required("permohonan_barang")

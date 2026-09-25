@@ -14,6 +14,13 @@
   {% endif %}
 </div>
 
+{% if wa_baru %}
+<div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>Permohonan <strong>{{ wa_baru.nomor_permohonan }}</strong> tersimpan. Kirim juga ke grup WhatsApp?</div>
+  <a href="{{ wa_links[wa_baru.id] }}" target="_blank" rel="noopener" class="btn btn-success btn-sm">Kirim ke WhatsApp</a>
+</div>
+{% endif %}
+
 <form method="get" class="card p-2 mb-3">
   <div class="input-group">
     <input type="text" name="q" class="form-control" placeholder="Cari nomor permohonan..." value="{{ q }}">
@@ -56,6 +63,10 @@
           {% if p.catatan and p.status in status_butuh_catatan %}<div class="small text-danger mt-1">{{ p.catatan }}</div>{% endif %}
         </td>
         <td class="text-end text-nowrap">
+          <a href="{{ wa_links[p.id] }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" title="Kirim ke WhatsApp (pilih grup)">WA</a>
+          {% if current_user.role == 'admin' %}
+          <button type="button" class="btn btn-sm btn-outline-primary btn-edit-pb" data-id="{{ p.id }}">Edit</button>
+          {% endif %}
           <div class="dropdown d-inline-block">
             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}'>Ubah Status</button>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -85,6 +96,42 @@
   </table>
   </div>
 </div>
+
+{% if current_user.role == 'admin' %}
+<div class="modal fade" id="modalEditPermohonan" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <form method="post" action="" id="formEditPB" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Permohonan <span id="editNomorPB"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Tanggal *</label>
+            <input type="date" name="tanggal" id="editTanggalPB" class="form-control" required>
+          </div>
+          <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small mb-0">Daftar Produk *</label>
+              <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahProdukEditPB">+ Tambah Produk</button>
+            </div>
+            <table class="table table-sm align-middle mb-0">
+              <thead><tr><th>Nama Produk</th><th style="width:20%;">Warna</th><th style="width:14%;">Qty</th><th style="width:36px;"></th></tr></thead>
+              <tbody id="tbodyProdukEditPB"></tbody>
+            </table>
+            <div class="form-text">Status permohonan tidak berubah saat diedit.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <div class="modal fade" id="modalTambahPermohonan" tabindex="-1">
   <div class="modal-dialog modal-lg">
@@ -128,10 +175,9 @@
 document.addEventListener("DOMContentLoaded", function () {
   var PRODUK = {{ daftar_produk | map(attribute='nama_produk') | list | tojson }};
   var IDS = {{ daftar_produk | map(attribute='id') | list | tojson }};
-  var tbody = document.getElementById("tbodyProdukPB");
-  if (!tbody) return;
+  {% if current_user.role == 'admin' %}var DATA_EDIT = {{ data_edit | tojson }};{% endif %}
 
-  function tambahBaris() {
+  function tambahBaris(tbody, item) {
     var opsi = '<option value="">Pilih produk...</option>';
     for (var i = 0; i < IDS.length; i++) {
       opsi += '<option value="' + IDS[i] + '">' + PRODUK[i].replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</option>';
@@ -143,15 +189,49 @@ document.addEventListener("DOMContentLoaded", function () {
       '<td><input type="number" min="1" step="1" name="qty[]" class="form-control form-control-sm" placeholder="50" required></td>' +
       '<td><button type="button" class="btn btn-sm btn-link text-danger p-0 btn-hapus-baris">&times;</button></td>';
     tbody.appendChild(tr);
-    if (window.initProdukSearch) window.initProdukSearch(tr.querySelector("select"));
+    var sel = tr.querySelector("select");
+    if (window.initProdukSearch) window.initProdukSearch(sel);
+    if (item) {
+      if (sel._choicesInstance) sel._choicesInstance.setChoiceByValue(String(item.produk_id));
+      else sel.value = String(item.produk_id);
+      tr.querySelector('[name="warna[]"]').value = item.warna || "";
+      tr.querySelector('[name="qty[]"]').value = item.qty;
+    }
   }
 
-  document.getElementById("btnTambahProdukPB").addEventListener("click", tambahBaris);
-  tbody.addEventListener("click", function (e) {
-    if (!e.target.classList.contains("btn-hapus-baris")) return;
-    if (tbody.children.length > 1) e.target.closest("tr").remove();
-  });
-  tambahBaris();
+  function pasangTabel(tbody, tombolTambah) {
+    document.getElementById(tombolTambah).addEventListener("click", function () { tambahBaris(tbody); });
+    tbody.addEventListener("click", function (e) {
+      if (!e.target.classList.contains("btn-hapus-baris")) return;
+      if (tbody.children.length > 1) e.target.closest("tr").remove();
+    });
+  }
+
+  var tbodyBaru = document.getElementById("tbodyProdukPB");
+  if (tbodyBaru) {
+    pasangTabel(tbodyBaru, "btnTambahProdukPB");
+    tambahBaris(tbodyBaru);
+  }
+
+  {% if current_user.role == 'admin' %}
+  var tbodyEdit = document.getElementById("tbodyProdukEditPB");
+  if (tbodyEdit) {
+    pasangTabel(tbodyEdit, "btnTambahProdukEditPB");
+    var modalEdit = new bootstrap.Modal(document.getElementById("modalEditPermohonan"));
+    document.querySelectorAll(".btn-edit-pb").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var d = DATA_EDIT[btn.dataset.id];
+        if (!d) return;
+        document.getElementById("formEditPB").action = "{{ url_for('permohonan_barang_list') }}/" + btn.dataset.id + "/edit";
+        document.getElementById("editNomorPB").textContent = d.nomor;
+        document.getElementById("editTanggalPB").value = d.tanggal;
+        tbodyEdit.innerHTML = "";
+        d.items.forEach(function (it) { tambahBaris(tbodyEdit, it); });
+        modalEdit.show();
+      });
+    });
+  }
+  {% endif %}
 });
 </script>
 
