@@ -21,11 +21,27 @@
     <tr><td class="label">No Permohonan</td><td>{{ p.nomor_permohonan }}</td></tr>
     <tr><td class="label">Tanggal Pengajuan</td><td>{{ p.tanggal.strftime("%d/%m/%Y") }}</td></tr>
     <tr><td class="label">PIC (Pengaju)</td><td>{{ p.pemohon_nama or "-" }}</td></tr>
-    <tr><td class="label">Produk</td><td>{{ p.produk.nama_produk }}</td></tr>
-    <tr><td class="label">SKU</td><td>{{ p.produk.sku or "-" }}</td></tr>
-    <tr><td class="label">Warna</td><td>{{ p.warna or "-" }}</td></tr>
-    <tr><td class="label">Qty</td><td>{{ p.qty }} pcs</td></tr>
+    <tr><td class="label">Total Qty</td><td>{{ p.total_qty }} pcs ({{ p.item_list | length }} produk)</td></tr>
     <tr><td class="label">Status</td><td>{{ p.status }}</td></tr>
+  </table>
+
+  <table class="data">
+    <tr>
+      <td class="label" style="width:6%;">No</td>
+      <td class="label" style="width:50%;">Produk</td>
+      <td class="label">SKU</td>
+      <td class="label">Warna</td>
+      <td class="label" style="width:10%;">Qty</td>
+    </tr>
+    {% for it in p.item_list %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ it.produk.nama_produk }}</td>
+      <td>{{ it.produk.sku or "-" }}</td>
+      <td>{{ it.warna or "-" }}</td>
+      <td>{{ it.qty }}</td>
+    </tr>
+    {% endfor %}
   </table>
 
   <div class="foot">Dokumen ini dibuat otomatis oleh Maslaha Portal. Permohonan yang sama juga tersedia di Kotak Masuk portal.</div>

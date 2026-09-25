@@ -704,7 +704,28 @@ class PermohonanBarang(db.Model):
     status = db.Column(db.String(16), nullable=False, default="Menunggu")  # Menunggu/Diproses/Selesai/Ditolak
     pemohon_id = db.Column(db.Integer, db.ForeignKey("employee.id"))  # PIC (karyawan pengaju); kosong kalau diajukan admin
     pemohon_nama = db.Column(db.String(128))
+    catatan = db.Column(db.String(256))  # alasan kalau status Kendala Bahan / Ditolak
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    # produk_id/warna/qty di atas = item pertama & total qty (sisa dari versi 1-produk per pengajuan);
+    # daftar produk sebenarnya ada di item_list.
+    produk = db.relationship("Produk")
+    item_list = db.relationship(
+        "PermohonanBarangItem", backref="permohonan", cascade="all, delete-orphan",
+        order_by="PermohonanBarangItem.id",
+    )
+
+    @property
+    def total_qty(self):
+        return sum(it.qty or 0 for it in self.item_list)
+
+
+class PermohonanBarangItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    permohonan_id = db.Column(db.Integer, db.ForeignKey("permohonan_barang.id"), nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    warna = db.Column(db.String(64))
+    qty = db.Column(db.Integer, nullable=False, default=0)
 
     produk = db.relationship("Produk")
 
@@ -719,7 +740,7 @@ class Notifikasi(db.Model):
     dibaca = db.Column(db.Boolean, nullable=False, default=False)
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
-    permohonan = db.relationship("PermohonanBarang")
+    permohonan = db.relationship("PermohonanBarang", foreign_keys=[permohonan_id])
 
 
 class PengajuanLembur(db.Model):

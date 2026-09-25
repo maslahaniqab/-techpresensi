@@ -47,8 +47,11 @@ from models import (
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
-    KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi,
+    KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi, PermohonanBarangItem,
 )
+
+STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
+STATUS_PERMOHONAN_BUTUH_CATATAN = ("Kendala Bahan", "Ditolak")
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 YARD_KE_METER = 0.9144  # konversi resmi 1 Yard = 0.9144 Meter
@@ -1680,6 +1683,12 @@ def create_app():
         if "pemohon_nama" not in kolom_pb:
             db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_nama VARCHAR(128)"))
             db.session.commit()
+        if "catatan" not in kolom_pb:
+            db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN catatan VARCHAR(256)"))
+            db.session.commit()
+        for pb in PermohonanBarang.query.filter(~PermohonanBarang.item_list.any()).all():
+            db.session.add(PermohonanBarangItem(permohonan_id=pb.id, produk_id=pb.produk_id, warna=pb.warna, qty=pb.qty))
+        db.session.commit()
         if "no_resi" not in kolom_pm:
             db.session.execute(db.text("ALTER TABLE pesanan_manual ADD COLUMN no_resi VARCHAR(64)"))
             db.session.commit()
@@ -3437,6 +3446,12 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     # ---------- INVENTORY: PERMOHONAN PENGADAAN BARANG ----------
+    def teks_item_permohonan(p):
+        return "\n".join(
+            f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}"
+            for it in p.item_list
+        )
+
     def kirim_email_permohonan(p, penerima_email):
         smtp_email = os.environ.get("SMTP_EMAIL")
         smtp_password = os.environ.get("SMTP_APP_PASSWORD")
@@ -3456,10 +3471,8 @@ def create_app():
             "PENTING - Ada permohonan produk baru yang perlu ditinjau.\n\n"
             f"No Permohonan: {p.nomor_permohonan}\n"
             f"PIC (pengaju): {p.pemohon_nama or '-'}\n"
-            f"Produk: {p.produk.nama_produk}\n"
-            f"Warna: {p.warna or '-'}\n"
-            f"Qty: {p.qty}\n"
-            f"Tanggal: {p.tanggal.strftime('%d-%m-%Y')}\n\n"
+            f"Tanggal: {p.tanggal.strftime('%d-%m-%Y')}\n"
+            f"Produk ({len(p.item_list)} item, total {p.total_qty} pcs):\n{teks_item_permohonan(p)}\n\n"
             "Rincian lengkap ada di file PDF terlampir. Permohonan ini juga sudah masuk ke Kotak Masuk "
             "di Maslaha Portal."
         )
@@ -3486,8 +3499,8 @@ def create_app():
             return 0, None
         isi = (
             f"No Permohonan: {p.nomor_permohonan}\nPIC (pengaju): {p.pemohon_nama or '-'}\n"
-            f"Produk: {p.produk.nama_produk}\nWarna: {p.warna or '-'}\nQty: {p.qty}\n"
-            f"Tanggal: {p.tanggal.strftime('%d/%m/%Y')}"
+            f"Tanggal: {p.tanggal.strftime('%d/%m/%Y')}\n"
+            f"Produk ({len(p.item_list)} item, total {p.total_qty} pcs):\n{teks_item_permohonan(p)}"
         )
         for e in supervisor:
             db.session.add(Notifikasi(
@@ -3503,17 +3516,25 @@ def create_app():
     @modul_required("permohonan_barang")
     def permohonan_barang_list():
         if request.method == "POST":
-            produk_id = request.form.get("produk_id", type=int)
-            produk = db.session.get(Produk, produk_id) if produk_id else None
-            warna = request.form.get("warna", "").strip()
-            qty = int(parse_angka_iklan(request.form.get("qty")))
             try:
                 tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
             except ValueError:
                 tanggal = today_wib()
 
-            if not produk or qty <= 0:
-                flash("Pilih Nama Produk dan isi Qty (harus lebih dari 0).", "danger")
+            items = []
+            warna_list = request.form.getlist("warna[]")
+            qty_list = request.form.getlist("qty[]")
+            for i, pid in enumerate(request.form.getlist("produk_id[]")):
+                produk = db.session.get(Produk, int(pid)) if pid.isdigit() else None
+                qty = max(int(parse_angka_iklan(qty_list[i])), 0) if i < len(qty_list) else 0
+                if not produk or qty <= 0:
+                    continue
+                items.append({
+                    "produk_id": produk.id, "qty": qty,
+                    "warna": warna_list[i].strip() if i < len(warna_list) else "",
+                })
+            if not items:
+                flash("Pilih minimal 1 Produk dan isi Qty (harus lebih dari 0).", "danger")
                 return redirect(url_for("permohonan_barang_list"))
 
             # Urutan (global) dihitung SEBELUM baris baru ini dibuat, biar nggak ikut
@@ -3524,10 +3545,11 @@ def create_app():
                 # bawah -- placeholder unik dulu di sini biar kolom unique nggak bentrok
                 # sebelum di-flush.
                 nomor_permohonan=f"TEMP-{uuid.uuid4().hex}", tanggal=tanggal,
-                produk_id=produk.id, warna=warna, qty=qty,
+                produk_id=items[0]["produk_id"], warna=items[0]["warna"], qty=sum(it["qty"] for it in items),
                 pemohon_id=current_user.id if current_user.role == "pegawai" else None,
                 pemohon_nama=current_user.nama,
             )
+            p.item_list = [PermohonanBarangItem(**it) for it in items]
             db.session.add(p)
             db.session.flush()
             while True:
@@ -3537,7 +3559,7 @@ def create_app():
                     break
             p.nomor_permohonan = nomor
             db.session.commit()
-            flash(f"Permohonan {nomor} berhasil diajukan.", "success")
+            flash(f"Permohonan {nomor} berhasil diajukan ({len(items)} produk).", "success")
             if current_user.role == "pegawai":
                 jumlah_sv, hasil_email = teruskan_permohonan_ke_supervisor(p)
                 if not jumlah_sv:
@@ -3560,6 +3582,7 @@ def create_app():
         return render_template(
             "inventory/permohonan_barang_list.html",
             daftar=daftar, daftar_produk=daftar_produk, tanggal_hari_ini=today_wib().isoformat(), q=q,
+            status_list=STATUS_PERMOHONAN, status_butuh_catatan=STATUS_PERMOHONAN_BUTUH_CATATAN,
         )
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/status", methods=["POST"])
@@ -3567,10 +3590,15 @@ def create_app():
     def permohonan_barang_status_update(permohonan_id):
         p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
         status = request.form.get("status", "")
-        if status not in ("Menunggu", "Diproses", "Selesai", "Ditolak"):
+        if status not in STATUS_PERMOHONAN:
             flash("Status tidak valid.", "danger")
             return redirect(url_for("permohonan_barang_list"))
         p.status = status
+        catatan = request.form.get("catatan", "").strip()[:256]
+        if status in STATUS_PERMOHONAN_BUTUH_CATATAN:
+            p.catatan = catatan or p.catatan
+        elif status == "Menunggu":
+            p.catatan = None
         db.session.commit()
         flash(f"Status permohonan {p.nomor_permohonan} diubah jadi {status}.", "success")
         return redirect(url_for("permohonan_barang_list"))
