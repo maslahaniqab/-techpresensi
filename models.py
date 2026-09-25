@@ -717,8 +717,8 @@ class PermohonanBarang(db.Model):
 
     @property
     def total_qty(self):
-        """Total qty produk yang masih diproses (produk yang ditolak tidak dihitung)."""
-        return sum(it.qty or 0 for it in self.item_list if not it.ditolak)
+        """Total qty produk yang masih aktif (produk berstatus Ditolak tidak dihitung)."""
+        return sum(it.qty or 0 for it in self.item_list if it.status != "Ditolak")
 
 
 class PermohonanBarangItem(db.Model):
@@ -727,8 +727,9 @@ class PermohonanBarangItem(db.Model):
     produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
     warna = db.Column(db.String(64))
     qty = db.Column(db.Integer, nullable=False, default=0)
-    ditolak = db.Column(db.Boolean, nullable=False, default=False)
-    alasan_tolak = db.Column(db.String(256))
+    # Menunggu / Diproses (dicentang utk diproduksi) / Kendala Bahan / Ditolak (dikembalikan ke pengajuan)
+    status = db.Column(db.String(16), nullable=False, default="Menunggu")
+    alasan_tolak = db.Column(db.String(256))  # alasan/catatan saat dikembalikan ke pengajuan
 
     produk = db.relationship("Produk")
 

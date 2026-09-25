@@ -50,19 +50,14 @@
         <td class="small text-muted">{{ loop.index }}</td>
         <td class="fw-semibold small">{{ p.nomor_permohonan }}</td>
         <td class="small">
+          {% set item_bg = {"Diproses": "#cfe2ff", "Kendala Bahan": "#f8d7da", "Ditolak": "#e2e3e5"} %}
           {% for it in p.item_list %}
-          <form method="post" action="{{ url_for('permohonan_barang_item_tolak', item_id=it.id) }}" class="d-flex align-items-start gap-2 form-tolak-item">
-            <input type="hidden" name="ditolak" value="">
-            <input type="hidden" name="alasan" value="">
-            <input type="checkbox" class="form-check-input mt-1 chk-tolak" title="Centang jika produk ini ditolak" {{ 'checked' if it.ditolak }}
-                   data-nama="{{ it.produk.nama_produk }}">
-            <div class="{{ 'text-decoration-line-through text-muted' if it.ditolak }}">
-              {{ it.produk.nama_produk }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span>
-              {% if it.ditolak %}<div class="text-danger" style="text-decoration:none; display:inline-block;">&mdash; DITOLAK: {{ it.alasan_tolak }}</div>{% endif %}
-            </div>
-          </form>
+          <div class="mb-1">
+            <span class="{{ 'text-decoration-line-through text-muted' if it.status == 'Ditolak' }}">{{ it.produk.nama_produk }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span></span>
+            {% if it.status != 'Menunggu' %}<span class="badge" style="background-color: {{ item_bg.get(it.status, '#eee') }}; color:#212529;">{{ 'Akan diproduksi' if it.status == 'Diproses' else it.status }}</span>{% endif %}
+            {% if it.alasan_tolak and it.status in ('Kendala Bahan', 'Ditolak') %}<div class="text-danger" style="font-size:.78rem;">{{ it.alasan_tolak }}</div>{% endif %}
+          </div>
           {% endfor %}
-          <div class="text-muted" style="font-size:.75rem;">Centang kotak di depan produk yang ditolak.</div>
         </td>
         <td class="text-end small fw-semibold">{{ p.total_qty }}</td>
         <td class="small text-nowrap">{{ p.pemohon_nama or "-" }}</td>
@@ -73,6 +68,7 @@
           {% if p.catatan and p.status in status_butuh_catatan %}<div class="small text-danger mt-1">{{ p.catatan }}</div>{% endif %}
         </td>
         <td class="text-end text-nowrap">
+          <button type="button" class="btn btn-sm btn-primary btn-proses-pb" data-id="{{ p.id }}">Proses</button>
           <a href="{{ wa_links[p.id] }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" title="Kirim ke WhatsApp (pilih grup)">WA</a>
           {% if current_user.role == 'admin' %}
           <button type="button" class="btn btn-sm btn-outline-primary btn-edit-pb" data-id="{{ p.id }}">Edit</button>
@@ -143,6 +139,42 @@
 </div>
 {% endif %}
 
+<div class="modal fade" id="modalProsesPermohonan" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <form method="post" action="" id="formProsesPB" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Proses Permohonan <span id="prosesNomorPB"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">Centang produk yang <strong>akan diproduksi</strong>. Produk yang tidak dicentang dikembalikan ke pengajuan dengan status pilihan Anda, dan pengaju diberi popup pemberitahuan.</p>
+        <table class="table table-sm align-middle">
+          <thead><tr><th style="width:40px;"><input type="checkbox" class="form-check-input" id="prosesCentangSemua" checked title="Centang semua"></th><th>Produk</th><th>Warna</th><th class="text-end">Qty</th><th>Status Sekarang</th></tr></thead>
+          <tbody id="tbodyProsesPB"></tbody>
+        </table>
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label small mb-1">Status produk yang tidak dicentang</label>
+            <select name="status_sisa" id="prosesStatusSisa" class="form-select">
+              {% for st in status_item_kembali %}
+              <option value="{{ st }}">{{ 'Menunggu (kembali ke pengajuan)' if st == 'Menunggu' else st }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-7">
+            <label class="form-label small mb-1">Alasan <span class="text-muted small">(wajib untuk Kendala Bahan / Ditolak)</span></label>
+            <input type="text" name="alasan" id="prosesAlasan" class="form-control" maxlength="256" placeholder="mis. kain Crinkle Hitam habis">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Simpan</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="modal fade" id="modalTambahPermohonan" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <form method="post" action="{{ url_for('permohonan_barang_list') }}" class="modal-content">
@@ -209,20 +241,34 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  document.querySelectorAll(".chk-tolak").forEach(function (chk) {
-    chk.addEventListener("change", function () {
-      var form = chk.closest("form");
-      if (chk.checked) {
-        var alasan = prompt("Alasan menolak produk \"" + chk.dataset.nama + "\"? (pengaju akan diberi pemberitahuan)");
-        if (alasan === null) { chk.checked = false; return; }
-        form.ditolak.value = "1";
-        form.alasan.value = alasan;
-      } else {
-        if (!confirm("Batalkan penolakan produk ini?")) { chk.checked = true; return; }
-        form.ditolak.value = "0";
-      }
-      form.submit();
+  var DATA_PROSES = {{ data_proses | tojson }};
+  var modalProses = new bootstrap.Modal(document.getElementById("modalProsesPermohonan"));
+  var tbodyProses = document.getElementById("tbodyProsesPB");
+  document.querySelectorAll(".btn-proses-pb").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var d = DATA_PROSES[btn.dataset.id];
+      if (!d) return;
+      document.getElementById("formProsesPB").action = "{{ url_for('permohonan_barang_list') }}/" + btn.dataset.id + "/proses";
+      document.getElementById("prosesNomorPB").textContent = d.nomor;
+      document.getElementById("prosesAlasan").value = "";
+      document.getElementById("prosesStatusSisa").value = "Menunggu";
+      document.getElementById("prosesCentangSemua").checked = d.items.every(function (it) { return it.centang; });
+      tbodyProses.innerHTML = "";
+      d.items.forEach(function (it) {
+        var tr = document.createElement("tr");
+        var cb = document.createElement("input");
+        cb.type = "checkbox"; cb.name = "item_id[]"; cb.value = it.id; cb.checked = it.centang; cb.className = "form-check-input";
+        var td0 = document.createElement("td"); td0.appendChild(cb); tr.appendChild(td0);
+        [it.nama, it.warna || "-", it.qty, it.status === "Diproses" ? "Akan diproduksi" : it.status].forEach(function (teks, i) {
+          var td = document.createElement("td"); td.textContent = teks; td.className = "small" + (i === 2 ? " text-end" : ""); tr.appendChild(td);
+        });
+        tbodyProses.appendChild(tr);
+      });
+      modalProses.show();
     });
+  });
+  document.getElementById("prosesCentangSemua").addEventListener("change", function (e) {
+    tbodyProses.querySelectorAll("input[type=checkbox]").forEach(function (c) { c.checked = e.target.checked; });
   });
 
   function pasangTabel(tbody, tombolTambah) {

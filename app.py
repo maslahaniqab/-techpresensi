@@ -52,6 +52,7 @@ from models import (
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
 STATUS_PERMOHONAN_BUTUH_CATATAN = ("Kendala Bahan", "Ditolak")
+STATUS_ITEM_KEMBALI = ("Menunggu", "Kendala Bahan", "Ditolak")
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 YARD_KE_METER = 0.9144  # konversi resmi 1 Yard = 0.9144 Meter
@@ -1684,9 +1685,12 @@ def create_app():
             db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_nama VARCHAR(128)"))
             db.session.commit()
         kolom_pbi = {c["name"] for c in db.inspect(db.engine).get_columns("permohonan_barang_item")}
-        if "ditolak" not in kolom_pbi:
-            db.session.execute(db.text("ALTER TABLE permohonan_barang_item ADD COLUMN ditolak BOOLEAN NOT NULL DEFAULT 0"))
+        if "status" not in kolom_pbi:
+            db.session.execute(db.text("ALTER TABLE permohonan_barang_item ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'Menunggu'"))
             db.session.commit()
+            if "ditolak" in kolom_pbi:  # sisa versi checkbox "ditolak" sebelumnya
+                db.session.execute(db.text("UPDATE permohonan_barang_item SET status = 'Ditolak' WHERE ditolak = 1"))
+                db.session.commit()
         if "alasan_tolak" not in kolom_pbi:
             db.session.execute(db.text("ALTER TABLE permohonan_barang_item ADD COLUMN alasan_tolak VARCHAR(256)"))
             db.session.commit()
@@ -3609,6 +3613,17 @@ def create_app():
         daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
         wa_links = {p.id: wa_link_permohonan(p) for p in daftar}
         wa_baru_id = request.args.get("wa", type=int)
+        data_proses = {
+            p.id: {
+                "nomor": p.nomor_permohonan,
+                "items": [
+                    {"id": it.id, "nama": it.produk.nama_produk, "warna": it.warna or "", "qty": it.qty,
+                     "status": it.status, "centang": it.status in ("Menunggu", "Diproses")}
+                    for it in p.item_list
+                ],
+            }
+            for p in daftar
+        }
         data_edit = {
             p.id: {
                 "nomor": p.nomor_permohonan, "tanggal": p.tanggal.isoformat(),
@@ -3621,6 +3636,7 @@ def create_app():
             daftar=daftar, daftar_produk=daftar_produk, tanggal_hari_ini=today_wib().isoformat(), q=q,
             status_list=STATUS_PERMOHONAN, status_butuh_catatan=STATUS_PERMOHONAN_BUTUH_CATATAN,
             wa_links=wa_links, wa_baru=next((p for p in daftar if p.id == wa_baru_id), None), data_edit=data_edit,
+            data_proses=data_proses, status_item_kembali=STATUS_ITEM_KEMBALI,
         )
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/edit", methods=["POST"])
@@ -3635,13 +3651,13 @@ def create_app():
             p.tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
         except ValueError:
             pass
-        lama = {(it.produk_id, it.warna or ""): it for it in p.item_list if it.ditolak}
+        lama = {(it.produk_id, it.warna or ""): it for it in p.item_list if it.status != "Menunggu"}
         baru = []
         for it in items:
             item = PermohonanBarangItem(**it)
             sebelumnya = lama.get((it["produk_id"], it["warna"]))
             if sebelumnya:
-                item.ditolak, item.alasan_tolak = True, sebelumnya.alasan_tolak
+                item.status, item.alasan_tolak = sebelumnya.status, sebelumnya.alasan_tolak
             baru.append(item)
         p.item_list = baru
         p.produk_id = items[0]["produk_id"]
@@ -3669,35 +3685,59 @@ def create_app():
         flash(f"Status permohonan {p.nomor_permohonan} diubah jadi {status}.", "success")
         return redirect(url_for("permohonan_barang_list"))
 
-    @app.route("/inventory/master-data/permohonan-barang/item/<int:item_id>/tolak", methods=["POST"])
+    @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/proses", methods=["POST"])
     @modul_required("permohonan_barang")
-    def permohonan_barang_item_tolak(item_id):
-        item = db.session.get(PermohonanBarangItem, item_id) or abort_404()
-        p = item.permohonan
-        tolak = request.form.get("ditolak") == "1"
+    def permohonan_barang_proses(permohonan_id):
+        """Produk yang DICENTANG = akan diproduksi (status Diproses). Yang tidak dicentang
+        dikembalikan ke pengajuan dengan status pilihan (Menunggu/Kendala Bahan/Ditolak)."""
+        p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
+        dipilih = {int(x) for x in request.form.getlist("item_id[]") if x.isdigit()}
+        status_sisa = request.form.get("status_sisa", "Menunggu")
         alasan = request.form.get("alasan", "").strip()[:256]
-        marker = "Semua produk ditolak"
-        if tolak:
-            item.ditolak, item.alasan_tolak = True, alasan or "Tanpa keterangan"
-            if all(it.ditolak for it in p.item_list):
-                p.status, p.catatan = "Ditolak", marker
-            flash(f"Produk {item.produk.nama_produk} pada {p.nomor_permohonan} ditandai DITOLAK.", "warning")
-            if p.pemohon_id and not (current_user.role == "pegawai" and current_user.id == p.pemohon_id):
-                db.session.add(Notifikasi(
-                    employee_id=p.pemohon_id, permohonan_id=p.id, popup=True,
-                    judul=f"Produk ditolak: {item.produk.nama_produk}",
-                    isi=(
-                        f"Permohonan {p.nomor_permohonan} (tgl {p.tanggal.strftime('%d/%m/%Y')})\n"
-                        f"Produk: {item.produk.nama_produk}" + (f" ({item.warna})" if item.warna else "") + f" x {item.qty}\n"
-                        f"Alasan: {item.alasan_tolak}\nDitolak oleh: {current_user.nama}"
-                    ),
-                ))
+        if status_sisa not in STATUS_ITEM_KEMBALI:
+            flash("Status untuk produk yang tidak dicentang tidak valid.", "danger")
+            return redirect(url_for("permohonan_barang_list"))
+        kembali = [it for it in p.item_list if it.id not in dipilih]
+        if kembali and status_sisa in STATUS_PERMOHONAN_BUTUH_CATATAN and not alasan:
+            flash("Isi alasan untuk produk yang dikembalikan ke pengajuan.", "danger")
+            return redirect(url_for("permohonan_barang_list"))
+
+        for it in p.item_list:
+            if it.id in dipilih:
+                it.status, it.alasan_tolak = "Diproses", None
+            else:
+                it.status, it.alasan_tolak = status_sisa, alasan or None
+
+        daftar_status = [it.status for it in p.item_list]
+        if "Diproses" in daftar_status:
+            p.status = "Diproses"
+        elif all(st == "Ditolak" for st in daftar_status):
+            p.status = "Ditolak"
+        elif "Kendala Bahan" in daftar_status:
+            p.status = "Kendala Bahan"
         else:
-            item.ditolak, item.alasan_tolak = False, None
-            if p.status == "Ditolak" and p.catatan == marker:
-                p.status, p.catatan = "Menunggu", None
-            flash(f"Penolakan produk {item.produk.nama_produk} dibatalkan.", "info")
+            p.status = "Menunggu"
+        p.catatan = alasan if kembali and p.status in STATUS_PERMOHONAN_BUTUH_CATATAN else None
+
+        if kembali and p.pemohon_id and not (current_user.role == "pegawai" and current_user.id == p.pemohon_id):
+            daftar_teks = "\n".join(
+                f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in kembali
+            )
+            db.session.add(Notifikasi(
+                employee_id=p.pemohon_id, permohonan_id=p.id, popup=True,
+                judul=f"{len(kembali)} produk dikembalikan ke pengajuan ({status_sisa})",
+                isi=(
+                    f"Permohonan {p.nomor_permohonan} (tgl {p.tanggal.strftime('%d/%m/%Y')})\n"
+                    f"Produk yang tidak diproduksi:\n{daftar_teks}\n"
+                    f"Status: {status_sisa}" + (f"\nAlasan: {alasan}" if alasan else "")
+                    + f"\nDiputuskan oleh: {current_user.nama}"
+                ),
+            ))
         db.session.commit()
+        pesan = f"Permohonan {p.nomor_permohonan}: {len(dipilih & {it.id for it in p.item_list})} produk diproses"
+        if kembali:
+            pesan += f", {len(kembali)} produk dikembalikan ke pengajuan ({status_sisa})"
+        flash(pesan + ".", "success")
         return redirect(url_for("permohonan_barang_list"))
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/hapus", methods=["POST"])
