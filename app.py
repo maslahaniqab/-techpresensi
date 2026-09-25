@@ -54,7 +54,7 @@ from models import (
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
 STATUS_PERMOHONAN_BUTUH_CATATAN = ("Kendala Bahan", "Ditolak")
 STATUS_ITEM_KEMBALI = ("Menunggu", "Kendala Bahan", "Ditolak")
-SUMBER_BAHAN_LIST = ("Bahan Sendiri", "Full Order")
+JENIS_PO_LIST = ("Bahan Sendiri", "Full Order")
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 YARD_KE_METER = 0.9144  # konversi resmi 1 Yard = 0.9144 Meter
@@ -1687,11 +1687,9 @@ def create_app():
             db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_nama VARCHAR(128)"))
             db.session.commit()
         for tabel, kolom, ddl in [
-            ("produk", "sumber_bahan", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
             ("produk", "stok_jadi", "INTEGER NOT NULL DEFAULT 0"),
             ("purchase_order", "jenis", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
             ("purchase_order", "permohonan_id", "INTEGER"),
-            ("permohonan_barang_item", "sumber_bahan", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
             ("permohonan_barang_item", "po_id", "INTEGER"),
         ]:
             ada = {c["name"] for c in db.inspect(db.engine).get_columns(tabel)}
@@ -2031,7 +2029,6 @@ def create_app():
                 harga_normal=int(request.form.get("harga_normal") or 0),
                 harga_flash_sale=int(request.form.get("harga_flash_sale") or 0),
                 harga_big_campaign=int(request.form.get("harga_big_campaign") or 0),
-                sumber_bahan=request.form.get("sumber_bahan") if request.form.get("sumber_bahan") in SUMBER_BAHAN_LIST else "Bahan Sendiri",
             )
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
@@ -2058,8 +2055,6 @@ def create_app():
             produk.harga_normal = int(request.form.get("harga_normal") or 0)
             produk.harga_flash_sale = int(request.form.get("harga_flash_sale") or 0)
             produk.harga_big_campaign = int(request.form.get("harga_big_campaign") or 0)
-            if request.form.get("sumber_bahan") in SUMBER_BAHAN_LIST:
-                produk.sumber_bahan = request.form.get("sumber_bahan")
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
                 return render_template("produk_form.html", produk=produk, daftar_kategori=daftar_kategori)
@@ -2826,7 +2821,7 @@ def create_app():
             # diisi di sini, baru difinalisasi + kehitung stok pas "Mulai Produksi"
             # (lihat purchase_order_mulai_produksi), krn di titik order dibuat qty pcs
             # pastinya belum tentu diketahui.
-            jenis_po = request.form.get("jenis") if request.form.get("jenis") in SUMBER_BAHAN_LIST else "Bahan Sendiri"
+            jenis_po = request.form.get("jenis") if request.form.get("jenis") in JENIS_PO_LIST else "Bahan Sendiri"
             full_order = jenis_po == "Full Order"
             ip_qty_list = request.form.getlist("ip_qty[]")
             ip_harga_list = request.form.getlist("ip_harga[]")
@@ -2901,8 +2896,9 @@ def create_app():
             if full_order:
                 po.total_biaya = sum(r[2] * r[3] for r in item_produk_rows)
             if pb_asal:
+                ikut = {(r[0].id, r[1]) for r in item_produk_rows}
                 for it in pb_asal.item_list:
-                    if it.status == "Diproses" and not it.po_id and it.sumber_bahan == jenis_po:
+                    if it.status == "Diproses" and not it.po_id and (it.produk_id, it.warna or "") in ikut:
                         it.po_id = po.id
 
             for bahan, qty in bahan_pakai_rows:
@@ -2920,10 +2916,13 @@ def create_app():
                     "klik \"Mulai Produksi\" di halaman Produksi begitu siap, baru di situ stok kepotong.",
                     "success",
                 )
-            jenis_lanjut = jenis_po_berikutnya(pb_asal) if pb_asal else None
-            if jenis_lanjut:
-                flash(f"Permohonan {pb_asal.nomor_permohonan} masih punya produk {jenis_lanjut} -- lanjut buat PO-nya.", "info")
-                return redirect(url_for("purchase_order_list", dari_permohonan=pb_asal.id, jenis=jenis_lanjut))
+            sisa_po = item_belum_po(pb_asal) if pb_asal else []
+            if sisa_po:
+                flash(
+                    f"Permohonan {pb_asal.nomor_permohonan} masih punya {len(sisa_po)} produk yang belum masuk PO "
+                    "-- lanjut pilih vendor berikutnya.", "info",
+                )
+                return redirect(url_for("purchase_order_list", dari_permohonan=pb_asal.id))
             return redirect(url_for("purchase_order_list"))
 
         q = request.args.get("q", "").strip()
@@ -2941,31 +2940,26 @@ def create_app():
         }
         prefill = None
         pb = db.session.get(PermohonanBarang, request.args.get("dari_permohonan", type=int) or 0)
-        if pb:
-            jenis_req = request.args.get("jenis") if request.args.get("jenis") in SUMBER_BAHAN_LIST else jenis_po_berikutnya(pb)
-            aktif = [
-                it for it in pb.item_list
-                if it.status == "Diproses" and not it.po_id and it.sumber_bahan == (jenis_req or "Bahan Sendiri")
-            ]
-            kebutuhan_bahan = {}
-            if jenis_req != "Full Order":
-                for it in aktif:
-                    for k in BahanBakuKebutuhan.query.filter_by(produk_id=it.produk_id).all():
-                        kebutuhan_bahan[k.bahan_baku_id] = kebutuhan_bahan.get(k.bahan_baku_id, 0) + (k.jumlah_yard or 0) * it.qty
-            prefill = {
-                "nomor": pb.nomor_permohonan, "id": pb.id, "jenis": jenis_req or "Bahan Sendiri",
-                "items": [
-                    {"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty,
-                     "harga": (it.produk.modal or 0) if jenis_req == "Full Order" else 0}
-                    for it in aktif
-                ],
-                "bahan": [{"bahan_id": bid, "qty": round(q, 2)} for bid, q in kebutuhan_bahan.items() if q > 0],
-            }
+        if pb and item_belum_po(pb):
+            items_prefill = []
+            for it in item_belum_po(pb):
+                items_prefill.append({
+                    "produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty, "harga": it.produk.modal or 0,
+                    "bahan": [
+                        {"bahan_id": k.bahan_baku_id, "qty": round((k.jumlah_yard or 0) * it.qty, 2)}
+                        for k in BahanBakuKebutuhan.query.filter_by(produk_id=it.produk_id).all() if (k.jumlah_yard or 0) * it.qty > 0
+                    ],
+                })
+            prefill = {"nomor": pb.nomor_permohonan, "id": pb.id, "items": items_prefill}
+        # Jenis PO terakhir yang dipakai tiap vendor -> jadi pilihan awal saat vendor dipilih
+        jenis_vendor = {}
+        for po_lama in PurchaseOrder.query.order_by(PurchaseOrder.id).all():
+            jenis_vendor[po_lama.vendor_id] = po_lama.jenis
         return render_template(
             "inventory/purchase_order_list.html",
             daftar=daftar, daftar_vendor=daftar_vendor, daftar_produk=daftar_produk,
             daftar_bahan=daftar_bahan, daftar_akun=daftar_akun, produk_json=produk_json, bahan_json=bahan_json,
-            tanggal_hari_ini=today_wib().isoformat(), q=q, prefill=prefill,
+            tanggal_hari_ini=today_wib().isoformat(), q=q, prefill=prefill, jenis_vendor=jenis_vendor,
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>")
@@ -3590,24 +3584,18 @@ def create_app():
             return True
         return AksesKaryawan.query.filter_by(employee_id=current_user.id, modul=modul).first() is not None
 
-    def jenis_po_berikutnya(p):
-        """Jenis PO yang masih perlu dibuat untuk produk berstatus Diproses yang belum punya PO
-        (Bahan Sendiri dulu, lalu Full Order); None kalau semuanya sudah punya PO."""
-        belum = {it.sumber_bahan for it in p.item_list if it.status == "Diproses" and not it.po_id}
-        for jenis in SUMBER_BAHAN_LIST:
-            if jenis in belum:
-                return jenis
-        return None
+    def item_belum_po(p):
+        """Produk berstatus Diproses yang belum dimasukkan ke Purchase Order mana pun."""
+        return [it for it in p.item_list if it.status == "Diproses" and not it.po_id]
 
     def arahkan_setelah_diproses(p, pesan):
         """Begitu ada produk yang Diproses, lanjut ke halaman Purchase Order (popup Buat PO
         baru & Pemakaian Bahan otomatis terbuka, sudah terisi dari permohonan ini)."""
         flash(pesan, "success")
-        jenis = jenis_po_berikutnya(p)
-        if not jenis:
+        if not item_belum_po(p):
             return redirect(url_for("permohonan_barang_list"))
         if punya_akses_modul("purchase_order"):
-            return redirect(url_for("purchase_order_list", dari_permohonan=p.id, jenis=jenis))
+            return redirect(url_for("purchase_order_list", dari_permohonan=p.id))
         flash("Produk sudah berstatus Diproses. Minta admin/PIC yang punya akses Purchase Order untuk membuat PO-nya.", "info")
         return redirect(url_for("permohonan_barang_list"))
 
@@ -3615,15 +3603,13 @@ def create_app():
         items = []
         warna_list = request.form.getlist("warna[]")
         qty_list = request.form.getlist("qty[]")
-        sumber_list = request.form.getlist("sumber_bahan[]")
         for i, pid in enumerate(request.form.getlist("produk_id[]")):
             produk = db.session.get(Produk, int(pid)) if pid.isdigit() else None
             qty = max(int(parse_angka_iklan(qty_list[i])), 0) if i < len(qty_list) else 0
             if not produk or qty <= 0:
                 continue
-            sumber = sumber_list[i] if i < len(sumber_list) and sumber_list[i] in SUMBER_BAHAN_LIST else produk.sumber_bahan
             items.append({
-                "produk_id": produk.id, "qty": qty, "sumber_bahan": sumber,
+                "produk_id": produk.id, "qty": qty,
                 "warna": warna_list[i].strip() if i < len(warna_list) else "",
             })
         return items
@@ -3771,7 +3757,7 @@ def create_app():
                 "items": [
                     {"id": it.id, "nama": it.produk.nama_produk, "warna": it.warna or "", "qty": it.qty,
                      "status": it.status, "centang": it.status in ("Menunggu", "Diproses"),
-                     "sumber_bahan": it.sumber_bahan, "po": it.po.nomor_po if it.po else ""}
+                     "po": it.po.nomor_po if it.po else ""}
                     for it in p.item_list
                 ],
             }
@@ -3781,7 +3767,7 @@ def create_app():
             p.id: {
                 "nomor": p.nomor_permohonan, "tanggal": p.tanggal.isoformat(),
                 "items": [
-                    {"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty, "sumber_bahan": it.sumber_bahan}
+                    {"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty}
                     for it in p.item_list
                 ],
             }

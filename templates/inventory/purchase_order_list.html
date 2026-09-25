@@ -190,8 +190,9 @@
           {% if prefill %}
           <div class="col-12 d-none" id="bannerDariPermohonan">
             <div class="alert alert-warning small mb-0 py-2">
-              Dari permohonan <strong>{{ prefill.nomor }}</strong> ({{ prefill.jenis }}): produk yang <strong>Diproses</strong> sudah dimasukkan ke Item Produk.
-              Pemakaian Bahan diisi perkiraan dari <em>Kebutuhan bahan per produk &times; Qty</em> permohonan (kalau kebutuhannya sudah dicatat di menu Bahan Baku) &mdash; silakan dicek dan diubah. Pilih Vendor lalu Simpan PO.
+              Dari permohonan <strong>{{ prefill.nomor }}</strong>: {{ prefill['items'] | length }} produk yang <strong>Diproses</strong> belum punya PO.
+              <strong>Satu PO = satu vendor.</strong> Pilih Vendor, lalu hapus (&times;) produk yang dikerjakan vendor lain &mdash; produk itu muncul lagi di PO berikutnya.
+              Pilih <strong>Jenis PO</strong> sesuai cara vendor ini bekerja (Full Order = bahan dari vendor, atau Bahan Sendiri). Perkiraan pemakaian bahan dihitung dari Kebutuhan bahan per produk &times; Qty dan ikut menyesuaikan saat produk dihapus.
             </div>
           </div>
           {% endif %}
@@ -280,7 +281,7 @@
       <td><input type="text" name="ip_warna[]" class="form-control form-control-sm"></td>
       <td class="fo-col ${isFullOrder() ? "" : "d-none"}"><input type="number" min="1" step="1" name="ip_qty[]" class="form-control form-control-sm"></td>
       <td class="fo-col ${isFullOrder() ? "" : "d-none"}"><input type="number" min="0" step="1" name="ip_harga[]" class="form-control form-control-sm"></td>
-      <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('tr').remove();">&times;</button></td>
+      <td><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="hapusBarisProduk(this)">&times;</button></td>
     `;
     document.getElementById("tbodyItemProduk").appendChild(tr);
     const sel = tr.querySelector("select[name='ip_produk_id[]']");
@@ -305,7 +306,9 @@
   }
 
   const PREFILL = {{ prefill | tojson }};
+  const JENIS_VENDOR = {{ jenis_vendor | tojson }};
   let prefillDipakai = false;
+  let bahanManual = false;
 
   function isFullOrder() { return document.getElementById("selJenisPO").value === "Full Order"; }
 
@@ -320,19 +323,17 @@
   }
   document.getElementById("selJenisPO").addEventListener("change", terapkanJenisPO);
 
-  function isiDariPermohonan() {
-    document.getElementById("selJenisPO").value = PREFILL.jenis;
-    terapkanJenisPO();
-    PREFILL.items.forEach(it => {
-      tambahBarisProduk();
-      const tr = document.getElementById("tbodyItemProduk").lastElementChild;
-      tr.querySelector("input[name='ip_qty[]']").value = it.qty;
-      if (it.harga) tr.querySelector("input[name='ip_harga[]']").value = it.harga;
-      const sel = tr.querySelector("select");
-      if (sel._choicesInstance) sel._choicesInstance.setChoiceByValue(String(it.produk_id)); else sel.value = String(it.produk_id);
-      tr.querySelector("input[name='ip_warna[]']").value = it.warna;
-    });
-    PREFILL.bahan.forEach(b => {
+  document.querySelector("#formBuatPO [name='vendor_id']").addEventListener("change", function () {
+    const j = JENIS_VENDOR[this.value];
+    if (j) { document.getElementById("selJenisPO").value = j; terapkanJenisPO(); }
+  });
+
+  document.getElementById("tbodyBahanPakai").addEventListener("input", e => { if (e.isTrusted) bahanManual = true; });
+  document.getElementById("tbodyBahanPakai").addEventListener("change", e => { if (e.isTrusted) bahanManual = true; });
+
+  function isiBarisBahan(daftar) {
+    document.getElementById("tbodyBahanPakai").innerHTML = "";
+    daftar.forEach(b => {
       tambahBarisBahan();
       const tr = document.getElementById("tbodyBahanPakai").lastElementChild;
       const sel = tr.querySelector("select");
@@ -340,8 +341,36 @@
       tr.querySelector("input[name='bp_qty[]']").value = b.qty;
       tr.querySelector(".bp-satuan").textContent = BAHAN_DATA[b.bahan_id] ? BAHAN_DATA[b.bahan_id].satuan : "";
     });
-    if (!PREFILL.items.length) tambahBarisProduk();
-    if (!PREFILL.bahan.length && PREFILL.jenis !== "Full Order") tambahBarisBahan();
+    if (!daftar.length) tambahBarisBahan();
+  }
+
+  function hitungBahanDariItem() {
+    if (!PREFILL || bahanManual) return;
+    const total = {};
+    document.querySelectorAll("#tbodyItemProduk tr[data-prefill]").forEach(tr => {
+      PREFILL.items[parseInt(tr.dataset.prefill, 10)].bahan.forEach(b => { total[b.bahan_id] = (total[b.bahan_id] || 0) + b.qty; });
+    });
+    isiBarisBahan(Object.keys(total).map(id => ({ bahan_id: id, qty: Math.round(total[id] * 100) / 100 })));
+  }
+
+  function hapusBarisProduk(btn) {
+    btn.closest("tr").remove();
+    hitungBahanDariItem();
+  }
+
+  function isiDariPermohonan() {
+    PREFILL.items.forEach((it, idx) => {
+      tambahBarisProduk();
+      const tr = document.getElementById("tbodyItemProduk").lastElementChild;
+      tr.dataset.prefill = idx;
+      tr.querySelector("input[name='ip_qty[]']").value = it.qty;
+      if (it.harga) tr.querySelector("input[name='ip_harga[]']").value = it.harga;
+      const sel = tr.querySelector("select");
+      if (sel._choicesInstance) sel._choicesInstance.setChoiceByValue(String(it.produk_id)); else sel.value = String(it.produk_id);
+      tr.querySelector("input[name='ip_warna[]']").value = it.warna;
+    });
+    bahanManual = false;
+    hitungBahanDariItem();
   }
 
   document.getElementById("modalBuatPO").addEventListener("show.bs.modal", function () {

@@ -232,7 +232,6 @@ class Produk(db.Model):
     harga_normal = db.Column(db.Integer, default=0)
     harga_flash_sale = db.Column(db.Integer, default=0)
     harga_big_campaign = db.Column(db.Integer, default=0)
-    sumber_bahan = db.Column(db.String(16), nullable=False, default="Bahan Sendiri")  # / "Full Order" (bahan dari vendor)
     stok_jadi = db.Column(db.Integer, nullable=False, default=0)  # stok produk jadi, bertambah lewat Terima Barang Jadi
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
     diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
@@ -760,6 +759,10 @@ class PermohonanBarang(db.Model):
     )
 
     @property
+    def item_belum_po(self):
+        return [it for it in self.item_list if it.status == "Diproses" and not it.po_id]
+
+    @property
     def total_qty(self):
         """Total qty produk yang masih aktif (produk berstatus Ditolak tidak dihitung)."""
         return sum(it.qty or 0 for it in self.item_list if it.status != "Ditolak")
@@ -774,7 +777,6 @@ class PermohonanBarangItem(db.Model):
     # Menunggu / Diproses (dicentang utk diproduksi) / Kendala Bahan / Ditolak (dikembalikan ke pengajuan)
     status = db.Column(db.String(16), nullable=False, default="Menunggu")
     alasan_tolak = db.Column(db.String(256))  # alasan/catatan saat dikembalikan ke pengajuan
-    sumber_bahan = db.Column(db.String(16), nullable=False, default="Bahan Sendiri")  # / "Full Order"
     po_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"))  # PO yang dibuat dari item ini
     po = db.relationship("PurchaseOrder", foreign_keys=[po_id])
 

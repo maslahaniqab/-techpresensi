@@ -26,14 +26,6 @@
       </select>
       <div class="form-text">Buat/kelola kategori di menu <a href="{{ url_for('kategori_produk_list') }}" target="_blank">Kategori Produk</a>. Berguna biar gampang input Biaya Produksi (Menjahit) sekaligus per kategori.</div>
     </div>
-    <div class="mb-3">
-      <label class="form-label">Sumber Bahan</label>
-      <select name="sumber_bahan" class="form-select">
-        <option value="Bahan Sendiri" {{ 'selected' if not produk or produk.sumber_bahan != 'Full Order' }}>Bahan Sendiri (bahan dari stok kita)</option>
-        <option value="Full Order" {{ 'selected' if produk and produk.sumber_bahan == 'Full Order' }}>Full Order (bahan dari vendor)</option>
-      </select>
-      <div class="form-text">Jadi pilihan awal di Permohonan Barang &amp; jenis Purchase Order. Full Order: stok bahan kita tidak dipotong.</div>
-    </div>
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Modal (Rp)</label>
