@@ -232,6 +232,8 @@ class Produk(db.Model):
     harga_normal = db.Column(db.Integer, default=0)
     harga_flash_sale = db.Column(db.Integer, default=0)
     harga_big_campaign = db.Column(db.Integer, default=0)
+    sumber_bahan = db.Column(db.String(16), nullable=False, default="Bahan Sendiri")  # / "Full Order" (bahan dari vendor)
+    stok_jadi = db.Column(db.Integer, nullable=False, default=0)  # stok produk jadi, bertambah lewat Terima Barang Jadi
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
     diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
 
@@ -385,8 +387,13 @@ class PurchaseOrder(db.Model):
     # bahan BELUM kepotong. Begitu diisi (lewat tombol Mulai Produksi), Size/Qty
     # final disimpan & stok baru dikurangi -- bukan lagi pas PO dibuat.
     produksi_mulai_pada = db.Column(db.DateTime)
+    # "Bahan Sendiri" = bahan dari stok kita (stok dipotong saat Mulai Produksi);
+    # "Full Order" = bahan dari vendor (tanpa pemakaian bahan, stok tidak dipotong).
+    jenis = db.Column(db.String(16), nullable=False, default="Bahan Sendiri")
+    permohonan_id = db.Column(db.Integer, db.ForeignKey("permohonan_barang.id"))
 
     vendor = db.relationship("Vendor")
+    permohonan = db.relationship("PermohonanBarang", foreign_keys=[permohonan_id])
     item_produk_list = db.relationship(
         "PurchaseOrderItemProduk", backref="po", cascade="all, delete-orphan",
         order_by="PurchaseOrderItemProduk.id",
@@ -421,6 +428,14 @@ class PurchaseOrder(db.Model):
         return sum(ip.qty for ip in self.item_produk_list)
 
     @property
+    def total_diterima(self):
+        return sum(ip.qty_diterima for ip in self.item_produk_list)
+
+    @property
+    def sisa_belum_diterima(self):
+        return max(self.total_qty_item - self.total_diterima, 0)
+
+    @property
     def total_jahit_selesai(self):
         return sum(ip.jahit_selesai for ip in self.item_produk_list)
 
@@ -434,6 +449,8 @@ class PurchaseOrder(db.Model):
         total = self.total_qty_item
         if not total:
             return 0
+        if self.jenis == "Full Order":
+            return round(min(self.total_diterima, total) / total * 100)
         capaian = (self.total_jahit_selesai + self.total_finish_selesai) / 2
         return round(min(capaian, total) / total * 100)
 
@@ -447,6 +464,10 @@ class PurchaseOrder(db.Model):
         total = self.total_qty_item
         if not total:
             return "Menunggu Produksi"
+        if self.jenis == "Full Order":
+            if self.total_diterima >= total:
+                return "Selesai Produksi"
+            return "Diproses" if self.total_diterima > 0 or self.produksi_mulai_pada else "Menunggu Produksi"
         if self.total_finish_selesai >= total:
             return "Selesai Produksi"
         if self.total_jahit_selesai > 0 or self.total_finish_selesai > 0:
@@ -475,6 +496,17 @@ class PurchaseOrderItemProduk(db.Model):
     biaya_produksi = db.Column(db.Integer, default=0)
 
     produk = db.relationship("Produk")
+    penerimaan_list = db.relationship(
+        "PenerimaanBarangJadi", backref="item", cascade="all, delete-orphan", order_by="PenerimaanBarangJadi.id",
+    )
+
+    @property
+    def qty_diterima(self):
+        return sum(r.qty for r in self.penerimaan_list)
+
+    @property
+    def sisa_belum_diterima(self):
+        return max((self.qty or 0) - self.qty_diterima, 0)
 
     @property
     def status_item(self):
@@ -489,6 +521,18 @@ class PurchaseOrderItemProduk(db.Model):
         if self.jahit_selesai > 0 or self.finish_selesai > 0:
             return "Diproses"
         return "Menunggu Produksi"
+
+
+class PenerimaanBarangJadi(db.Model):
+    """Catatan barang jadi yang datang dari vendor untuk 1 baris item PO (bisa bertahap/dicicil)."""
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("purchase_order_item_produk.id"), nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    qty = db.Column(db.Integer, nullable=False, default=0)
+    catatan = db.Column(db.String(256))
+    dicatat_oleh = db.Column(db.String(128))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
 
 class PurchaseOrderBahanPakai(db.Model):
@@ -730,6 +774,9 @@ class PermohonanBarangItem(db.Model):
     # Menunggu / Diproses (dicentang utk diproduksi) / Kendala Bahan / Ditolak (dikembalikan ke pengajuan)
     status = db.Column(db.String(16), nullable=False, default="Menunggu")
     alasan_tolak = db.Column(db.String(256))  # alasan/catatan saat dikembalikan ke pengajuan
+    sumber_bahan = db.Column(db.String(16), nullable=False, default="Bahan Sendiri")  # / "Full Order"
+    po_id = db.Column(db.Integer, db.ForeignKey("purchase_order.id"))  # PO yang dibuat dari item ini
+    po = db.relationship("PurchaseOrder", foreign_keys=[po_id])
 
     produk = db.relationship("Produk")
 

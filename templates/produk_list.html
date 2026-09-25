@@ -42,6 +42,8 @@
           <th>Produk</th>
           <th>SKU</th>
           <th>Kategori</th>
+          <th>Sumber Bahan</th>
+          <th class="text-end">Stok Jadi</th>
           <th class="text-end">Modal</th>
           <th class="text-end">HPP</th>
           <th class="text-end">Harga Dasar</th>
@@ -62,6 +64,8 @@
           <td>{{ p.nama_produk }}</td>
           <td class="small">{% if p.sku %}{{ p.sku }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
           <td class="small">{% if p.kategori %}{{ p.kategori.nama_kategori }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="small">{{ p.sumber_bahan }}</td>
+          <td class="text-end">{{ p.stok_jadi or 0 }}</td>
           <td class="text-end">{{ p.modal | rupiah }}</td>
           <td class="text-end">{{ p.hpp | rupiah }}</td>
           <td class="text-end">{{ p.harga_dasar | rupiah }}</td>
@@ -84,7 +88,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="14" class="text-center text-muted py-4">{{ "Tidak ada produk yang cocok dengan pencarian/filter." if (q or kategori_id) else "Belum ada data produk." }}</td></tr>
+        <tr><td colspan="16" class="text-center text-muted py-4">{{ "Tidak ada produk yang cocok dengan pencarian/filter." if (q or kategori_id) else "Belum ada data produk." }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -36,6 +36,7 @@
       <tr>
         <td>
           <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="fw-semibold text-decoration-none">{{ po.nomor_po }}</a>
+          {% if po.jenis == 'Full Order' %}<span class="badge" style="background-color:#f5c4b3; color:#712b13;">Full Order</span>{% endif %}
           <div class="text-muted small">{{ po.vendor.nama_vendor }} &middot; {{ po.tanggal_order.strftime("%d/%m/%Y") }}</div>
         </td>
         <td class="small">
@@ -43,8 +44,8 @@
           {% for ip in po.item_produk_list %}
           <div class="d-flex align-items-center gap-1 flex-wrap">
             <span>{{ ip.produk.nama_produk }}{% if ip.warna or ip.size %} ({{ [ip.warna, ip.size] | select | join(", ") }}){% endif %}
-              {%- if po.produksi_mulai_pada %} &mdash; {{ ip.jahit_selesai }}/{{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}</span>
-            {% if po.produksi_mulai_pada %}
+              {%- if po.jenis == 'Full Order' %} &mdash; diterima {{ ip.qty_diterima }}/{{ ip.qty }}{% elif po.produksi_mulai_pada %} &mdash; {{ ip.jahit_selesai }}/{{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}</span>
+            {% if po.produksi_mulai_pada and po.jenis != 'Full Order' %}
             <span class="badge" style="background-color: {{ item_status_bg.get(ip.status_item, '#eee') }}; color:#212529;">{{ ip.status_item }}</span>
             {% endif %}
           </div>
@@ -53,7 +54,7 @@
           {% endfor %}
         </td>
         <td class="text-end small text-nowrap">{{ po.total_qty_item }} pcs</td>
-        <td class="small text-nowrap">Jahit: {{ po.total_jahit_selesai }}<br>Finish: {{ po.total_finish_selesai }}</td>
+        <td class="small text-nowrap">{% if po.jenis == 'Full Order' %}Diterima: {{ po.total_diterima }}<br>Sisa: {{ po.sisa_belum_diterima }}{% else %}Jahit: {{ po.total_jahit_selesai }}<br>Finish: {{ po.total_finish_selesai }}{% if po.total_diterima %}<br>Diterima: {{ po.total_diterima }}{% endif %}{% endif %}</td>
         <td>
           {% set status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Dibatalkan": "#e2e3e5"} %}
           <span class="badge" style="background-color: {{ status_bg.get(po.status_produksi, '#eee') }}; color:#212529;">{{ po.status_produksi }}</span>
@@ -69,7 +70,8 @@
             {% if not po.produksi_mulai_pada %}
             <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalMulai{{ po.id }}">▶️ Mulai Produksi</button>
             {% else %}
-            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUpdate{{ po.id }}">Update</button>
+            {% if po.jenis != 'Full Order' %}<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUpdate{{ po.id }}">Update</button>{% endif %}
+            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalTerima{{ po.id }}">Terima Barang</button>
             {% endif %}
           {% endif %}
         </td>
@@ -82,6 +84,68 @@
 </div>
 
 {% for po in daftar %}
+{% if po.item_produk_list and po.produksi_mulai_pada %}
+<div class="modal fade" id="modalTerima{{ po.id }}" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <form method="post" action="{{ url_for('purchase_order_terima_barang', po_id=po.id) }}" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Terima Barang Jadi &mdash; {{ po.nomor_po }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Isi jumlah barang jadi yang <strong>datang sekarang</strong> (boleh dicicil). Stok produk jadi bertambah otomatis.</p>
+        <div class="row g-2 mb-2">
+          <div class="col-md-4"><label class="form-label small mb-1">Tanggal Terima</label><input type="date" name="tanggal" class="form-control form-control-sm" value="{{ tanggal_hari_ini }}"></div>
+          <div class="col-md-8"><label class="form-label small mb-1">Catatan <span class="text-muted">(opsional)</span></label><input type="text" name="catatan" class="form-control form-control-sm" maxlength="256" placeholder="mis. kiriman pertama, surat jalan 123"></div>
+        </div>
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Produk</th><th class="text-end">Dipesan</th><th class="text-end">Sudah Diterima</th><th class="text-end">Sisa</th><th style="width:110px;">Diterima Sekarang</th></tr></thead>
+          <tbody>
+            {% for ip in po.item_produk_list %}
+            <tr>
+              <td class="small">{{ ip.produk.nama_produk }}{% if ip.warna %} ({{ ip.warna }}){% endif %}</td>
+              <td class="text-end small">{{ ip.qty }}</td>
+              <td class="text-end small">{{ ip.qty_diterima }}</td>
+              <td class="text-end small {{ 'text-danger fw-semibold' if ip.sisa_belum_diterima }}">{{ ip.sisa_belum_diterima }}</td>
+              <td><input type="hidden" name="item_id[]" value="{{ ip.id }}"><input type="number" min="0" step="1" name="qty[]" class="form-control form-control-sm" placeholder="0"></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% set riwayat = [] %}
+        {% for ip in po.item_produk_list %}{% for r in ip.penerimaan_list %}{% set _ = riwayat.append((r, ip)) %}{% endfor %}{% endfor %}
+        {% if riwayat %}
+        <div class="fw-semibold small mb-1">Riwayat penerimaan</div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for r, ip in riwayat | sort(attribute='0.id', reverse=True) %}
+            <tr class="small">
+              <td class="text-nowrap">{{ r.tanggal.strftime("%d/%m/%Y") }}</td>
+              <td>{{ ip.produk.nama_produk }}{% if ip.warna %} ({{ ip.warna }}){% endif %}</td>
+              <td class="text-end">{{ r.qty }} pcs</td>
+              <td class="text-muted">{{ r.catatan or "" }}{% if r.dicatat_oleh %} &middot; {{ r.dicatat_oleh }}{% endif %}</td>
+              <td class="text-end">
+                {% if current_user.role == 'admin' %}
+                <button type="submit" form="hapusTerima{{ r.id }}" class="btn btn-sm btn-link text-danger p-0" onclick="return confirm('Hapus catatan penerimaan ini? Stok produk jadi ikut dikurangi.');">&times;</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-success">Simpan Penerimaan</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </form>
+    {% for ip in po.item_produk_list %}{% for r in ip.penerimaan_list %}
+    <form method="post" id="hapusTerima{{ r.id }}" action="{{ url_for('purchase_order_penerimaan_hapus', penerimaan_id=r.id) }}"></form>
+    {% endfor %}{% endfor %}
+  </div>
+</div>
+{% endif %}
 {% if po.item_produk_list and not po.produksi_mulai_pada %}
 <div class="modal fade" id="modalMulai{{ po.id }}" tabindex="-1">
   <div class="modal-dialog modal-lg">
@@ -149,7 +213,7 @@
   </div>
 </div>
 {% endif %}
-{% if po.item_produk_list and po.produksi_mulai_pada %}
+{% if po.item_produk_list and po.produksi_mulai_pada and po.jenis != 'Full Order' %}
 <div class="modal fade" id="modalUpdate{{ po.id }}" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <form method="post" action="{{ url_for('progress_produksi_update', po_id=po.id) }}" class="modal-content">

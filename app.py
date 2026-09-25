@@ -48,11 +48,13 @@ from models import (
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
     KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi, PermohonanBarangItem,
+    PenerimaanBarangJadi,
 )
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
 STATUS_PERMOHONAN_BUTUH_CATATAN = ("Kendala Bahan", "Ditolak")
 STATUS_ITEM_KEMBALI = ("Menunggu", "Kendala Bahan", "Ditolak")
+SUMBER_BAHAN_LIST = ("Bahan Sendiri", "Full Order")
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 YARD_KE_METER = 0.9144  # konversi resmi 1 Yard = 0.9144 Meter
@@ -1684,6 +1686,18 @@ def create_app():
         if "pemohon_nama" not in kolom_pb:
             db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_nama VARCHAR(128)"))
             db.session.commit()
+        for tabel, kolom, ddl in [
+            ("produk", "sumber_bahan", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
+            ("produk", "stok_jadi", "INTEGER NOT NULL DEFAULT 0"),
+            ("purchase_order", "jenis", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
+            ("purchase_order", "permohonan_id", "INTEGER"),
+            ("permohonan_barang_item", "sumber_bahan", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
+            ("permohonan_barang_item", "po_id", "INTEGER"),
+        ]:
+            ada = {c["name"] for c in db.inspect(db.engine).get_columns(tabel)}
+            if kolom not in ada:
+                db.session.execute(db.text(f"ALTER TABLE {tabel} ADD COLUMN {kolom} {ddl}"))
+                db.session.commit()
         kolom_pbi = {c["name"] for c in db.inspect(db.engine).get_columns("permohonan_barang_item")}
         if "status" not in kolom_pbi:
             db.session.execute(db.text("ALTER TABLE permohonan_barang_item ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'Menunggu'"))
@@ -2017,6 +2031,7 @@ def create_app():
                 harga_normal=int(request.form.get("harga_normal") or 0),
                 harga_flash_sale=int(request.form.get("harga_flash_sale") or 0),
                 harga_big_campaign=int(request.form.get("harga_big_campaign") or 0),
+                sumber_bahan=request.form.get("sumber_bahan") if request.form.get("sumber_bahan") in SUMBER_BAHAN_LIST else "Bahan Sendiri",
             )
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
@@ -2043,6 +2058,8 @@ def create_app():
             produk.harga_normal = int(request.form.get("harga_normal") or 0)
             produk.harga_flash_sale = int(request.form.get("harga_flash_sale") or 0)
             produk.harga_big_campaign = int(request.form.get("harga_big_campaign") or 0)
+            if request.form.get("sumber_bahan") in SUMBER_BAHAN_LIST:
+                produk.sumber_bahan = request.form.get("sumber_bahan")
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
                 return render_template("produk_form.html", produk=produk, daftar_kategori=daftar_kategori)
@@ -2809,13 +2826,22 @@ def create_app():
             # diisi di sini, baru difinalisasi + kehitung stok pas "Mulai Produksi"
             # (lihat purchase_order_mulai_produksi), krn di titik order dibuat qty pcs
             # pastinya belum tentu diketahui.
+            jenis_po = request.form.get("jenis") if request.form.get("jenis") in SUMBER_BAHAN_LIST else "Bahan Sendiri"
+            full_order = jenis_po == "Full Order"
+            ip_qty_list = request.form.getlist("ip_qty[]")
+            ip_harga_list = request.form.getlist("ip_harga[]")
             item_produk_rows = []
-            for produk_id_s, warna in zip(
+            for i, (produk_id_s, warna) in enumerate(zip(
                 request.form.getlist("ip_produk_id[]"), request.form.getlist("ip_warna[]"),
-            ):
+            )):
                 produk = db.session.get(Produk, int(produk_id_s)) if produk_id_s else None
                 if produk:
-                    item_produk_rows.append((produk, warna.strip()))
+                    qty_fo = max(int(parse_angka_iklan(ip_qty_list[i])), 0) if i < len(ip_qty_list) else 0
+                    harga_fo = max(round(parse_angka_iklan(ip_harga_list[i])), 0) if i < len(ip_harga_list) else 0
+                    item_produk_rows.append((produk, warna.strip(), qty_fo, harga_fo))
+            if full_order and (not item_produk_rows or any(r[2] <= 0 for r in item_produk_rows)):
+                flash("PO Full Order: isi minimal 1 produk dan Qty (pcs) tiap produk harus lebih dari 0.", "danger")
+                return redirect(url_for("purchase_order_list"))
 
             # -- baris Pemakaian Bahan (wajib minimal 1) --
             bahan_pakai_rows = []
@@ -2827,7 +2853,9 @@ def create_app():
                 if bahan and qty > 0:
                     bahan_pakai_rows.append((bahan, qty))
 
-            if not bahan_pakai_rows:
+            if full_order:
+                bahan_pakai_rows = []  # bahan dari vendor -> tidak ada pemakaian bahan/stok kita
+            elif not bahan_pakai_rows:
                 flash("Isi minimal 1 baris Pemakaian Bahan (bahan + qty pakai) sebelum disimpan.", "danger")
                 return redirect(url_for("purchase_order_list"))
 
@@ -2842,8 +2870,14 @@ def create_app():
                 # kolom unique nggak bentrok sebelum di-flush. Total Biaya masih 0 --
                 # baru kehitung pas Mulai Produksi (Qty pcs blm final di titik ini).
                 nomor_po=f"TEMP-{uuid.uuid4().hex}", vendor_id=vendor.id, tanggal_order=tanggal_order,
-                estimasi_selesai=estimasi_selesai, total_biaya=0,
+                estimasi_selesai=estimasi_selesai, total_biaya=0, jenis=jenis_po,
+                # Full Order: order ke vendor = produksi langsung berjalan (tanpa langkah Mulai Produksi)
+                produksi_mulai_pada=now_wib() if full_order else None,
             )
+            dari_id = request.form.get("dari_permohonan", type=int)
+            pb_asal = db.session.get(PermohonanBarang, dari_id) if dari_id else None
+            if pb_asal:
+                po.permohonan_id = pb_asal.id
             db.session.add(po)
             db.session.flush()
 
@@ -2858,11 +2892,18 @@ def create_app():
 
             # Size & Qty pcs sengaja belum diisi (qty=0) -- difinalisasi nanti pas
             # "Mulai Produksi" di halaman Produksi, begitu juga stok bahannya.
-            for produk, warna in item_produk_rows:
+            for produk, warna, qty_fo, harga_fo in item_produk_rows:
                 db.session.add(PurchaseOrderItemProduk(
                     purchase_order_id=po.id, produk_id=produk.id, warna=warna, size=None,
-                    qty=0, total=0,
+                    qty=qty_fo if full_order else 0, biaya_produksi=harga_fo if full_order else 0,
+                    total=qty_fo * harga_fo if full_order else 0,
                 ))
+            if full_order:
+                po.total_biaya = sum(r[2] * r[3] for r in item_produk_rows)
+            if pb_asal:
+                for it in pb_asal.item_list:
+                    if it.status == "Diproses" and not it.po_id and it.sumber_bahan == jenis_po:
+                        it.po_id = po.id
 
             for bahan, qty in bahan_pakai_rows:
                 db.session.add(PurchaseOrderBahanPakai(
@@ -2870,11 +2911,19 @@ def create_app():
                 ))
 
             db.session.commit()
-            flash(
-                f"Purchase Order {nomor_po} berhasil disimpan. Stok bahan BELUM dikurangi -- "
-                "klik \"Mulai Produksi\" di halaman Produksi begitu siap, baru di situ stok kepotong.",
-                "success",
-            )
+            if full_order:
+                flash(f"Purchase Order Full Order {nomor_po} berhasil disimpan (bahan dari vendor, stok bahan tidak dipotong). "
+                      "Catat barang yang datang lewat tombol \"Terima Barang\" di halaman Produksi.", "success")
+            else:
+                flash(
+                    f"Purchase Order {nomor_po} berhasil disimpan. Stok bahan BELUM dikurangi -- "
+                    "klik \"Mulai Produksi\" di halaman Produksi begitu siap, baru di situ stok kepotong.",
+                    "success",
+                )
+            jenis_lanjut = jenis_po_berikutnya(pb_asal) if pb_asal else None
+            if jenis_lanjut:
+                flash(f"Permohonan {pb_asal.nomor_permohonan} masih punya produk {jenis_lanjut} -- lanjut buat PO-nya.", "info")
+                return redirect(url_for("purchase_order_list", dari_permohonan=pb_asal.id, jenis=jenis_lanjut))
             return redirect(url_for("purchase_order_list"))
 
         q = request.args.get("q", "").strip()
@@ -2893,14 +2942,23 @@ def create_app():
         prefill = None
         pb = db.session.get(PermohonanBarang, request.args.get("dari_permohonan", type=int) or 0)
         if pb:
-            aktif = [it for it in pb.item_list if it.status == "Diproses"]
+            jenis_req = request.args.get("jenis") if request.args.get("jenis") in SUMBER_BAHAN_LIST else jenis_po_berikutnya(pb)
+            aktif = [
+                it for it in pb.item_list
+                if it.status == "Diproses" and not it.po_id and it.sumber_bahan == (jenis_req or "Bahan Sendiri")
+            ]
             kebutuhan_bahan = {}
-            for it in aktif:
-                for k in BahanBakuKebutuhan.query.filter_by(produk_id=it.produk_id).all():
-                    kebutuhan_bahan[k.bahan_baku_id] = kebutuhan_bahan.get(k.bahan_baku_id, 0) + (k.jumlah_yard or 0) * it.qty
+            if jenis_req != "Full Order":
+                for it in aktif:
+                    for k in BahanBakuKebutuhan.query.filter_by(produk_id=it.produk_id).all():
+                        kebutuhan_bahan[k.bahan_baku_id] = kebutuhan_bahan.get(k.bahan_baku_id, 0) + (k.jumlah_yard or 0) * it.qty
             prefill = {
-                "nomor": pb.nomor_permohonan,
-                "items": [{"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty} for it in aktif],
+                "nomor": pb.nomor_permohonan, "id": pb.id, "jenis": jenis_req or "Bahan Sendiri",
+                "items": [
+                    {"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty,
+                     "harga": (it.produk.modal or 0) if jenis_req == "Full Order" else 0}
+                    for it in aktif
+                ],
                 "bahan": [{"bahan_id": bid, "qty": round(q, 2)} for bid, q in kebutuhan_bahan.items() if q > 0],
             }
         return render_template(
@@ -2963,6 +3021,10 @@ def create_app():
     def purchase_order_hapus(po_id):
         po = db.session.get(PurchaseOrder, po_id) or abort_404()
         nomor_po = po.nomor_po
+        for ip in po.item_produk_list:  # barang jadi yang sudah tercatat diterima ikut dikeluarkan dari stok jadi
+            for r in ip.penerimaan_list:
+                ip.produk.stok_jadi = max((ip.produk.stok_jadi or 0) - r.qty, 0)
+        PermohonanBarangItem.query.filter_by(po_id=po.id).update({"po_id": None})
         # Stok cuma perlu dikembalikan kalau PO ini SUDAH "Mulai Produksi" (baru di
         # titik itu stok kepotong) -- kalau belum, gak ada apa2 yg perlu dibalikin.
         if po.produksi_mulai_pada:
@@ -3172,7 +3234,7 @@ def create_app():
 
         return render_template(
             "inventory/progress_produksi_list.html", daftar=daftar, q=q,
-            saran_qty=saran_qty, saran_biaya=saran_biaya,
+            saran_qty=saran_qty, saran_biaya=saran_biaya, tanggal_hari_ini=today_wib().isoformat(),
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
@@ -3196,6 +3258,55 @@ def create_app():
             item.status_qc = status_qc if status_qc in ("Selesai", "Revisi") else None
         db.session.commit()
         flash(f"Progress produksi PO {po.nomor_po} diperbarui. Status sekarang: {po.status_produksi}.", "success")
+        return redirect(url_for("progress_produksi_list"))
+
+    @app.route("/inventory/master-data/purchase-order/<int:po_id>/terima-barang", methods=["POST"])
+    @modul_required("produksi")
+    def purchase_order_terima_barang(po_id):
+        """Catat barang jadi yang datang dari vendor (bisa bertahap) -> stok produk jadi bertambah."""
+        po = db.session.get(PurchaseOrder, po_id) or abort_404()
+        try:
+            tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+        except ValueError:
+            tanggal = today_wib()
+        catatan = request.form.get("catatan", "").strip()[:256]
+        by_id = {ip.id: ip for ip in po.item_produk_list}
+        total_masuk, lebih = 0, []
+        for item_id_s, qty_s in zip(request.form.getlist("item_id[]"), request.form.getlist("qty[]")):
+            ip = by_id.get(int(item_id_s)) if item_id_s.isdigit() else None
+            qty = max(int(parse_angka_iklan(qty_s)), 0)
+            if not ip or qty <= 0:
+                continue
+            if qty > ip.sisa_belum_diterima:
+                lebih.append(ip.produk.nama_produk)
+            db.session.add(PenerimaanBarangJadi(
+                item_id=ip.id, produk_id=ip.produk_id, tanggal=tanggal, qty=qty, catatan=catatan or None,
+                dicatat_oleh=current_user.nama,
+            ))
+            ip.produk.stok_jadi = (ip.produk.stok_jadi or 0) + qty
+            total_masuk += qty
+        if not total_masuk:
+            flash("Isi jumlah barang yang diterima (minimal 1 produk dengan qty lebih dari 0).", "danger")
+            return redirect(url_for("progress_produksi_list"))
+        db.session.commit()
+        pesan = f"{total_masuk} pcs barang jadi dari {po.nomor_po} dicatat masuk ke stok produk jadi."
+        if po.sisa_belum_diterima:
+            pesan += f" Sisa belum datang: {po.sisa_belum_diterima} pcs."
+        flash(pesan, "success")
+        if lebih:
+            flash("Perhatian: jumlah diterima melebihi pesanan untuk " + ", ".join(lebih) + ".", "warning")
+        return redirect(url_for("progress_produksi_list"))
+
+    @app.route("/inventory/master-data/purchase-order/penerimaan/<int:penerimaan_id>/hapus", methods=["POST"])
+    @admin_required
+    def purchase_order_penerimaan_hapus(penerimaan_id):
+        r = db.session.get(PenerimaanBarangJadi, penerimaan_id) or abort_404()
+        produk = db.session.get(Produk, r.produk_id)
+        if produk:
+            produk.stok_jadi = max((produk.stok_jadi or 0) - r.qty, 0)
+        db.session.delete(r)
+        db.session.commit()
+        flash("Catatan penerimaan dihapus, stok produk jadi dikoreksi.", "info")
         return redirect(url_for("progress_produksi_list"))
 
     @app.route("/inventory/bahan-baku/input", methods=["GET", "POST"])
@@ -3479,12 +3590,24 @@ def create_app():
             return True
         return AksesKaryawan.query.filter_by(employee_id=current_user.id, modul=modul).first() is not None
 
+    def jenis_po_berikutnya(p):
+        """Jenis PO yang masih perlu dibuat untuk produk berstatus Diproses yang belum punya PO
+        (Bahan Sendiri dulu, lalu Full Order); None kalau semuanya sudah punya PO."""
+        belum = {it.sumber_bahan for it in p.item_list if it.status == "Diproses" and not it.po_id}
+        for jenis in SUMBER_BAHAN_LIST:
+            if jenis in belum:
+                return jenis
+        return None
+
     def arahkan_setelah_diproses(p, pesan):
         """Begitu ada produk yang Diproses, lanjut ke halaman Purchase Order (popup Buat PO
         baru & Pemakaian Bahan otomatis terbuka, sudah terisi dari permohonan ini)."""
         flash(pesan, "success")
+        jenis = jenis_po_berikutnya(p)
+        if not jenis:
+            return redirect(url_for("permohonan_barang_list"))
         if punya_akses_modul("purchase_order"):
-            return redirect(url_for("purchase_order_list", dari_permohonan=p.id))
+            return redirect(url_for("purchase_order_list", dari_permohonan=p.id, jenis=jenis))
         flash("Produk sudah berstatus Diproses. Minta admin/PIC yang punya akses Purchase Order untuk membuat PO-nya.", "info")
         return redirect(url_for("permohonan_barang_list"))
 
@@ -3492,13 +3615,15 @@ def create_app():
         items = []
         warna_list = request.form.getlist("warna[]")
         qty_list = request.form.getlist("qty[]")
+        sumber_list = request.form.getlist("sumber_bahan[]")
         for i, pid in enumerate(request.form.getlist("produk_id[]")):
             produk = db.session.get(Produk, int(pid)) if pid.isdigit() else None
             qty = max(int(parse_angka_iklan(qty_list[i])), 0) if i < len(qty_list) else 0
             if not produk or qty <= 0:
                 continue
+            sumber = sumber_list[i] if i < len(sumber_list) and sumber_list[i] in SUMBER_BAHAN_LIST else produk.sumber_bahan
             items.append({
-                "produk_id": produk.id, "qty": qty,
+                "produk_id": produk.id, "qty": qty, "sumber_bahan": sumber,
                 "warna": warna_list[i].strip() if i < len(warna_list) else "",
             })
         return items
@@ -3645,7 +3770,8 @@ def create_app():
                 "nomor": p.nomor_permohonan,
                 "items": [
                     {"id": it.id, "nama": it.produk.nama_produk, "warna": it.warna or "", "qty": it.qty,
-                     "status": it.status, "centang": it.status in ("Menunggu", "Diproses")}
+                     "status": it.status, "centang": it.status in ("Menunggu", "Diproses"),
+                     "sumber_bahan": it.sumber_bahan, "po": it.po.nomor_po if it.po else ""}
                     for it in p.item_list
                 ],
             }
@@ -3654,7 +3780,10 @@ def create_app():
         data_edit = {
             p.id: {
                 "nomor": p.nomor_permohonan, "tanggal": p.tanggal.isoformat(),
-                "items": [{"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty} for it in p.item_list],
+                "items": [
+                    {"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty, "sumber_bahan": it.sumber_bahan}
+                    for it in p.item_list
+                ],
             }
             for p in daftar
         } if current_user.role == "admin" else {}
@@ -3678,13 +3807,13 @@ def create_app():
             p.tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
         except ValueError:
             pass
-        lama = {(it.produk_id, it.warna or ""): it for it in p.item_list if it.status != "Menunggu"}
+        lama = {(it.produk_id, it.warna or ""): it for it in p.item_list if it.status != "Menunggu" or it.po_id}
         baru = []
         for it in items:
             item = PermohonanBarangItem(**it)
             sebelumnya = lama.get((it["produk_id"], it["warna"]))
             if sebelumnya:
-                item.status, item.alasan_tolak = sebelumnya.status, sebelumnya.alasan_tolak
+                item.status, item.alasan_tolak, item.po_id = sebelumnya.status, sebelumnya.alasan_tolak, sebelumnya.po_id
             baru.append(item)
         p.item_list = baru
         p.produk_id = items[0]["produk_id"]

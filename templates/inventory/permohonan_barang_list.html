@@ -54,6 +54,8 @@
           {% for it in p.item_list %}
           <div class="mb-1">
             <span class="{{ 'text-decoration-line-through text-muted' if it.status == 'Ditolak' }}">{{ it.produk.nama_produk }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span></span>
+            {% if it.sumber_bahan == 'Full Order' %}<span class="badge" style="background-color:#f5c4b3; color:#712b13;">Full Order</span>{% endif %}
+            {% if it.po %}<a href="{{ url_for('purchase_order_detail', po_id=it.po_id) }}" class="badge text-decoration-none" style="background-color:#e2e3e5; color:#212529;" title="Purchase Order untuk produk ini">{{ it.po.nomor_po }}</a>{% endif %}
             {% if it.status != 'Menunggu' %}<span class="badge" style="background-color: {{ item_bg.get(it.status, '#eee') }}; color:#212529;">{{ 'Akan diproduksi' if it.status == 'Diproses' else it.status }}</span>{% endif %}
             {% if it.alasan_tolak and it.status in ('Kendala Bahan', 'Ditolak') %}<div class="text-danger" style="font-size:.78rem;">{{ it.alasan_tolak }}</div>{% endif %}
           </div>
@@ -123,7 +125,7 @@
               <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahProdukEditPB">+ Tambah Produk</button>
             </div>
             <table class="table table-sm align-middle mb-0">
-              <thead><tr><th>Nama Produk</th><th style="width:20%;">Warna</th><th style="width:14%;">Qty</th><th style="width:36px;"></th></tr></thead>
+              <thead><tr><th>Nama Produk</th><th style="width:16%;">Warna</th><th style="width:12%;">Qty</th><th style="width:20%;">Sumber Bahan</th><th style="width:36px;"></th></tr></thead>
               <tbody id="tbodyProdukEditPB"></tbody>
             </table>
             <div class="form-text">Status permohonan tidak berubah saat diedit.</div>
@@ -149,7 +151,7 @@
       <div class="modal-body">
         <p class="small text-muted mb-2">Centang produk yang <strong>akan diproduksi</strong>. Produk yang tidak dicentang dikembalikan ke pengajuan dengan status pilihan Anda, dan pengaju diberi popup pemberitahuan.</p>
         <table class="table table-sm align-middle">
-          <thead><tr><th style="width:40px;"><input type="checkbox" class="form-check-input" id="prosesCentangSemua" checked title="Centang semua"></th><th>Produk</th><th>Warna</th><th class="text-end">Qty</th><th>Status Sekarang</th></tr></thead>
+          <thead><tr><th style="width:40px;"><input type="checkbox" class="form-check-input" id="prosesCentangSemua" checked title="Centang semua"></th><th>Produk</th><th>Warna</th><th class="text-end">Qty</th><th>Sumber Bahan</th><th>Status Sekarang</th></tr></thead>
           <tbody id="tbodyProsesPB"></tbody>
         </table>
         <div class="row g-3">
@@ -198,7 +200,7 @@
               <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahProdukPB">+ Tambah Produk</button>
             </div>
             <table class="table table-sm align-middle mb-0">
-              <thead><tr><th>Nama Produk</th><th style="width:20%;">Warna</th><th style="width:14%;">Qty</th><th style="width:36px;"></th></tr></thead>
+              <thead><tr><th>Nama Produk</th><th style="width:16%;">Warna</th><th style="width:12%;">Qty</th><th style="width:20%;">Sumber Bahan</th><th style="width:36px;"></th></tr></thead>
               <tbody id="tbodyProdukPB"></tbody>
             </table>
             <div class="form-text">Satu pengajuan bisa berisi beberapa produk dengan satu nomor pengajuan.</div>
@@ -217,6 +219,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   var PRODUK = {{ daftar_produk | map(attribute='nama_produk') | list | tojson }};
   var IDS = {{ daftar_produk | map(attribute='id') | list | tojson }};
+  var SUMBER_DEFAULT = {{ daftar_produk | map(attribute='sumber_bahan') | list | tojson }};
   {% if current_user.role == 'admin' %}var DATA_EDIT = {{ data_edit | tojson }};{% endif %}
 
   function tambahBaris(tbody, item) {
@@ -229,11 +232,18 @@ document.addEventListener("DOMContentLoaded", function () {
       '<td><select name="produk_id[]" class="form-select form-select-sm produk-search" required>' + opsi + '</select></td>' +
       '<td><input type="text" name="warna[]" class="form-control form-control-sm" placeholder="Hitam"></td>' +
       '<td><input type="number" min="1" step="1" name="qty[]" class="form-control form-control-sm" placeholder="50" required></td>' +
+      '<td><select name="sumber_bahan[]" class="form-select form-select-sm"><option value="Bahan Sendiri">Bahan Sendiri</option><option value="Full Order">Full Order</option></select></td>' +
       '<td><button type="button" class="btn btn-sm btn-link text-danger p-0 btn-hapus-baris">&times;</button></td>';
     tbody.appendChild(tr);
     var sel = tr.querySelector("select");
     if (window.initProdukSearch) window.initProdukSearch(sel);
+    var selSumber = tr.querySelector('[name="sumber_bahan[]"]');
+    sel.addEventListener("change", function () {
+      var idx = IDS.indexOf(parseInt(sel.value, 10));
+      if (idx >= 0) selSumber.value = SUMBER_DEFAULT[idx];
+    });
     if (item) {
+      if (item.sumber_bahan) selSumber.value = item.sumber_bahan;
       if (sel._choicesInstance) sel._choicesInstance.setChoiceByValue(String(item.produk_id));
       else sel.value = String(item.produk_id);
       tr.querySelector('[name="warna[]"]').value = item.warna || "";
@@ -259,7 +269,7 @@ document.addEventListener("DOMContentLoaded", function () {
         var cb = document.createElement("input");
         cb.type = "checkbox"; cb.name = "item_id[]"; cb.value = it.id; cb.checked = it.centang; cb.className = "form-check-input";
         var td0 = document.createElement("td"); td0.appendChild(cb); tr.appendChild(td0);
-        [it.nama, it.warna || "-", it.qty, it.status === "Diproses" ? "Akan diproduksi" : it.status].forEach(function (teks, i) {
+        [it.nama, it.warna || "-", it.qty, it.sumber_bahan, (it.status === "Diproses" ? "Akan diproduksi" : it.status) + (it.po ? " (" + it.po + ")" : "")].forEach(function (teks, i) {
           var td = document.createElement("td"); td.textContent = teks; td.className = "small" + (i === 2 ? " text-end" : ""); tr.appendChild(td);
         });
         tbodyProses.appendChild(tr);
