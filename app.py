@@ -1673,6 +1673,13 @@ def create_app():
         if "ekspedisi" not in kolom_pm:
             db.session.execute(db.text("ALTER TABLE pesanan_manual ADD COLUMN ekspedisi VARCHAR(64)"))
             db.session.commit()
+        if "no_resi" not in kolom_pm:
+            db.session.execute(db.text("ALTER TABLE pesanan_manual ADD COLUMN no_resi VARCHAR(64)"))
+            db.session.commit()
+        kolom_pmi = {c["name"] for c in db.inspect(db.engine).get_columns("pesanan_manual_item")}
+        if "produk_id" not in kolom_pmi:
+            db.session.execute(db.text("ALTER TABLE pesanan_manual_item ADD COLUMN produk_id INTEGER"))
+            db.session.commit()
         # Order manual lama (1 produk, disimpan di kolom order-nya langsung) -> salin jadi 1 item
         # supaya tampil sama seperti order baru yang punya banyak item.
         for pm in PesananManual.query.filter(~PesananManual.item_list.any()).all():
@@ -5037,8 +5044,13 @@ def create_app():
     @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_dashboard():
         daftar = PesananManual.query.order_by(PesananManual.id.desc()).all()
+        produk_master = [
+            {"id": p.id, "nama": p.nama_produk, "sku": p.sku or "", "harga": p.harga_normal or 0}
+            for p in Produk.query.order_by(Produk.nama_produk).all()
+        ]
         return render_template(
             "pendapatan/penjualan_dashboard.html", daftar=daftar, ekspedisi_list=EKSPEDISI_LIST,
+            produk_master=produk_master,
         )
 
     @app.route("/pendapatan/penjualan/manual/tambah", methods=["POST"])
@@ -5049,8 +5061,12 @@ def create_app():
         if ekspedisi not in EKSPEDISI_LIST:
             ekspedisi = ""
 
+        produk_by_id = {p.id: p for p in Produk.query.all()}
+        produk_by_nama = {p.nama_produk.strip().lower(): p for p in produk_by_id.values()}
+
         items = []
-        sku_list = request.form.getlist("sku[]")
+        tidak_ditemukan = []
+        produk_id_list = request.form.getlist("produk_id[]")
         nama_list = request.form.getlist("nama_produk[]")
         warna_list = request.form.getlist("warna[]")
         harga_list = request.form.getlist("harga[]")
@@ -5058,15 +5074,26 @@ def create_app():
             nama = nama.strip()
             if not nama:
                 continue
+            pid = produk_id_list[i].strip() if i < len(produk_id_list) else ""
+            produk = produk_by_id.get(int(pid)) if pid.isdigit() else None
+            if not produk:
+                produk = produk_by_nama.get(nama.lower())
+            if not produk:
+                tidak_ditemukan.append(nama)
+                continue
             items.append({
-                "sku": sku_list[i].strip() if i < len(sku_list) else "",
-                "nama_produk": nama,
+                "produk_id": produk.id,
+                "sku": produk.sku or "",
+                "nama_produk": produk.nama_produk,
                 "warna": warna_list[i].strip() if i < len(warna_list) else "",
                 "harga": max(round(parse_angka_iklan(harga_list[i])), 0) if i < len(harga_list) else 0,
             })
 
+        if tidak_ditemukan:
+            flash("Produk tidak ada di Data Produk (pilih dari daftar): " + "; ".join(tidak_ditemukan[:3]), "danger")
+            return redirect(url_for("pendapatan_penjualan_dashboard"))
         if not nama_pembeli or not items:
-            flash("Nama Pembeli dan minimal 1 Nama Produk wajib diisi.", "danger")
+            flash("Nama Pembeli dan minimal 1 Produk wajib diisi.", "danger")
             return redirect(url_for("pendapatan_penjualan_dashboard"))
 
         tanggal = today_wib()
@@ -5088,6 +5115,7 @@ def create_app():
             warna=items[0]["warna"],
             harga=sum(it["harga"] for it in items),
             ekspedisi=ekspedisi or None,
+            no_resi=request.form.get("no_resi", "").strip()[:64] or None,
         )
         pesanan.item_list = [PesananManualItem(**it) for it in items]
         db.session.add(pesanan)
@@ -5112,14 +5140,14 @@ def create_app():
         ws = wb.active
         ws.title = "Order Manual"
         ws.append([
-            "No Invoice", "Tanggal", "Nama", "WA", "Alamat", "Ekspedisi",
+            "No Invoice", "Tanggal", "Nama", "WA", "Alamat", "Ekspedisi", "No Resi",
             "SKU", "Produk", "Warna", "Harga", "Total Order",
         ])
         for p in PesananManual.query.order_by(PesananManual.id).all():
             for n, it in enumerate(p.item_list):
                 ws.append([
                     p.no_invoice, p.tanggal.strftime("%d/%m/%Y"), p.nama_pembeli, p.no_telepon or "",
-                    p.alamat or "", p.ekspedisi or "", it.sku or "", it.nama_produk, it.warna or "",
+                    p.alamat or "", p.ekspedisi or "", p.no_resi or "", it.sku or "", it.nama_produk, it.warna or "",
                     it.harga or 0, (p.harga or 0) if n == 0 else None,
                 ])
         buf = io.BytesIO()

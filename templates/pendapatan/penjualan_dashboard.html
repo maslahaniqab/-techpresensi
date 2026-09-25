@@ -35,6 +35,10 @@
           {% endfor %}
         </select>
       </div>
+      <div class="col-md-6">
+        <label class="form-label">No Resi Ekspedisi</label>
+        <input type="text" name="no_resi" class="form-control" maxlength="64">
+      </div>
     </div>
 
     <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
@@ -45,17 +49,20 @@
       <table class="table table-sm align-middle mb-0" id="tabelItem">
         <thead>
           <tr>
-            <th style="width:20%;">SKU Produk</th>
-            <th>Nama Produk</th>
-            <th style="width:16%;">Warna</th>
-            <th style="width:18%;">Harga (Rp)</th>
+            <th style="width:16%;">SKU Produk</th>
+            <th>Nama Produk <span class="text-muted small fw-normal">(ketik &amp; pilih dari Data Produk)</span></th>
+            <th style="width:14%;">Warna</th>
+            <th style="width:17%;">Harga (Rp)</th>
             <th style="width:44px;"></th>
           </tr>
         </thead>
         <tbody id="itemBody">
           <tr class="item-row">
-            <td><input type="text" name="sku[]" class="form-control form-control-sm"></td>
-            <td><input type="text" name="nama_produk[]" class="form-control form-control-sm" required></td>
+            <td class="small text-muted sku-cell">-</td>
+            <td>
+              <input type="hidden" name="produk_id[]" class="produk-id">
+              <input type="text" name="nama_produk[]" class="form-control form-control-sm produk-input" list="daftarProduk" autocomplete="off" placeholder="Cari nama / SKU produk..." required>
+            </td>
             <td><input type="text" name="warna[]" class="form-control form-control-sm"></td>
             <td><input type="number" min="0" step="1" name="harga[]" class="form-control form-control-sm harga-input" placeholder="150000"></td>
             <td><button type="button" class="btn btn-sm btn-outline-danger btn-hapus-item" title="Hapus baris">&times;</button></td>
@@ -69,6 +76,13 @@
         </tfoot>
       </table>
     </div>
+
+    <datalist id="daftarProduk">
+      {% for p in produk_master %}<option value="{{ p.nama }}" label="{{ p.sku }}"></option>{% endfor %}
+    </datalist>
+    {% if not produk_master %}
+    <div class="form-text text-danger">Belum ada Data Produk. Tambah dulu di menu <a href="{{ url_for('produk_list') }}">Produk</a>.</div>
+    {% endif %}
 
     <div class="text-center mt-4">
       <button type="submit" class="btn btn-primary px-5">Simpan</button>
@@ -89,7 +103,7 @@
           <th>Nama</th>
           <th>WA</th>
           <th>Alamat</th>
-          <th>Ekspedisi</th>
+          <th>Ekspedisi / Resi</th>
           <th>Produk</th>
           <th class="text-end">Total</th>
           <th></th>
@@ -102,7 +116,7 @@
           <td class="small">{{ p.nama_pembeli }}</td>
           <td class="small">{{ p.no_telepon or "-" }}</td>
           <td class="small">{{ p.alamat or "-" }}</td>
-          <td class="small">{{ p.ekspedisi or "-" }}</td>
+          <td class="small">{{ p.ekspedisi or "-" }}{% if p.no_resi %}<div class="text-muted">{{ p.no_resi }}</div>{% endif %}</td>
           <td class="small">
             {% for it in p.item_list %}
             <div>
@@ -130,6 +144,31 @@
 (function () {
   var body = document.getElementById('itemBody');
   var totalEl = document.getElementById('totalHarga');
+  var PRODUK = {{ produk_master | tojson }};
+  var byNama = {}, bySku = {};
+  PRODUK.forEach(function (p) {
+    byNama[p.nama.toLowerCase()] = p;
+    if (p.sku) bySku[p.sku.toLowerCase()] = p;
+  });
+
+  function pilihProduk(input) {
+    var row = input.closest('.item-row');
+    var teks = input.value.trim().toLowerCase();
+    var p = byNama[teks] || bySku[teks];
+    var hargaEl = row.querySelector('.harga-input');
+    if (p) {
+      input.value = p.nama;
+      row.querySelector('.produk-id').value = p.id;
+      row.querySelector('.sku-cell').textContent = p.sku || '-';
+      hargaEl.value = p.harga || '';
+      input.setCustomValidity('');
+    } else {
+      row.querySelector('.produk-id').value = '';
+      row.querySelector('.sku-cell').textContent = '-';
+      input.setCustomValidity(teks ? 'Pilih produk dari daftar Data Produk' : '');
+    }
+    hitungTotal();
+  }
 
   function hitungTotal() {
     var total = 0;
@@ -139,15 +178,28 @@
 
   document.getElementById('btnTambahItem').addEventListener('click', function () {
     var baris = body.querySelector('.item-row').cloneNode(true);
-    baris.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+    baris.querySelectorAll('input').forEach(function (el) { el.value = ''; el.setCustomValidity(''); });
+    baris.querySelector('.sku-cell').textContent = '-';
     body.appendChild(baris);
-    baris.querySelector('input[name="sku[]"]').focus();
+    baris.querySelector('.produk-input').focus();
+  });
+
+  body.addEventListener('change', function (e) {
+    if (e.target.classList.contains('produk-input')) pilihProduk(e.target);
+  });
+  body.addEventListener('input', function (e) {
+    if (e.target.classList.contains('produk-input')) {
+      var teks = e.target.value.trim().toLowerCase();
+      if (byNama[teks] || bySku[teks]) pilihProduk(e.target);
+    }
   });
 
   body.addEventListener('click', function (e) {
     if (!e.target.classList.contains('btn-hapus-item')) return;
     if (body.querySelectorAll('.item-row').length === 1) {
-      e.target.closest('.item-row').querySelectorAll('input').forEach(function (el) { el.value = ''; });
+      var r = e.target.closest('.item-row');
+      r.querySelectorAll('input').forEach(function (el) { el.value = ''; el.setCustomValidity(''); });
+      r.querySelector('.sku-cell').textContent = '-';
     } else {
       e.target.closest('.item-row').remove();
     }

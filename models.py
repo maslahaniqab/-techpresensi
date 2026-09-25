@@ -634,6 +634,7 @@ class PesananManual(db.Model):
     warna = db.Column(db.String(64))
     harga = db.Column(db.Integer, default=0)  # = total semua item (kolom sku/nama_produk/warna = item pertama, sisa dari versi 1-produk)
     ekspedisi = db.Column(db.String(64))
+    no_resi = db.Column(db.String(64))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
     item_list = db.relationship(
@@ -645,6 +646,7 @@ class PesananManualItem(db.Model):
     """Satu baris produk di dalam satu order manual (1 order bisa banyak produk)."""
     id = db.Column(db.Integer, primary_key=True)
     pesanan_id = db.Column(db.Integer, db.ForeignKey("pesanan_manual.id"), nullable=False)
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"))
     sku = db.Column(db.String(128))
     nama_produk = db.Column(db.String(256), nullable=False)
     warna = db.Column(db.String(64))
