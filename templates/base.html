@@ -248,6 +248,10 @@
 
   {{ nav_section('navPresensiP', 'Presensi', menu_pegawai_utama) }}
 
+  {% if current_user.jabatan == 'Supervisor' or notif_total %}
+  <a class="nav-link {{ 'active' if request.endpoint == 'pegawai_kotak_masuk' }}" href="{{ url_for('pegawai_kotak_masuk') }}">📥 Kotak Masuk{% if notif_belum %} <span class="badge bg-danger">{{ notif_belum }}</span>{% endif %}</a>
+  {% endif %}
+
   {% set ns_kepeg = namespace(list=[]) %}
   {% for item in menu_kepegawaian %}{% if item[3] in akses_pegawai %}{% set ns_kepeg.list = ns_kepeg.list + [item] %}{% endif %}{% endfor %}
   {% if ns_kepeg.list %}{{ nav_section('navKepegawaianP', 'Kepegawaian', ns_kepeg.list) }}{% endif %}

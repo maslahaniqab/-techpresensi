@@ -47,7 +47,7 @@ from models import (
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
-    KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem,
+    KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -1672,6 +1672,13 @@ def create_app():
         kolom_pm = {c["name"] for c in db.inspect(db.engine).get_columns("pesanan_manual")}
         if "ekspedisi" not in kolom_pm:
             db.session.execute(db.text("ALTER TABLE pesanan_manual ADD COLUMN ekspedisi VARCHAR(64)"))
+            db.session.commit()
+        kolom_pb = {c["name"] for c in db.inspect(db.engine).get_columns("permohonan_barang")}
+        if "pemohon_id" not in kolom_pb:
+            db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_id INTEGER"))
+            db.session.commit()
+        if "pemohon_nama" not in kolom_pb:
+            db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_nama VARCHAR(128)"))
             db.session.commit()
         if "no_resi" not in kolom_pm:
             db.session.execute(db.text("ALTER TABLE pesanan_manual ADD COLUMN no_resi VARCHAR(64)"))
@@ -3430,6 +3437,68 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     # ---------- INVENTORY: PERMOHONAN PENGADAAN BARANG ----------
+    def kirim_email_permohonan(p, penerima_email):
+        smtp_email = os.environ.get("SMTP_EMAIL")
+        smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+        if not smtp_email or not smtp_password:
+            return False, "Pengiriman email belum dikonfigurasi di server (SMTP_EMAIL/SMTP_APP_PASSWORD)."
+
+        settings = get_settings()
+        html = render_template("inventory/permohonan_barang_pdf.html", p=p, settings=settings)
+        buffer = BytesIO()
+        pisa.CreatePDF(html, dest=buffer)
+
+        msg = EmailMessage()
+        msg["Subject"] = f"PENTING: PERMOHONAN PRODUK {p.nomor_permohonan} - {p.pemohon_nama or '-'}"
+        msg["From"] = smtp_email
+        msg["To"] = ", ".join(penerima_email)
+        msg.set_content(
+            "PENTING - Ada permohonan produk baru yang perlu ditinjau.\n\n"
+            f"No Permohonan: {p.nomor_permohonan}\n"
+            f"PIC (pengaju): {p.pemohon_nama or '-'}\n"
+            f"Produk: {p.produk.nama_produk}\n"
+            f"Warna: {p.warna or '-'}\n"
+            f"Qty: {p.qty}\n"
+            f"Tanggal: {p.tanggal.strftime('%d-%m-%Y')}\n\n"
+            "Rincian lengkap ada di file PDF terlampir. Permohonan ini juga sudah masuk ke Kotak Masuk "
+            "di Maslaha Portal."
+        )
+        nama_file = "PENTING_PERMOHONAN_PRODUK_" + p.nomor_permohonan.replace("/", "-") + ".pdf"
+        msg.add_attachment(buffer.getvalue(), maintype="application", subtype="pdf", filename=nama_file)
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.send_message(msg)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def teruskan_permohonan_ke_supervisor(p):
+        """Masukkan ke Kotak Masuk semua Supervisor aktif + kirim email (PDF terlampir).
+        Mengembalikan (jumlah_supervisor, hasil_email) -- hasil_email = None kalau tidak ada
+        yang dikirimi, (True, None) berhasil, (False, pesan) gagal."""
+        supervisor = [
+            e for e in Employee.query.filter_by(jabatan="Supervisor", status="Aktif").all()
+            if e.id != p.pemohon_id
+        ]
+        if not supervisor:
+            return 0, None
+        isi = (
+            f"No Permohonan: {p.nomor_permohonan}\nPIC (pengaju): {p.pemohon_nama or '-'}\n"
+            f"Produk: {p.produk.nama_produk}\nWarna: {p.warna or '-'}\nQty: {p.qty}\n"
+            f"Tanggal: {p.tanggal.strftime('%d/%m/%Y')}"
+        )
+        for e in supervisor:
+            db.session.add(Notifikasi(
+                employee_id=e.id, judul=f"PENTING: Permohonan Produk {p.nomor_permohonan} dari {p.pemohon_nama or '-'}",
+                isi=isi, permohonan_id=p.id,
+            ))
+        db.session.commit()
+        emails = [e.email.strip() for e in supervisor if (e.email or "").strip()]
+        hasil_email = kirim_email_permohonan(p, emails) if emails else (False, "Supervisor belum punya alamat email terdaftar.")
+        return len(supervisor), hasil_email
+
     @app.route("/inventory/master-data/permohonan-barang", methods=["GET", "POST"])
     @modul_required("permohonan_barang")
     def permohonan_barang_list():
@@ -3456,6 +3525,8 @@ def create_app():
                 # sebelum di-flush.
                 nomor_permohonan=f"TEMP-{uuid.uuid4().hex}", tanggal=tanggal,
                 produk_id=produk.id, warna=warna, qty=qty,
+                pemohon_id=current_user.id if current_user.role == "pegawai" else None,
+                pemohon_nama=current_user.nama,
             )
             db.session.add(p)
             db.session.flush()
@@ -3467,6 +3538,17 @@ def create_app():
             p.nomor_permohonan = nomor
             db.session.commit()
             flash(f"Permohonan {nomor} berhasil diajukan.", "success")
+            if current_user.role == "pegawai":
+                jumlah_sv, hasil_email = teruskan_permohonan_ke_supervisor(p)
+                if not jumlah_sv:
+                    flash("Belum ada karyawan aktif dengan jabatan Supervisor, jadi permohonan belum diteruskan ke siapa pun.", "warning")
+                elif hasil_email and hasil_email[0]:
+                    flash(f"Permohonan diteruskan ke {jumlah_sv} Supervisor (Kotak Masuk + email dengan lampiran PDF).", "info")
+                else:
+                    flash(
+                        f"Permohonan masuk ke Kotak Masuk {jumlah_sv} Supervisor, tetapi email gagal dikirim: "
+                        f"{hasil_email[1] if hasil_email else 'tidak diketahui'}", "warning",
+                    )
             return redirect(url_for("permohonan_barang_list"))
 
         q = request.args.get("q", "").strip()
@@ -7248,11 +7330,30 @@ def create_app():
         flash("File yang diupload terlalu besar (maksimal 10MB). Silakan kompres/perkecil filenya lalu coba lagi.", "danger")
         return redirect(request.referrer or url_for("login"))
 
+    @app.route("/pegawai/kotak-masuk")
+    @pegawai_required
+    def pegawai_kotak_masuk():
+        daftar = (
+            Notifikasi.query.filter_by(employee_id=current_user.id)
+            .order_by(Notifikasi.id.desc()).limit(200).all()
+        )
+        belum_dibaca_ids = [n.id for n in daftar if not n.dibaca]
+        html = render_template("pegawai/kotak_masuk.html", daftar=daftar, belum_dibaca_ids=set(belum_dibaca_ids))
+        if belum_dibaca_ids:
+            Notifikasi.query.filter(Notifikasi.id.in_(belum_dibaca_ids)).update({"dibaca": True}, synchronize_session=False)
+            db.session.commit()
+        return html
+
     @app.context_processor
     def inject_globals():
         pending_izin = 0
         pending_lembur = 0
         akses_pegawai = set()
+        notif_total = 0
+        notif_belum = 0
+        if current_user.is_authenticated and getattr(current_user, "role", None) == "pegawai":
+            notif_total = Notifikasi.query.filter_by(employee_id=current_user.id).count()
+            notif_belum = Notifikasi.query.filter_by(employee_id=current_user.id, dibaca=False).count()
         if current_user.is_authenticated and getattr(current_user, "role", None) == "admin":
             pending_izin = PengajuanIzin.query.filter_by(status="Menunggu").count()
             pending_lembur = PengajuanLembur.query.filter_by(status="Menunggu").count()
@@ -7266,6 +7367,8 @@ def create_app():
             "pending_lembur_count": pending_lembur,
             "site_settings": get_settings(),
             "akses_pegawai": akses_pegawai,
+            "notif_total": notif_total,
+            "notif_belum": notif_belum,
         }
 
     return app

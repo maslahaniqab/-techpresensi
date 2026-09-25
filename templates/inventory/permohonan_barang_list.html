@@ -22,15 +22,17 @@
   </div>
 </form>
 
-<div class="card p-3" style="overflow-x:auto;">
+<div class="card p-3">
+  <div class="table-responsive" {% if daftar | length > 10 %}style="max-height: 560px; overflow-y: auto;"{% endif %}>
   <table class="table table-hover align-middle mb-0">
-    <thead>
+    <thead {% if daftar | length > 10 %}style="position: sticky; top: 0; background: #fff; z-index: 2;"{% endif %}>
       <tr>
         <th>No</th>
         <th>No Pengajuan</th>
         <th>Produk</th>
         <th>Warna</th>
         <th class="text-end">Qty</th>
+        <th>PIC</th>
         <th>Tgl Pengajuan</th>
         <th>Status</th>
         <th class="text-end">Aksi</th>
@@ -44,6 +46,7 @@
         <td class="small">{{ p.produk.nama_produk }}</td>
         <td class="small">{{ p.warna or "-" }}</td>
         <td class="text-end small">{{ p.qty }}</td>
+        <td class="small text-nowrap">{{ p.pemohon_nama or "-" }}</td>
         <td class="small text-nowrap">{{ p.tanggal.strftime("%d/%m/%Y") }}</td>
         <td>
           {% set status_bg = {"Menunggu": "#fff3cd", "Diproses": "#cfe2ff", "Selesai": "#d1e7dd", "Ditolak": "#e2e3e5"} %}
@@ -51,7 +54,7 @@
         </td>
         <td class="text-end text-nowrap">
           <div class="dropdown d-inline-block">
-            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">Ubah Status</button>
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}'>Ubah Status</button>
             <ul class="dropdown-menu dropdown-menu-end">
               {% for st in ["Menunggu", "Diproses", "Selesai", "Ditolak"] %}
               <li>
@@ -71,10 +74,11 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="text-center text-muted py-4">{{ "Tidak ada permohonan yang cocok dengan pencarian." if q else 'Belum ada Permohonan Barang. Klik "+ Ajukan Permohonan" untuk mulai.' }}</td></tr>
+      <tr><td colspan="9" class="text-center text-muted py-4">{{ "Tidak ada permohonan yang cocok dengan pencarian." if q else 'Belum ada Permohonan Barang. Klik "+ Ajukan Permohonan" untuk mulai.' }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <div class="modal fade" id="modalTambahPermohonan" tabindex="-1">

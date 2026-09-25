@@ -1,0 +1,33 @@
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #222; }
+  .penting { background-color: #b3261e; color: #fff; padding: 8px 12px; font-size: 16px; font-weight: bold; }
+  h2 { margin: 14px 0 4px 0; }
+  table.data { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  table.data td { border: 1px solid #999; padding: 7px 9px; }
+  table.data td.label { width: 32%; background-color: #eee; font-weight: bold; }
+  .foot { margin-top: 24px; font-size: 10px; color: #666; }
+</style>
+</head>
+<body>
+  <div class="penting">PENTING - PERMOHONAN PRODUK</div>
+  <h2>{{ settings.nama_perusahaan }}</h2>
+  <div>Permohonan pengadaan barang yang perlu ditinjau Supervisor.</div>
+
+  <table class="data">
+    <tr><td class="label">No Permohonan</td><td>{{ p.nomor_permohonan }}</td></tr>
+    <tr><td class="label">Tanggal Pengajuan</td><td>{{ p.tanggal.strftime("%d/%m/%Y") }}</td></tr>
+    <tr><td class="label">PIC (Pengaju)</td><td>{{ p.pemohon_nama or "-" }}</td></tr>
+    <tr><td class="label">Produk</td><td>{{ p.produk.nama_produk }}</td></tr>
+    <tr><td class="label">SKU</td><td>{{ p.produk.sku or "-" }}</td></tr>
+    <tr><td class="label">Warna</td><td>{{ p.warna or "-" }}</td></tr>
+    <tr><td class="label">Qty</td><td>{{ p.qty }} pcs</td></tr>
+    <tr><td class="label">Status</td><td>{{ p.status }}</td></tr>
+  </table>
+
+  <div class="foot">Dokumen ini dibuat otomatis oleh Maslaha Portal. Permohonan yang sama juga tersedia di Kotak Masuk portal.</div>
+</body>
+</html>

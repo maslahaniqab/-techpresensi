@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Kotak Masuk{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h3 class="mb-1">Kotak Masuk</h3>
+  <p class="text-muted small mb-0">Pemberitahuan untuk Anda, mis. permohonan barang baru dari karyawan.</p>
+</div>
+
+{% for n in daftar %}
+<div class="card p-3 mb-2 {{ 'border-danger' if n.id in belum_dibaca_ids }}">
+  <div class="d-flex justify-content-between flex-wrap gap-2">
+    <div class="fw-semibold">
+      {% if n.id in belum_dibaca_ids %}<span class="badge bg-danger me-1">Baru</span>{% endif %}{{ n.judul }}
+    </div>
+    <div class="text-muted small">{{ n.dibuat_pada.strftime("%d/%m/%Y %H:%M") }}</div>
+  </div>
+  {% if n.isi %}<div class="small mt-2" style="white-space: pre-line;">{{ n.isi }}</div>{% endif %}
+  {% if n.permohonan %}
+  <div class="small mt-2">
+    Status saat ini: <span class="badge bg-secondary">{{ n.permohonan.status }}</span>
+    {% if 'permohonan_barang' in akses_pegawai %}
+    <a href="{{ url_for('permohonan_barang_list', q=n.permohonan.nomor_permohonan) }}" class="ms-2">Buka Permohonan Barang &rarr;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="card p-4 text-center text-muted">Belum ada pesan di Kotak Masuk.</div>
+{% endfor %}
+{% endblock %}

@@ -702,9 +702,24 @@ class PermohonanBarang(db.Model):
     warna = db.Column(db.String(64))
     qty = db.Column(db.Integer, nullable=False, default=0)
     status = db.Column(db.String(16), nullable=False, default="Menunggu")  # Menunggu/Diproses/Selesai/Ditolak
+    pemohon_id = db.Column(db.Integer, db.ForeignKey("employee.id"))  # PIC (karyawan pengaju); kosong kalau diajukan admin
+    pemohon_nama = db.Column(db.String(128))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
     produk = db.relationship("Produk")
+
+
+class Notifikasi(db.Model):
+    """Kotak masuk di portal untuk karyawan (mis. Supervisor menerima permohonan barang baru)."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    judul = db.Column(db.String(200), nullable=False)
+    isi = db.Column(db.Text)
+    permohonan_id = db.Column(db.Integer, db.ForeignKey("permohonan_barang.id"))
+    dibaca = db.Column(db.Boolean, nullable=False, default=False)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    permohonan = db.relationship("PermohonanBarang")
 
 
 class PengajuanLembur(db.Model):
