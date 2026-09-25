@@ -176,6 +176,14 @@
             <input type="text" class="form-control" value="Dibuat otomatis" disabled>
             <div class="form-text">Format: PO-tgl-kodevendor+urut, mis. PO-04/09/2026-01001</div>
           </div>
+          {% if prefill %}
+          <div class="col-12 d-none" id="bannerDariPermohonan">
+            <div class="alert alert-warning small mb-0 py-2">
+              Dari permohonan <strong>{{ prefill.nomor }}</strong>: produk yang <strong>Diproses</strong> sudah dimasukkan ke Item Produk.
+              Pemakaian Bahan diisi perkiraan dari <em>Kebutuhan bahan per produk &times; Qty</em> permohonan (kalau kebutuhannya sudah dicatat di menu Bahan Baku) &mdash; silakan dicek dan diubah. Pilih Vendor lalu Simpan PO.
+            </div>
+          </div>
+          {% endif %}
           <div class="col-12">
             <div class="alert alert-info small mb-0 py-2">Size &amp; Qty pcs per produk diisi belakangan pas <strong>Mulai Produksi</strong> di halaman Produksi -- di sini cukup Produk + Warna. Stok bahan juga baru kepotong pas itu, bukan sekarang.</div>
           </div>
@@ -283,11 +291,46 @@
     initBahanSearch(sel);
   }
 
+  const PREFILL = {{ prefill | tojson }};
+  let prefillDipakai = false;
+
+  function isiDariPermohonan() {
+    PREFILL.items.forEach(it => {
+      tambahBarisProduk();
+      const tr = document.getElementById("tbodyItemProduk").lastElementChild;
+      const sel = tr.querySelector("select");
+      if (sel._choicesInstance) sel._choicesInstance.setChoiceByValue(String(it.produk_id)); else sel.value = String(it.produk_id);
+      tr.querySelector("input[name='ip_warna[]']").value = it.warna;
+    });
+    PREFILL.bahan.forEach(b => {
+      tambahBarisBahan();
+      const tr = document.getElementById("tbodyBahanPakai").lastElementChild;
+      const sel = tr.querySelector("select");
+      if (sel._choicesInstance) sel._choicesInstance.setChoiceByValue(String(b.bahan_id)); else sel.value = String(b.bahan_id);
+      tr.querySelector("input[name='bp_qty[]']").value = b.qty;
+      tr.querySelector(".bp-satuan").textContent = BAHAN_DATA[b.bahan_id] ? BAHAN_DATA[b.bahan_id].satuan : "";
+    });
+    if (!PREFILL.items.length) tambahBarisProduk();
+    if (!PREFILL.bahan.length) tambahBarisBahan();
+  }
+
   document.getElementById("modalBuatPO").addEventListener("show.bs.modal", function () {
     document.getElementById("tbodyItemProduk").innerHTML = "";
     document.getElementById("tbodyBahanPakai").innerHTML = "";
-    tambahBarisProduk();
-    tambahBarisBahan();
+    const banner = document.getElementById("bannerDariPermohonan");
+    if (PREFILL && !prefillDipakai) {
+      prefillDipakai = true;
+      if (banner) banner.classList.remove("d-none");
+      isiDariPermohonan();
+    } else {
+      if (banner) banner.classList.add("d-none");
+      tambahBarisProduk();
+      tambahBarisBahan();
+    }
   });
+
+  if (PREFILL && document.querySelector("[data-bs-target='#modalBuatPO']")) {
+    new bootstrap.Modal(document.getElementById("modalBuatPO")).show();
+  }
 </script>
 {% endblock %}

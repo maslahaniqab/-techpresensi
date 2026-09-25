@@ -2890,11 +2890,24 @@ def create_app():
         bahan_json = {
             b.id: {"nama": b.nama_bahan, "stok": b.stok_saat_ini or 0, "satuan": b.satuan} for b in daftar_bahan
         }
+        prefill = None
+        pb = db.session.get(PermohonanBarang, request.args.get("dari_permohonan", type=int) or 0)
+        if pb:
+            aktif = [it for it in pb.item_list if it.status == "Diproses"]
+            kebutuhan_bahan = {}
+            for it in aktif:
+                for k in BahanBakuKebutuhan.query.filter_by(produk_id=it.produk_id).all():
+                    kebutuhan_bahan[k.bahan_baku_id] = kebutuhan_bahan.get(k.bahan_baku_id, 0) + (k.jumlah_yard or 0) * it.qty
+            prefill = {
+                "nomor": pb.nomor_permohonan,
+                "items": [{"produk_id": it.produk_id, "warna": it.warna or "", "qty": it.qty} for it in aktif],
+                "bahan": [{"bahan_id": bid, "qty": round(q, 2)} for bid, q in kebutuhan_bahan.items() if q > 0],
+            }
         return render_template(
             "inventory/purchase_order_list.html",
             daftar=daftar, daftar_vendor=daftar_vendor, daftar_produk=daftar_produk,
             daftar_bahan=daftar_bahan, daftar_akun=daftar_akun, produk_json=produk_json, bahan_json=bahan_json,
-            tanggal_hari_ini=today_wib().isoformat(), q=q,
+            tanggal_hari_ini=today_wib().isoformat(), q=q, prefill=prefill,
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>")
@@ -3461,6 +3474,20 @@ def create_app():
         return redirect(url_for("bahan_baku_cutting"))
 
     # ---------- INVENTORY: PERMOHONAN PENGADAAN BARANG ----------
+    def punya_akses_modul(modul):
+        if current_user.role == "admin":
+            return True
+        return AksesKaryawan.query.filter_by(employee_id=current_user.id, modul=modul).first() is not None
+
+    def arahkan_setelah_diproses(p, pesan):
+        """Begitu ada produk yang Diproses, lanjut ke halaman Purchase Order (popup Buat PO
+        baru & Pemakaian Bahan otomatis terbuka, sudah terisi dari permohonan ini)."""
+        flash(pesan, "success")
+        if punya_akses_modul("purchase_order"):
+            return redirect(url_for("purchase_order_list", dari_permohonan=p.id))
+        flash("Produk sudah berstatus Diproses. Minta admin/PIC yang punya akses Purchase Order untuk membuat PO-nya.", "info")
+        return redirect(url_for("permohonan_barang_list"))
+
     def baca_item_permohonan_form():
         items = []
         warna_list = request.form.getlist("warna[]")
@@ -3681,8 +3708,15 @@ def create_app():
             p.catatan = catatan or p.catatan
         elif status == "Menunggu":
             p.catatan = None
+        if status == "Diproses":
+            for it in p.item_list:
+                if it.status == "Menunggu":
+                    it.status = "Diproses"
         db.session.commit()
-        flash(f"Status permohonan {p.nomor_permohonan} diubah jadi {status}.", "success")
+        pesan = f"Status permohonan {p.nomor_permohonan} diubah jadi {status}."
+        if status == "Diproses" and any(it.status == "Diproses" for it in p.item_list):
+            return arahkan_setelah_diproses(p, pesan + " Lanjut buat Purchase Order.")
+        flash(pesan, "success")
         return redirect(url_for("permohonan_barang_list"))
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/proses", methods=["POST"])
@@ -3737,6 +3771,8 @@ def create_app():
         pesan = f"Permohonan {p.nomor_permohonan}: {len(dipilih & {it.id for it in p.item_list})} produk diproses"
         if kembali:
             pesan += f", {len(kembali)} produk dikembalikan ke pengajuan ({status_sisa})"
+        if dipilih:
+            return arahkan_setelah_diproses(p, pesan + ". Lanjut buat Purchase Order.")
         flash(pesan + ".", "success")
         return redirect(url_for("permohonan_barang_list"))
 
