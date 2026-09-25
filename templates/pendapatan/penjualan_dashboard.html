@@ -27,22 +27,49 @@
         <input type="text" name="no_telepon" class="form-control">
       </div>
       <div class="col-md-6">
-        <label class="form-label">SKU Produk</label>
-        <input type="text" name="sku" class="form-control">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Nama Produk</label>
-        <input type="text" name="nama_produk" class="form-control" required>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Warna</label>
-        <input type="text" name="warna" class="form-control">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Harga</label>
-        <input type="number" min="0" step="1" name="harga" class="form-control" placeholder="Contoh: 150000">
+        <label class="form-label">Ekspedisi</label>
+        <select name="ekspedisi" class="form-select">
+          <option value="">- Pilih Ekspedisi -</option>
+          {% for e in ekspedisi_list %}
+          <option value="{{ e }}">{{ e }}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+      <div class="fw-semibold">Daftar Produk</div>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahItem">+ Tambah Produk</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0" id="tabelItem">
+        <thead>
+          <tr>
+            <th style="width:20%;">SKU Produk</th>
+            <th>Nama Produk</th>
+            <th style="width:16%;">Warna</th>
+            <th style="width:18%;">Harga (Rp)</th>
+            <th style="width:44px;"></th>
+          </tr>
+        </thead>
+        <tbody id="itemBody">
+          <tr class="item-row">
+            <td><input type="text" name="sku[]" class="form-control form-control-sm"></td>
+            <td><input type="text" name="nama_produk[]" class="form-control form-control-sm" required></td>
+            <td><input type="text" name="warna[]" class="form-control form-control-sm"></td>
+            <td><input type="number" min="0" step="1" name="harga[]" class="form-control form-control-sm harga-input" placeholder="150000"></td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger btn-hapus-item" title="Hapus baris">&times;</button></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" class="text-end fw-semibold">Total Dibayar Customer</td>
+            <td colspan="2" class="fw-bold fs-6" id="totalHarga">Rp 0</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
     <div class="text-center mt-4">
       <button type="submit" class="btn btn-primary px-5">Simpan</button>
     </div>
@@ -62,10 +89,9 @@
           <th>Nama</th>
           <th>WA</th>
           <th>Alamat</th>
-          <th>SKU</th>
+          <th>Ekspedisi</th>
           <th>Produk</th>
-          <th>Warna</th>
-          <th class="text-end">Harga</th>
+          <th class="text-end">Total</th>
           <th></th>
         </tr>
       </thead>
@@ -76,10 +102,16 @@
           <td class="small">{{ p.nama_pembeli }}</td>
           <td class="small">{{ p.no_telepon or "-" }}</td>
           <td class="small">{{ p.alamat or "-" }}</td>
-          <td class="small">{{ p.sku or "-" }}</td>
-          <td class="small">{{ p.nama_produk }}</td>
-          <td class="small">{{ p.warna or "-" }}</td>
-          <td class="text-end small">{{ p.harga | rupiah }}</td>
+          <td class="small">{{ p.ekspedisi or "-" }}</td>
+          <td class="small">
+            {% for it in p.item_list %}
+            <div>
+              {% if it.sku %}<span class="text-muted">[{{ it.sku }}]</span> {% endif %}{{ it.nama_produk }}{% if it.warna %} <span class="text-muted">&middot; {{ it.warna }}</span>{% endif %}
+              <span class="text-muted">&middot; {{ it.harga | rupiah }}</span>
+            </div>
+            {% endfor %}
+          </td>
+          <td class="text-end small fw-semibold text-nowrap">{{ p.harga | rupiah }}</td>
           <td class="text-end">
             <form method="post" action="{{ url_for('pendapatan_penjualan_manual_hapus', pesanan_id=p.id) }}" onsubmit="return confirm('Hapus order {{ p.no_invoice }}?');">
               <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
@@ -87,10 +119,44 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted py-4">Belum ada order manual. Isi form di atas untuk mulai.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">Belum ada order manual. Isi form di atas untuk mulai.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<script>
+(function () {
+  var body = document.getElementById('itemBody');
+  var totalEl = document.getElementById('totalHarga');
+
+  function hitungTotal() {
+    var total = 0;
+    body.querySelectorAll('.harga-input').forEach(function (el) { total += parseFloat(el.value) || 0; });
+    totalEl.textContent = 'Rp ' + Math.round(total).toLocaleString('id-ID');
+  }
+
+  document.getElementById('btnTambahItem').addEventListener('click', function () {
+    var baris = body.querySelector('.item-row').cloneNode(true);
+    baris.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+    body.appendChild(baris);
+    baris.querySelector('input[name="sku[]"]').focus();
+  });
+
+  body.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('btn-hapus-item')) return;
+    if (body.querySelectorAll('.item-row').length === 1) {
+      e.target.closest('.item-row').querySelectorAll('input').forEach(function (el) { el.value = ''; });
+    } else {
+      e.target.closest('.item-row').remove();
+    }
+    hitungTotal();
+  });
+
+  body.addEventListener('input', function (e) {
+    if (e.target.classList.contains('harga-input')) hitungTotal();
+  });
+})();
+</script>
 {% endblock %}

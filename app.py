@@ -47,7 +47,7 @@ from models import (
     BahanBaku, BahanBakuKebutuhan, BahanBakuTransaksi, ProdukSpekUkuran,
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
-    KategoriProduk, AksesKaryawan, PesananManual,
+    KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem,
 )
 
 HARI_NAMA = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
@@ -245,6 +245,12 @@ PRESET_LABA_RUGI = {
 }
 
 MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
+
+EKSPEDISI_LIST = [
+    "JNE", "J&T Express", "J&T Cargo", "SiCepat", "AnterAja", "Ninja Xpress", "ID Express",
+    "Pos Indonesia", "Lion Parcel", "SAP Express", "Wahana", "Paxel", "Gojek / Grab (Instan)",
+    "Ambil di Tempat", "Lainnya",
+]
 
 KOLOM_TARGET_IKLAN = [
     ("tanggal", "Tanggal", True, ["tanggal", "date", "tgl", "periode", "reporting starts", "reporting ends", "per hari"]),
@@ -1663,6 +1669,17 @@ def create_app():
                 "SELECT DISTINCT purchase_order_id FROM purchase_order_item_produk WHERE qty > 0)"
             ))
             db.session.commit()
+        kolom_pm = {c["name"] for c in db.inspect(db.engine).get_columns("pesanan_manual")}
+        if "ekspedisi" not in kolom_pm:
+            db.session.execute(db.text("ALTER TABLE pesanan_manual ADD COLUMN ekspedisi VARCHAR(64)"))
+            db.session.commit()
+        # Order manual lama (1 produk, disimpan di kolom order-nya langsung) -> salin jadi 1 item
+        # supaya tampil sama seperti order baru yang punya banyak item.
+        for pm in PesananManual.query.filter(~PesananManual.item_list.any()).all():
+            db.session.add(PesananManualItem(
+                pesanan_id=pm.id, sku=pm.sku, nama_produk=pm.nama_produk, warna=pm.warna, harga=pm.harga or 0,
+            ))
+        db.session.commit()
         if not User.query.first():
             admin = User(username="admin", nama="Administrator")
             admin.set_password("admin123")
@@ -5020,15 +5037,36 @@ def create_app():
     @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_dashboard():
         daftar = PesananManual.query.order_by(PesananManual.id.desc()).all()
-        return render_template("pendapatan/penjualan_dashboard.html", daftar=daftar)
+        return render_template(
+            "pendapatan/penjualan_dashboard.html", daftar=daftar, ekspedisi_list=EKSPEDISI_LIST,
+        )
 
     @app.route("/pendapatan/penjualan/manual/tambah", methods=["POST"])
     @modul_required("pendapatan_penjualan")
     def pendapatan_penjualan_manual_tambah():
         nama_pembeli = request.form.get("nama_pembeli", "").strip()
-        nama_produk = request.form.get("nama_produk", "").strip()
-        if not nama_pembeli or not nama_produk:
-            flash("Nama Pembeli dan Nama Produk wajib diisi.", "danger")
+        ekspedisi = request.form.get("ekspedisi", "").strip()
+        if ekspedisi not in EKSPEDISI_LIST:
+            ekspedisi = ""
+
+        items = []
+        sku_list = request.form.getlist("sku[]")
+        nama_list = request.form.getlist("nama_produk[]")
+        warna_list = request.form.getlist("warna[]")
+        harga_list = request.form.getlist("harga[]")
+        for i, nama in enumerate(nama_list):
+            nama = nama.strip()
+            if not nama:
+                continue
+            items.append({
+                "sku": sku_list[i].strip() if i < len(sku_list) else "",
+                "nama_produk": nama,
+                "warna": warna_list[i].strip() if i < len(warna_list) else "",
+                "harga": max(round(parse_angka_iklan(harga_list[i])), 0) if i < len(harga_list) else 0,
+            })
+
+        if not nama_pembeli or not items:
+            flash("Nama Pembeli dan minimal 1 Nama Produk wajib diisi.", "danger")
             return redirect(url_for("pendapatan_penjualan_dashboard"))
 
         tanggal = today_wib()
@@ -5045,14 +5083,16 @@ def create_app():
             nama_pembeli=nama_pembeli,
             no_telepon=request.form.get("no_telepon", "").strip(),
             alamat=request.form.get("alamat", "").strip(),
-            sku=request.form.get("sku", "").strip(),
-            nama_produk=nama_produk,
-            warna=request.form.get("warna", "").strip(),
-            harga=round(parse_angka_iklan(request.form.get("harga", "0"))),
+            sku=items[0]["sku"],
+            nama_produk=items[0]["nama_produk"],
+            warna=items[0]["warna"],
+            harga=sum(it["harga"] for it in items),
+            ekspedisi=ekspedisi or None,
         )
+        pesanan.item_list = [PesananManualItem(**it) for it in items]
         db.session.add(pesanan)
         db.session.commit()
-        flash(f"Order manual {no_invoice} berhasil disimpan.", "success")
+        flash(f"Order manual {no_invoice} berhasil disimpan ({len(items)} produk, total {pesanan.harga:,.0f}).".replace(",", "."), "success")
         return redirect(url_for("pendapatan_penjualan_dashboard"))
 
     @app.route("/pendapatan/penjualan/manual/<int:pesanan_id>/hapus", methods=["POST"])
@@ -5071,12 +5111,17 @@ def create_app():
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Order Manual"
-        ws.append(["No Invoice", "Nama", "WA", "Alamat", "SKU", "Produk", "Warna", "Harga"])
+        ws.append([
+            "No Invoice", "Tanggal", "Nama", "WA", "Alamat", "Ekspedisi",
+            "SKU", "Produk", "Warna", "Harga", "Total Order",
+        ])
         for p in PesananManual.query.order_by(PesananManual.id).all():
-            ws.append([
-                p.no_invoice, p.nama_pembeli, p.no_telepon or "", p.alamat or "",
-                p.sku or "", p.nama_produk, p.warna or "", p.harga or 0,
-            ])
+            for n, it in enumerate(p.item_list):
+                ws.append([
+                    p.no_invoice, p.tanggal.strftime("%d/%m/%Y"), p.nama_pembeli, p.no_telepon or "",
+                    p.alamat or "", p.ekspedisi or "", it.sku or "", it.nama_produk, it.warna or "",
+                    it.harga or 0, (p.harga or 0) if n == 0 else None,
+                ])
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
