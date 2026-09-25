@@ -342,6 +342,29 @@
     document.querySelectorAll("select.bahan-search").forEach(window.initBahanSearch);
   });
 </script>
+{% if notif_popup %}
+<div class="modal fade" id="modalNotifPopup" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-danger">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">&#9888;&#65039; {{ notif_popup.judul }}</h5>
+      </div>
+      <div class="modal-body" style="white-space: pre-line;">{{ notif_popup.isi }}</div>
+      <div class="modal-footer">
+        <a href="{{ url_for('pegawai_kotak_masuk') }}" class="btn btn-outline-secondary">Lihat Kotak Masuk</a>
+        <form method="post" action="{{ url_for('pegawai_notif_baca', notif_id=notif_popup.id) }}" class="d-inline">
+          <button type="submit" class="btn btn-danger">Mengerti</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    new bootstrap.Modal(document.getElementById("modalNotifPopup")).show();
+  });
+</script>
+{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

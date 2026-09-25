@@ -1683,6 +1683,17 @@ def create_app():
         if "pemohon_nama" not in kolom_pb:
             db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN pemohon_nama VARCHAR(128)"))
             db.session.commit()
+        kolom_pbi = {c["name"] for c in db.inspect(db.engine).get_columns("permohonan_barang_item")}
+        if "ditolak" not in kolom_pbi:
+            db.session.execute(db.text("ALTER TABLE permohonan_barang_item ADD COLUMN ditolak BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.commit()
+        if "alasan_tolak" not in kolom_pbi:
+            db.session.execute(db.text("ALTER TABLE permohonan_barang_item ADD COLUMN alasan_tolak VARCHAR(256)"))
+            db.session.commit()
+        kolom_notif = {c["name"] for c in db.inspect(db.engine).get_columns("notifikasi")}
+        if "popup" not in kolom_notif:
+            db.session.execute(db.text("ALTER TABLE notifikasi ADD COLUMN popup BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.commit()
         if "catatan" not in kolom_pb:
             db.session.execute(db.text("ALTER TABLE permohonan_barang ADD COLUMN catatan VARCHAR(256)"))
             db.session.commit()
@@ -3624,7 +3635,15 @@ def create_app():
             p.tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
         except ValueError:
             pass
-        p.item_list = [PermohonanBarangItem(**it) for it in items]
+        lama = {(it.produk_id, it.warna or ""): it for it in p.item_list if it.ditolak}
+        baru = []
+        for it in items:
+            item = PermohonanBarangItem(**it)
+            sebelumnya = lama.get((it["produk_id"], it["warna"]))
+            if sebelumnya:
+                item.ditolak, item.alasan_tolak = True, sebelumnya.alasan_tolak
+            baru.append(item)
+        p.item_list = baru
         p.produk_id = items[0]["produk_id"]
         p.warna = items[0]["warna"]
         p.qty = sum(it["qty"] for it in items)
@@ -3648,6 +3667,37 @@ def create_app():
             p.catatan = None
         db.session.commit()
         flash(f"Status permohonan {p.nomor_permohonan} diubah jadi {status}.", "success")
+        return redirect(url_for("permohonan_barang_list"))
+
+    @app.route("/inventory/master-data/permohonan-barang/item/<int:item_id>/tolak", methods=["POST"])
+    @modul_required("permohonan_barang")
+    def permohonan_barang_item_tolak(item_id):
+        item = db.session.get(PermohonanBarangItem, item_id) or abort_404()
+        p = item.permohonan
+        tolak = request.form.get("ditolak") == "1"
+        alasan = request.form.get("alasan", "").strip()[:256]
+        marker = "Semua produk ditolak"
+        if tolak:
+            item.ditolak, item.alasan_tolak = True, alasan or "Tanpa keterangan"
+            if all(it.ditolak for it in p.item_list):
+                p.status, p.catatan = "Ditolak", marker
+            flash(f"Produk {item.produk.nama_produk} pada {p.nomor_permohonan} ditandai DITOLAK.", "warning")
+            if p.pemohon_id and not (current_user.role == "pegawai" and current_user.id == p.pemohon_id):
+                db.session.add(Notifikasi(
+                    employee_id=p.pemohon_id, permohonan_id=p.id, popup=True,
+                    judul=f"Produk ditolak: {item.produk.nama_produk}",
+                    isi=(
+                        f"Permohonan {p.nomor_permohonan} (tgl {p.tanggal.strftime('%d/%m/%Y')})\n"
+                        f"Produk: {item.produk.nama_produk}" + (f" ({item.warna})" if item.warna else "") + f" x {item.qty}\n"
+                        f"Alasan: {item.alasan_tolak}\nDitolak oleh: {current_user.nama}"
+                    ),
+                ))
+        else:
+            item.ditolak, item.alasan_tolak = False, None
+            if p.status == "Ditolak" and p.catatan == marker:
+                p.status, p.catatan = "Menunggu", None
+            flash(f"Penolakan produk {item.produk.nama_produk} dibatalkan.", "info")
+        db.session.commit()
         return redirect(url_for("permohonan_barang_list"))
 
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/hapus", methods=["POST"])
@@ -7419,6 +7469,15 @@ def create_app():
             db.session.commit()
         return html
 
+    @app.route("/pegawai/notif/<int:notif_id>/baca", methods=["POST"])
+    @pegawai_required
+    def pegawai_notif_baca(notif_id):
+        n = Notifikasi.query.filter_by(id=notif_id, employee_id=current_user.id).first()
+        if n:
+            n.dibaca = True
+            db.session.commit()
+        return redirect(request.referrer or url_for("pegawai_kotak_masuk"))
+
     @app.context_processor
     def inject_globals():
         pending_izin = 0
@@ -7426,9 +7485,15 @@ def create_app():
         akses_pegawai = set()
         notif_total = 0
         notif_belum = 0
+        notif_popup = None
         if current_user.is_authenticated and getattr(current_user, "role", None) == "pegawai":
             notif_total = Notifikasi.query.filter_by(employee_id=current_user.id).count()
             notif_belum = Notifikasi.query.filter_by(employee_id=current_user.id, dibaca=False).count()
+            if notif_belum:
+                notif_popup = (
+                    Notifikasi.query.filter_by(employee_id=current_user.id, dibaca=False, popup=True)
+                    .order_by(Notifikasi.id.desc()).first()
+                )
         if current_user.is_authenticated and getattr(current_user, "role", None) == "admin":
             pending_izin = PengajuanIzin.query.filter_by(status="Menunggu").count()
             pending_lembur = PengajuanLembur.query.filter_by(status="Menunggu").count()
@@ -7444,6 +7509,7 @@ def create_app():
             "akses_pegawai": akses_pegawai,
             "notif_total": notif_total,
             "notif_belum": notif_belum,
+            "notif_popup": notif_popup,
         }
 
     return app

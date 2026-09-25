@@ -51,8 +51,18 @@
         <td class="fw-semibold small">{{ p.nomor_permohonan }}</td>
         <td class="small">
           {% for it in p.item_list %}
-          <div>{{ it.produk.nama_produk }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span></div>
+          <form method="post" action="{{ url_for('permohonan_barang_item_tolak', item_id=it.id) }}" class="d-flex align-items-start gap-2 form-tolak-item">
+            <input type="hidden" name="ditolak" value="">
+            <input type="hidden" name="alasan" value="">
+            <input type="checkbox" class="form-check-input mt-1 chk-tolak" title="Centang jika produk ini ditolak" {{ 'checked' if it.ditolak }}
+                   data-nama="{{ it.produk.nama_produk }}">
+            <div class="{{ 'text-decoration-line-through text-muted' if it.ditolak }}">
+              {{ it.produk.nama_produk }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span>
+              {% if it.ditolak %}<div class="text-danger" style="text-decoration:none; display:inline-block;">&mdash; DITOLAK: {{ it.alasan_tolak }}</div>{% endif %}
+            </div>
+          </form>
           {% endfor %}
+          <div class="text-muted" style="font-size:.75rem;">Centang kotak di depan produk yang ditolak.</div>
         </td>
         <td class="text-end small fw-semibold">{{ p.total_qty }}</td>
         <td class="small text-nowrap">{{ p.pemohon_nama or "-" }}</td>
@@ -198,6 +208,22 @@ document.addEventListener("DOMContentLoaded", function () {
       tr.querySelector('[name="qty[]"]').value = item.qty;
     }
   }
+
+  document.querySelectorAll(".chk-tolak").forEach(function (chk) {
+    chk.addEventListener("change", function () {
+      var form = chk.closest("form");
+      if (chk.checked) {
+        var alasan = prompt("Alasan menolak produk \"" + chk.dataset.nama + "\"? (pengaju akan diberi pemberitahuan)");
+        if (alasan === null) { chk.checked = false; return; }
+        form.ditolak.value = "1";
+        form.alasan.value = alasan;
+      } else {
+        if (!confirm("Batalkan penolakan produk ini?")) { chk.checked = true; return; }
+        form.ditolak.value = "0";
+      }
+      form.submit();
+    });
+  });
 
   function pasangTabel(tbody, tombolTambah) {
     document.getElementById(tombolTambah).addEventListener("click", function () { tambahBaris(tbody); });

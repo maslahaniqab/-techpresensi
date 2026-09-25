@@ -717,7 +717,8 @@ class PermohonanBarang(db.Model):
 
     @property
     def total_qty(self):
-        return sum(it.qty or 0 for it in self.item_list)
+        """Total qty produk yang masih diproses (produk yang ditolak tidak dihitung)."""
+        return sum(it.qty or 0 for it in self.item_list if not it.ditolak)
 
 
 class PermohonanBarangItem(db.Model):
@@ -726,6 +727,8 @@ class PermohonanBarangItem(db.Model):
     produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"), nullable=False)
     warna = db.Column(db.String(64))
     qty = db.Column(db.Integer, nullable=False, default=0)
+    ditolak = db.Column(db.Boolean, nullable=False, default=False)
+    alasan_tolak = db.Column(db.String(256))
 
     produk = db.relationship("Produk")
 
@@ -738,6 +741,7 @@ class Notifikasi(db.Model):
     isi = db.Column(db.Text)
     permohonan_id = db.Column(db.Integer, db.ForeignKey("permohonan_barang.id"))
     dibaca = db.Column(db.Boolean, nullable=False, default=False)
+    popup = db.Column(db.Boolean, nullable=False, default=False)  # tampil sbg popup sampai dikonfirmasi
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 
     permohonan = db.relationship("PermohonanBarang", foreign_keys=[permohonan_id])
