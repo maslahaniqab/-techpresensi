@@ -1813,7 +1813,24 @@ def create_app():
         absen_hari_ini = Attendance.query.filter_by(tanggal=hari_ini).count()
         hadir_hari_ini = Attendance.query.filter_by(tanggal=hari_ini, status="Hadir").count()
 
-        bulan_ini, tahun_ini = hari_ini.month, hari_ini.year
+        # Filter Bulan/Tahun -- default ke bulan berjalan, dipakai utk semua ringkasan
+        # yg sifatnya "per periode" (profit, penjualan, produk terlaris/slow move).
+        # Data stok (Item Stok Rendah/Habis, Nilai Inventory saat ini) TIDAK ikut
+        # filter ini krn itu kondisi stok SEKARANG, bukan angka historis per bulan.
+        try:
+            bulan_ini = int(request.args.get("bulan", hari_ini.month))
+            if not 1 <= bulan_ini <= 12:
+                bulan_ini = hari_ini.month
+        except ValueError:
+            bulan_ini = hari_ini.month
+        try:
+            tahun_ini = int(request.args.get("tahun", hari_ini.year))
+        except ValueError:
+            tahun_ini = hari_ini.year
+        tahun_opsi = list(range(hari_ini.year - 2, hari_ini.year + 1))
+        if tahun_ini not in tahun_opsi:
+            tahun_opsi = sorted(tahun_opsi + [tahun_ini])
+
         payrolls_bulan_ini = Payroll.query.filter_by(bulan=bulan_ini, tahun=tahun_ini).all()
         total_gaji_bulan_ini = sum(p.gaji_bersih for p in payrolls_bulan_ini)
 
@@ -1861,16 +1878,17 @@ def create_app():
         ]
 
         # ---- Ringkasan Penjualan & Inventory (kartu, diagram, watchlist stok) ----
-        awal_bulan = hari_ini.replace(day=1)
+        awal_bulan = date(tahun_ini, bulan_ini, 1)
+        akhir_bulan = date(tahun_ini, bulan_ini, calendar.monthrange(tahun_ini, bulan_ini)[1])
         pesanan_mp_bulan_ini = PesananMarketplace.query.filter(
             PesananMarketplace.status_pesanan.notin_(STATUS_BATAL_MARKETPLACE),
-            PesananMarketplace.tanggal_pesanan >= awal_bulan, PesananMarketplace.tanggal_pesanan <= hari_ini,
+            PesananMarketplace.tanggal_pesanan >= awal_bulan, PesananMarketplace.tanggal_pesanan <= akhir_bulan,
         ).all()
         channel_omzet = {}
         for it in pesanan_mp_bulan_ini:
             channel_omzet[it.marketplace] = channel_omzet.get(it.marketplace, 0) + it.subtotal
         pesanan_manual_bulan_ini = PesananManual.query.filter(
-            PesananManual.tanggal >= awal_bulan, PesananManual.tanggal <= hari_ini,
+            PesananManual.tanggal >= awal_bulan, PesananManual.tanggal <= akhir_bulan,
         ).all()
         omzet_manual = sum(p.harga or 0 for p in pesanan_manual_bulan_ini)
         if omzet_manual:
@@ -1938,6 +1956,9 @@ def create_app():
             produk_terlaris_10=produk_terlaris_10,
             produk_slow_move_10=produk_slow_move_10,
             perputaran_inventory=perputaran_inventory,
+            bulan_filter=bulan_ini,
+            tahun_filter=tahun_ini,
+            tahun_opsi=tahun_opsi,
         )
 
     # ---------- KARYAWAN ----------

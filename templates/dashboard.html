@@ -8,6 +8,21 @@
   <div class="small" style="color:#8a6d1f;">Kelola presensi, gaji, dan operasional Toko Maslaha lebih mudah, cepat, dan terintegrasi.</div>
 </div>
 
+<form method="get" class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <span class="text-muted small">Tampilkan data periode:</span>
+  <select name="bulan" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+    {% for i in range(1, 13) %}
+    <option value="{{ i }}" {{ 'selected' if i == bulan_filter }}>{{ bulan_nama_list[i] }}</option>
+    {% endfor %}
+  </select>
+  <select name="tahun" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+    {% for th in tahun_opsi %}
+    <option value="{{ th }}" {{ 'selected' if th == tahun_filter }}>{{ th }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit" class="btn btn-sm btn-outline-secondary">Tampilkan</button></noscript>
+</form>
+
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <h5 class="mb-0">Ringkasan Profitabilitas</h5>
