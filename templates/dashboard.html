@@ -362,7 +362,7 @@ new Chart(document.getElementById('chartChannelPenjualan'), {
     labels: {{ channel_omzet.keys() | list | tojson }},
     datasets: [{
       data: {{ channel_omzet.values() | list | tojson }},
-      backgroundColor: ['#ee4d2d', '#000000', '#8b2be2', '#0f52ba', '#a8672f', '#198754'],
+      backgroundColor: {{ channel_warna | tojson }},
     }],
   },
   options: { responsive: true, plugins: { legend: { position: 'bottom' } } },

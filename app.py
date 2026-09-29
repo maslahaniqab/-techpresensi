@@ -251,6 +251,15 @@ PRESET_LABA_RUGI = {
 }
 
 MARKETPLACE_LIST = ["Shopee", "Tokopedia", "TikTok Shop", "Lazada", "Blibli"]
+WARNA_MARKETPLACE = {
+    "Shopee": "#ee4d2d",
+    "Tokopedia": "#42b549",
+    "TikTok Shop": "#010101",
+    "Lazada": "#0f146d",
+    "Blibli": "#0072ce",
+    "Manual": "#a8672f",
+}
+WARNA_MARKETPLACE_FALLBACK = "#9aa0a6"
 
 EKSPEDISI_LIST = [
     "JNE", "J&T Express", "J&T Cargo", "SiCepat", "AnterAja", "Ninja Xpress", "ID Express",
@@ -1893,6 +1902,7 @@ def create_app():
         omzet_manual = sum(p.harga or 0 for p in pesanan_manual_bulan_ini)
         if omzet_manual:
             channel_omzet["Manual"] = channel_omzet.get("Manual", 0) + omzet_manual
+        channel_warna = [WARNA_MARKETPLACE.get(k, WARNA_MARKETPLACE_FALLBACK) for k in channel_omzet.keys()]
         total_penjualan_bulan_ini = sum(channel_omzet.values())
         jumlah_pesanan_mp = len({(it.marketplace, it.no_pesanan) for it in pesanan_mp_bulan_ini})
         total_pesanan_bulan_ini = jumlah_pesanan_mp + len(pesanan_manual_bulan_ini)
@@ -1947,6 +1957,7 @@ def create_app():
             total_penjualan_bulan_ini=total_penjualan_bulan_ini,
             total_pesanan_bulan_ini=total_pesanan_bulan_ini,
             channel_omzet=channel_omzet,
+            channel_warna=channel_warna,
             item_stok_rendah=item_stok_rendah,
             item_stok_habis=item_stok_habis,
             item_dalam_stok=item_dalam_stok,
