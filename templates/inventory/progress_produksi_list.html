@@ -144,7 +144,7 @@
               <td class="text-end small text-nowrap">{{ po.total_qty_item }} pcs</td>
               <td>
                 <div class="progress" style="height: 8px;">
-                  <div class="progress-bar" role="progressbar" style="width: {{ po.persen_progress }}%; background-color:#d4af37;"></div>
+                  <div class="progress-bar" role="progressbar" style="width: {{ po.persen_progress }}%; background-color:#a8672f;"></div>
                 </div>
                 <div class="text-muted small">{{ po.persen_progress }}%</div>
               </td>
@@ -442,7 +442,7 @@ new Chart(document.getElementById('chartRealisasiProduksi'), {
     labels: {{ realisasi_chart.label | tojson }},
     datasets: [
       { label: 'Target', data: {{ realisasi_chart.target | tojson }}, backgroundColor: '#e5ddc8', borderRadius: 4 },
-      { label: 'Realisasi', data: {{ realisasi_chart.realisasi | tojson }}, backgroundColor: '#d4af37', borderRadius: 4 },
+      { label: 'Realisasi', data: {{ realisasi_chart.realisasi | tojson }}, backgroundColor: '#a8672f', borderRadius: 4 },
     ],
   },
   options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } },
