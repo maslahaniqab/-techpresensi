@@ -11,9 +11,21 @@
     .choices { margin-bottom: 0; }
     .choices .choices__inner { min-height: calc(1.5em + .75rem + 2px); padding: .375rem .75rem; font-size: 1rem; border-radius: .375rem; }
     .form-select-sm + .choices .choices__inner, .choices.choices-sm .choices__inner { min-height: calc(1.5em + .5rem + 2px); padding: .25rem .5rem; font-size: .875rem; }
-    body { background-color: #f5f7fa; }
-    .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,.08); border-radius: .75rem; }
-    .table thead { background-color: #eef1f6; }
+    body { background-color: #f7f4ee; }
+    .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-radius: .9rem; }
+    .table thead { background-color: #f4efe4; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      margin-bottom: 1.25rem; flex-wrap: wrap;
+    }
+    .topbar .topbar-date { color: #6b6355; font-size: .88rem; }
+    .topbar .topbar-avatar {
+      width: 38px; height: 38px; border-radius: 50%; background: #14120e; color: #d4af37;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem;
+    }
+    .topbar .topbar-user { line-height: 1.15; }
+    .topbar .topbar-user .nama { font-weight: 600; font-size: .88rem; }
+    .topbar .topbar-user .peran { color: #8a8577; font-size: .76rem; }
     @media print {
       .no-print { display: none !important; }
     }
@@ -308,6 +320,19 @@
         {% endfor %}
       {% endif %}
     {% endwith %}
+
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+    <div class="topbar no-print">
+      <div class="topbar-date">📅 {{ hari_ini | tanggal_lengkap }}</div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="topbar-user text-end">
+          <div class="nama">{{ current_user.nama }}</div>
+          <div class="peran">Administrator</div>
+        </div>
+        <div class="topbar-avatar">{{ current_user.nama[:2] | upper }}</div>
+      </div>
+    </div>
+    {% endif %}
 
     {% block content %}{% endblock %}
   </div>

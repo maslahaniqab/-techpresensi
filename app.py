@@ -3182,14 +3182,145 @@ def create_app():
         flash("Catatan pembayaran dihapus.", "info")
         return redirect(url_for("purchase_order_pembayaran", po_id=po_id))
 
+    AMBANG_STOK_BAHAN_MENIPIS = 20  # dalam satuan bahan masing2 (yard/dll) -- belum ada field ambang per-bahan di data, jadi pakai satu angka tetap sbg perkiraan kasar
+
+    def hitung_dashboard_produksi(semua_po):
+        hari_ini = today_wib()
+        awal_bulan_ini = hari_ini.replace(day=1)
+        akhir_bulan_lalu = awal_bulan_ini - timedelta(days=1)
+        awal_bulan_lalu = akhir_bulan_lalu.replace(day=1)
+
+        def hitung_periode(mulai, akhir):
+            return sum(1 for po in semua_po if po.tanggal_order and mulai <= po.tanggal_order <= akhir)
+
+        def delta_persen(sekarang, lalu):
+            if not lalu:
+                return None
+            return round((sekarang - lalu) / lalu * 100)
+
+        jumlah_bulan_ini = hitung_periode(awal_bulan_ini, hari_ini)
+        jumlah_bulan_lalu = hitung_periode(awal_bulan_lalu, akhir_bulan_lalu)
+
+        by_status = {"Menunggu Produksi": 0, "Diproses": 0, "Selesai Produksi": 0, "Dibatalkan": 0}
+        for po in semua_po:
+            by_status[po.status_produksi] = by_status.get(po.status_produksi, 0) + 1
+        jumlah_terlambat = sum(
+            1 for po in semua_po
+            if po.estimasi_selesai and po.estimasi_selesai < hari_ini
+            and po.status_produksi not in ("Selesai Produksi", "Dibatalkan")
+        )
+
+        stat_kartu = {
+            "total_po": len(semua_po),
+            "total_po_delta": delta_persen(jumlah_bulan_ini, jumlah_bulan_lalu),
+            "total_po_delta_absolut": jumlah_bulan_ini - jumlah_bulan_lalu,
+            "diproses": by_status["Diproses"],
+            "menunggu": by_status["Menunggu Produksi"],
+            "selesai": by_status["Selesai Produksi"],
+        }
+
+        # Pipeline "Alur Produksi" -- Cutting/QC belum jadi tahap yg dicatat sungguhan
+        # di data (cuma ada Jahit & Finish), jadi dipetakan dari status/angka progress
+        # yg sudah ada sbg perkiraan visual, BUKAN pencatatan tahap baru.
+        pipeline = {
+            "po_jumlah": len(semua_po), "po_qty": sum(po.total_qty_item for po in semua_po),
+            "bahan_baku_jumlah": 0, "bahan_baku_qty": 0, "bahan_kurang": False,
+            "cutting_qty": 0, "jahit_qty": 0, "finishing_qty": 0, "qc_qty": 0, "barang_jadi_qty": 0,
+        }
+        bahan_menipis_ids = {
+            b.id for b in BahanBaku.query.filter(BahanBaku.stok_saat_ini < AMBANG_STOK_BAHAN_MENIPIS).all()
+        }
+        for po in semua_po:
+            if po.status_produksi == "Dibatalkan" or not po.item_produk_list:
+                continue
+            if not po.produksi_mulai_pada:
+                pipeline["bahan_baku_jumlah"] += 1
+                pipeline["bahan_baku_qty"] += po.total_qty_item
+                if any(bp.bahan_baku_id in bahan_menipis_ids for bp in po.bahan_pakai_list):
+                    pipeline["bahan_kurang"] = True
+                continue
+            if po.jenis == "Full Order":
+                pipeline["barang_jadi_qty"] += po.total_diterima
+                pipeline["jahit_qty"] += po.sisa_belum_diterima
+                continue
+            for ip in po.item_produk_list:
+                if ip.status_qc == "Selesai":
+                    pipeline["barang_jadi_qty"] += ip.qty
+                elif ip.status_qc == "Revisi" or (ip.qty and ip.finish_selesai >= ip.qty):
+                    pipeline["qc_qty"] += ip.qty
+                elif ip.qty and ip.jahit_selesai >= ip.qty:
+                    pipeline["finishing_qty"] += ip.qty
+                elif ip.jahit_selesai:
+                    pipeline["jahit_qty"] += ip.qty
+                else:
+                    pipeline["cutting_qty"] += ip.qty
+
+        # Diagram batang Realisasi vs Target -- dikelompokkan per minggu dari Target
+        # Selesai (estimasi_selesai) PO, dibandingkan dgn jumlah yg sudah benar2 kelar
+        # produksi/diterima sejauh ini utk PO2 dgn target di minggu itu.
+        realisasi_chart = {"label": [], "target": [], "realisasi": []}
+        for i in range(3, -1, -1):
+            akhir_minggu = hari_ini - timedelta(days=7 * i)
+            awal_minggu = akhir_minggu - timedelta(days=6)
+            po_minggu = [
+                po for po in semua_po
+                if po.estimasi_selesai and awal_minggu <= po.estimasi_selesai <= akhir_minggu
+            ]
+            realisasi_chart["label"].append(f"{awal_minggu.day}-{akhir_minggu.day} {BULAN_NAMA[akhir_minggu.month][:3]}")
+            realisasi_chart["target"].append(sum(po.total_qty_item for po in po_minggu))
+            realisasi_chart["realisasi"].append(sum(
+                (po.total_diterima if po.jenis == "Full Order" else po.total_finish_selesai) for po in po_minggu
+            ))
+
+        deadline_terdekat = sorted(
+            (po for po in semua_po if po.estimasi_selesai and po.status_produksi not in ("Selesai Produksi", "Dibatalkan")),
+            key=lambda po: po.estimasi_selesai,
+        )[:3]
+
+        bahan_menipis = (
+            BahanBaku.query.filter(BahanBaku.stok_saat_ini < AMBANG_STOK_BAHAN_MENIPIS)
+            .order_by(BahanBaku.stok_saat_ini.asc()).limit(3).all()
+        )
+
+        aktivitas = []
+        for po in PurchaseOrder.query.order_by(PurchaseOrder.dibuat_pada.desc()).limit(5).all():
+            aktivitas.append({"waktu": po.dibuat_pada, "teks": f"PO baru dibuat: {po.nomor_po}", "sub": po.vendor.nama_vendor if po.vendor else ""})
+        for r in PenerimaanBarangJadi.query.order_by(PenerimaanBarangJadi.dibuat_pada.desc()).limit(5).all():
+            aktivitas.append({"waktu": r.dibuat_pada, "teks": f"Barang jadi diterima: {r.qty} pcs {r.item.produk.nama_produk}", "sub": r.dicatat_oleh or ""})
+        for p in PurchaseOrderPembayaran.query.order_by(PurchaseOrderPembayaran.dibuat_pada.desc()).limit(5).all():
+            aktivitas.append({"waktu": p.dibuat_pada, "teks": f"Pembayaran PO {p.po.nomor_po} dicatat ({p.metode})", "sub": f"Rp {p.jumlah:,.0f}".replace(",", ".")})
+        aktivitas.sort(key=lambda a: a["waktu"], reverse=True)
+
+        return {
+            "stat_kartu": stat_kartu, "pipeline": pipeline, "realisasi_chart": realisasi_chart,
+            "distribusi_status": by_status, "deadline_terdekat": deadline_terdekat,
+            "bahan_menipis": bahan_menipis, "aktivitas_terbaru": aktivitas[:6], "hari_ini": hari_ini,
+            "jumlah_terlambat": jumlah_terlambat,
+        }
+
     @app.route("/inventory/master-data/purchase-order/progress-produksi")
     @modul_required("produksi")
     def progress_produksi_list():
         q = request.args.get("q", "").strip()
-        query = PurchaseOrder.query
+        tab = request.args.get("tab", "semua")
+        semua_po = PurchaseOrder.query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
+        dash = hitung_dashboard_produksi(semua_po)
+
+        daftar = semua_po
         if q:
-            query = query.filter(PurchaseOrder.nomor_po.ilike(f"%{q}%"))
-        daftar = query.order_by(PurchaseOrder.tanggal_order.desc(), PurchaseOrder.id.desc()).all()
+            ql = q.lower()
+            daftar = [po for po in daftar if ql in po.nomor_po.lower()]
+        if tab == "menunggu":
+            daftar = [po for po in daftar if po.status_produksi == "Menunggu Produksi"]
+        elif tab == "diproses":
+            daftar = [po for po in daftar if po.status_produksi == "Diproses"]
+        elif tab == "selesai":
+            daftar = [po for po in daftar if po.status_produksi == "Selesai Produksi"]
+        elif tab == "terlambat":
+            daftar = [
+                po for po in daftar if po.estimasi_selesai and po.estimasi_selesai < dash["hari_ini"]
+                and po.status_produksi not in ("Selesai Produksi", "Dibatalkan")
+            ]
 
         # Saran Qty pcs per ITEM (bukan per PO) buat modal "Mulai Produksi" -- dari
         # rumus Jumlah Yard (Qty Pakai bahan) / Kebutuhan Yard per Pcs, dihitung per
@@ -3227,8 +3358,9 @@ def create_app():
                     saran_biaya[ip.id] = tarif.biaya_per_pcs
 
         return render_template(
-            "inventory/progress_produksi_list.html", daftar=daftar, q=q,
+            "inventory/progress_produksi_list.html", daftar=daftar, q=q, tab=tab,
             saran_qty=saran_qty, saran_biaya=saran_biaya, tanggal_hari_ini=today_wib().isoformat(),
+            jumlah_semua_po=len(semua_po), AMBANG_STOK_BAHAN_MENIPIS=AMBANG_STOK_BAHAN_MENIPIS, **dash,
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])
@@ -7694,6 +7826,7 @@ def create_app():
             }
         return {
             "bulan_nama_list": BULAN_NAMA,
+            "hari_ini": today_wib(),
             "pending_izin_count": pending_izin,
             "pending_lembur_count": pending_lembur,
             "site_settings": get_settings(),

@@ -5,83 +5,251 @@
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
     <h3 class="mb-1">Produksi</h3>
-    <p class="text-muted small mb-0">Riwayat &amp; progress produksi per Purchase Order &mdash; tiap PO otomatis jadi 1 catatan produksi (historikal dari nomor PO). Update progress jahit &amp; finishing per varian produk di sini, status PO otomatis ngikutin.</p>
+    <p class="text-muted small mb-0">Kelola dan pantau proses produksi dari setiap Purchase Order secara real-time.</p>
   </div>
   <a href="{{ url_for('bahan_baku_cutting') }}" class="btn btn-outline-secondary btn-sm text-nowrap">✂️ Cutting Manual &amp; Kelola Ukuran</a>
 </div>
 
-<form method="get" class="card p-2 mb-3">
-  <div class="input-group">
-    <input type="text" name="q" class="form-control" placeholder="Cari nomor PO..." value="{{ q }}">
-    <button type="submit" class="btn btn-outline-secondary">🔍</button>
-    {% if q %}<a href="{{ url_for('progress_produksi_list') }}" class="btn btn-outline-secondary">&times;</a>{% endif %}
-  </div>
-</form>
+{% macro persen_dari_total(bagian, total) %}
+  {%- if total -%}{{ (bagian / total * 100) | round | int }}% dari total PO{%- else -%}&mdash;{%- endif -%}
+{% endmacro %}
 
-<div class="card p-3" style="overflow-x:auto;">
-  <table class="table table-hover align-middle mb-0">
-    <thead>
-      <tr>
-        <th>No PO</th>
-        <th style="min-width:260px;">Detail Progress</th>
-        <th class="text-end">Total Target</th>
-        <th>Total Selesai</th>
-        <th>Status</th>
-        <th style="min-width:140px;">Global Progress</th>
-        <th class="text-end">Aksi</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for po in daftar %}
-      <tr>
-        <td>
-          <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="fw-semibold text-decoration-none">{{ po.nomor_po }}</a>
-          {% if po.jenis == 'Full Order' %}<span class="badge" style="background-color:#f5c4b3; color:#712b13;">Full Order</span>{% endif %}
-          <div class="text-muted small">{{ po.vendor.nama_vendor }} &middot; {{ po.tanggal_order.strftime("%d/%m/%Y") }}</div>
-        </td>
-        <td class="small">
-          {% set item_status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Selesai": "#d1e7dd", "Pending": "#f8d7da"} %}
-          {% for ip in po.item_produk_list %}
-          <div class="d-flex align-items-center gap-1 flex-wrap">
-            <span>{{ ip.produk.nama_produk }}{% if ip.warna or ip.size %} ({{ [ip.warna, ip.size] | select | join(", ") }}){% endif %}
-              {%- if po.jenis == 'Full Order' %} &mdash; diterima {{ ip.qty_diterima }}/{{ ip.qty }}{% elif po.produksi_mulai_pada %} &mdash; {{ ip.jahit_selesai }}/{{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}</span>
-            {% if po.produksi_mulai_pada and po.jenis != 'Full Order' %}
-            <span class="badge" style="background-color: {{ item_status_bg.get(ip.status_item, '#eee') }}; color:#212529;">{{ ip.status_item }}</span>
-            {% endif %}
-          </div>
-          {% else %}
-          <span class="text-muted">Tidak ada item produk.</span>
-          {% endfor %}
-        </td>
-        <td class="text-end small text-nowrap">{{ po.total_qty_item }} pcs</td>
-        <td class="small text-nowrap">{% if po.jenis == 'Full Order' %}Diterima: {{ po.total_diterima }}<br>Sisa: {{ po.sisa_belum_diterima }}{% else %}Jahit: {{ po.total_jahit_selesai }}<br>Finish: {{ po.total_finish_selesai }}{% if po.total_diterima %}<br>Diterima: {{ po.total_diterima }}{% endif %}{% endif %}</td>
-        <td>
-          {% set status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Dibatalkan": "#e2e3e5"} %}
-          <span class="badge" style="background-color: {{ status_bg.get(po.status_produksi, '#eee') }}; color:#212529;">{{ po.status_produksi }}</span>
-        </td>
-        <td>
-          <div class="progress" style="height: 8px;">
-            <div class="progress-bar" role="progressbar" style="width: {{ po.persen_progress }}%;"></div>
-          </div>
-          <div class="text-muted small">{{ po.persen_progress }}%</div>
-        </td>
-        <td class="text-end">
-          {% if po.item_produk_list %}
-            {% if not po.produksi_mulai_pada %}
-            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalMulai{{ po.id }}">▶️ Mulai Produksi</button>
-            {% else %}
-            {% if po.jenis != 'Full Order' %}<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUpdate{{ po.id }}">Update</button>{% endif %}
-            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalTerima{{ po.id }}">Terima Barang</button>
-            {% endif %}
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7" class="text-center text-muted py-4">{{ "Tidak ada PO yang cocok dengan pencarian." if q else "Belum ada Purchase Order." }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="stat-icon" style="background:#f3ecd9; color:#8a6d1f;">📄</span>
+        <span class="text-muted small">Total PO Aktif</span>
+      </div>
+      <div class="fs-4 fw-bold">{{ stat_kartu.total_po }}</div>
+      <span class="small {{ 'text-success' if stat_kartu.total_po_delta_absolut >= 0 else 'text-danger' }}">
+        {{ '+' if stat_kartu.total_po_delta_absolut >= 0 }}{{ stat_kartu.total_po_delta_absolut }} dari bulan lalu
+      </span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="stat-icon" style="background:#dbe8ff; color:#0d4bad;">⚙️</span>
+        <span class="text-muted small">Dalam Produksi</span>
+      </div>
+      <div class="fs-4 fw-bold">{{ stat_kartu.diproses }}</div>
+      <span class="text-muted small">{{ persen_dari_total(stat_kartu.diproses, stat_kartu.total_po) }}</span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="stat-icon" style="background:#fff3cd; color:#8a6a10;">⏳</span>
+        <span class="text-muted small">Menunggu Produksi</span>
+      </div>
+      <div class="fs-4 fw-bold">{{ stat_kartu.menunggu }}</div>
+      <span class="text-muted small">{{ persen_dari_total(stat_kartu.menunggu, stat_kartu.total_po) }}</span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="stat-icon" style="background:#d1e7dd; color:#146c43;">✅</span>
+        <span class="text-muted small">Selesai Produksi</span>
+      </div>
+      <div class="fs-4 fw-bold">{{ stat_kartu.selesai }}</div>
+      <span class="text-muted small">{{ persen_dari_total(stat_kartu.selesai, stat_kartu.total_po) }}</span>
+    </div>
+  </div>
 </div>
+
+<div class="card p-3 mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="fw-semibold small">Alur Produksi</div>
+    <div class="text-muted small">Cutting/QC diperkirakan dari progress Jahit &amp; Finishing (belum ada pencatatan tahap terpisah)</div>
+  </div>
+  <div class="d-flex align-items-stretch flex-nowrap gap-1 pipeline-scroll" style="overflow-x:auto;">
+    {% set tahap_list = [
+      ("📝", "Purchase Order", pipeline.po_jumlah ~ " PO", pipeline.po_qty ~ " pcs", "#f3ecd9", "#8a6d1f", none),
+      ("🧵", "Bahan Baku", pipeline.bahan_baku_jumlah ~ " PO", pipeline.bahan_baku_qty ~ " pcs", "#fde2d8", "#a13f1a", ("⚠ kurang stok" if pipeline.bahan_kurang else none)),
+      ("✂️", "Cutting", pipeline.cutting_qty ~ " pcs", "", "#e7e0f7", "#4b2f8a", none),
+      ("🧷", "Jahit", pipeline.jahit_qty ~ " pcs", "", "#dbe8ff", "#0d4bad", none),
+      ("🧺", "Finishing", pipeline.finishing_qty ~ " pcs", "", "#d8f0ec", "#0f7a63", none),
+      ("🔍", "QC", pipeline.qc_qty ~ " pcs", "", "#fff3cd", "#8a6a10", none),
+      ("📦", "Barang Jadi", pipeline.barang_jadi_qty ~ " pcs", "", "#d1e7dd", "#146c43", none),
+    ] %}
+    {% for icon, label, baris1, baris2, bg, fg, catatan in tahap_list %}
+    <div class="pipeline-tahap p-3 text-center" style="background:{{ bg }}; color:{{ fg }};">
+      <div class="fs-4">{{ icon }}</div>
+      <div class="fw-semibold small mt-1">{{ label }}</div>
+      <div class="small">{{ baris1 }}</div>
+      {% if baris2 %}<div class="small text-muted" style="color:{{ fg }} !important; opacity:.75;">{{ baris2 }}</div>{% endif %}
+      {% if catatan %}<div class="small fw-semibold mt-1">{{ catatan }}</div>{% endif %}
+    </div>
+    {% if not loop.last %}<div class="pipeline-arrow d-flex align-items-center px-1">→</div>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+
+    <div class="card p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <div class="btn-group btn-group-sm flex-wrap" role="group">
+          <a href="{{ url_for('progress_produksi_list', q=q) }}" class="btn {{ 'btn-dark' if tab == 'semua' else 'btn-outline-secondary' }}">Semua PO ({{ jumlah_semua_po }})</a>
+          <a href="{{ url_for('progress_produksi_list', q=q, tab='menunggu') }}" class="btn {{ 'btn-dark' if tab == 'menunggu' else 'btn-outline-secondary' }}">Menunggu ({{ stat_kartu.menunggu }})</a>
+          <a href="{{ url_for('progress_produksi_list', q=q, tab='diproses') }}" class="btn {{ 'btn-dark' if tab == 'diproses' else 'btn-outline-secondary' }}">Dalam Produksi ({{ stat_kartu.diproses }})</a>
+          <a href="{{ url_for('progress_produksi_list', q=q, tab='selesai') }}" class="btn {{ 'btn-dark' if tab == 'selesai' else 'btn-outline-secondary' }}">Selesai ({{ stat_kartu.selesai }})</a>
+          <a href="{{ url_for('progress_produksi_list', q=q, tab='terlambat') }}" class="btn {{ 'btn-dark' if tab == 'terlambat' else 'btn-outline-secondary' }}">Terlambat ({{ jumlah_terlambat }})</a>
+        </div>
+        <form method="get" class="d-flex gap-1">
+          <input type="hidden" name="tab" value="{{ tab }}">
+          <input type="text" name="q" class="form-control form-control-sm" placeholder="Cari nomor PO..." value="{{ q }}" style="max-width:180px;">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">🔍</button>
+        </form>
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>No PO</th>
+              <th style="min-width:220px;">Produk / Varian</th>
+              <th class="text-end">Total Qty</th>
+              <th style="min-width:120px;">Progress</th>
+              <th>Status</th>
+              <th>Target Selesai</th>
+              <th class="text-end">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for po in daftar %}
+            <tr>
+              <td>
+                <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="fw-semibold text-decoration-none">{{ po.nomor_po }}</a>
+                {% if po.jenis == 'Full Order' %}<span class="badge" style="background-color:#f5c4b3; color:#712b13;">Full Order</span>{% endif %}
+                <div class="text-muted small">{{ po.vendor.nama_vendor }} &middot; {{ po.tanggal_order.strftime("%d/%m/%Y") }}</div>
+              </td>
+              <td class="small">
+                {% set item_status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Selesai": "#d1e7dd", "Pending": "#f8d7da"} %}
+                {% for ip in po.item_produk_list %}
+                <div class="d-flex align-items-center gap-1 flex-wrap">
+                  <span>{{ ip.produk.nama_produk }}{% if ip.warna or ip.size %} ({{ [ip.warna, ip.size] | select | join(", ") }}){% endif %}
+                    {%- if po.jenis == 'Full Order' %} &mdash; diterima {{ ip.qty_diterima }}/{{ ip.qty }}{% elif po.produksi_mulai_pada %} &mdash; {{ ip.jahit_selesai }}/{{ ip.qty }}{% else %} <span class="text-muted">(qty blm ditentukan)</span>{% endif %}</span>
+                  {% if po.produksi_mulai_pada and po.jenis != 'Full Order' %}
+                  <span class="badge" style="background-color: {{ item_status_bg.get(ip.status_item, '#eee') }}; color:#212529;">{{ ip.status_item }}</span>
+                  {% endif %}
+                </div>
+                {% else %}
+                <span class="text-muted">Tidak ada item produk.</span>
+                {% endfor %}
+              </td>
+              <td class="text-end small text-nowrap">{{ po.total_qty_item }} pcs</td>
+              <td>
+                <div class="progress" style="height: 8px;">
+                  <div class="progress-bar" role="progressbar" style="width: {{ po.persen_progress }}%; background-color:#d4af37;"></div>
+                </div>
+                <div class="text-muted small">{{ po.persen_progress }}%</div>
+              </td>
+              <td>
+                {% set status_bg = {"Menunggu Produksi": "#fff3cd", "Diproses": "#cfe2ff", "Selesai Produksi": "#d1e7dd", "Dibatalkan": "#e2e3e5"} %}
+                <span class="badge" style="background-color: {{ status_bg.get(po.status_produksi, '#eee') }}; color:#212529;">{{ po.status_produksi }}</span>
+              </td>
+              <td class="small text-nowrap {{ 'text-danger fw-semibold' if po.estimasi_selesai and po.estimasi_selesai < hari_ini and po.status_produksi not in ('Selesai Produksi', 'Dibatalkan') }}">
+                {{ po.estimasi_selesai.strftime("%d/%m/%Y") if po.estimasi_selesai else "-" }}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if po.item_produk_list %}
+                  {% if not po.produksi_mulai_pada %}
+                  <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalMulai{{ po.id }}">▶️ Mulai Produksi</button>
+                  {% else %}
+                  {% if po.jenis != 'Full Order' %}<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalUpdate{{ po.id }}">Update</button>{% endif %}
+                  <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalTerima{{ po.id }}">Terima Barang</button>
+                  {% endif %}
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">{{ "Tidak ada PO yang cocok dengan pencarian." if q else "Belum ada Purchase Order." }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-7">
+        <div class="card p-3 h-100">
+          <div class="text-muted small mb-2">Realisasi Produksi (Qty) &mdash; per minggu, dari PO yang Target Selesainya jatuh minggu itu</div>
+          <canvas id="chartRealisasiProduksi" height="160"></canvas>
+        </div>
+      </div>
+      <div class="col-md-5">
+        <div class="card p-3 h-100">
+          <div class="text-muted small mb-2">Distribusi Status PO</div>
+          <canvas id="chartDistribusiStatus" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="col-lg-4">
+
+    <div class="card p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold small">Deadline Terdekat</div>
+      </div>
+      {% for po in deadline_terdekat %}
+      <a href="{{ url_for('purchase_order_detail', po_id=po.id) }}" class="d-flex justify-content-between align-items-center text-decoration-none text-body py-2 {{ 'border-bottom' if not loop.last }}">
+        <div>
+          <div class="fw-semibold small">{{ po.nomor_po }}</div>
+          <div class="text-muted small">{{ po.vendor.nama_vendor if po.vendor else "-" }} &middot; {{ po.total_qty_item }} pcs</div>
+        </div>
+        {% set sisa_hari = (po.estimasi_selesai - hari_ini).days %}
+        <span class="badge {{ 'bg-danger' if sisa_hari < 0 else ('bg-warning text-dark' if sisa_hari <= 3 else 'bg-secondary') }}">
+          {{ (sisa_hari ~ " hari lagi") if sisa_hari >= 0 else ((-sisa_hari) ~ " hari lewat") }}
+        </span>
+      </a>
+      {% else %}
+      <div class="text-muted small">Tidak ada PO dengan Target Selesai yang mendekat.</div>
+      {% endfor %}
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold small">Stok Bahan Baku Menipis</div>
+        <a href="{{ url_for('bahan_baku_list') }}" class="small text-decoration-none">Lihat Semua</a>
+      </div>
+      {% for b in bahan_menipis %}
+      <div class="d-flex justify-content-between align-items-center py-2 {{ 'border-bottom' if not loop.last }}">
+        <div>
+          <div class="fw-semibold small">{{ b.nama_bahan }}</div>
+          <div class="text-muted small">Sisa {{ "%.0f"|format(b.stok_saat_ini) }} {{ b.satuan }}</div>
+        </div>
+        <span class="badge bg-danger">&lt; {{ AMBANG_STOK_BAHAN_MENIPIS }}{{ b.satuan[:1] }}</span>
+      </div>
+      {% else %}
+      <div class="text-muted small">Tidak ada bahan baku yang menipis saat ini.</div>
+      {% endfor %}
+    </div>
+
+    <div class="card p-3">
+      <div class="fw-semibold small mb-2">Aktivitas Terbaru</div>
+      {% for a in aktivitas_terbaru %}
+      <div class="py-2 {{ 'border-bottom' if not loop.last }}">
+        <div class="small">{{ a.teks }}</div>
+        <div class="text-muted small">{{ a.sub }}{% if a.sub %} &middot; {% endif %}{{ a.waktu.strftime("%d/%m %H:%M") }}</div>
+      </div>
+      {% else %}
+      <div class="text-muted small">Belum ada aktivitas.</div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+<style>
+  .pipeline-tahap { border-radius: .6rem; min-width: 130px; flex: 1 1 0; }
+  .pipeline-arrow { color: #b8ab7e; font-weight: 700; }
+</style>
 
 {% for po in daftar %}
 {% if po.item_produk_list and po.produksi_mulai_pada %}
@@ -263,4 +431,37 @@
 {% endif %}
 {% endfor %}
 
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('chartRealisasiProduksi'), {
+  type: 'bar',
+  data: {
+    labels: {{ realisasi_chart.label | tojson }},
+    datasets: [
+      { label: 'Target', data: {{ realisasi_chart.target | tojson }}, backgroundColor: '#e5ddc8', borderRadius: 4 },
+      { label: 'Realisasi', data: {{ realisasi_chart.realisasi | tojson }}, backgroundColor: '#d4af37', borderRadius: 4 },
+    ],
+  },
+  options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } },
+});
+new Chart(document.getElementById('chartDistribusiStatus'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Menunggu', 'Diproses', 'Selesai', 'Dibatalkan'],
+    datasets: [{
+      data: [
+        {{ distribusi_status.get('Menunggu Produksi', 0) }},
+        {{ distribusi_status.get('Diproses', 0) }},
+        {{ distribusi_status.get('Selesai Produksi', 0) }},
+        {{ distribusi_status.get('Dibatalkan', 0) }}
+      ],
+      backgroundColor: ['#f0d78c', '#8ab4f8', '#a3cfbb', '#c9c9c9'],
+    }],
+  },
+  options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+});
+</script>
 {% endblock %}
