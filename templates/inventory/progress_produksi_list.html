@@ -224,7 +224,7 @@
           <div class="fw-semibold small">{{ b.nama_bahan }}</div>
           <div class="text-muted small">Sisa {{ "%.0f"|format(b.stok_saat_ini) }} {{ b.satuan }}</div>
         </div>
-        <span class="badge bg-danger">&lt; {{ AMBANG_STOK_BAHAN_MENIPIS }}{{ b.satuan[:1] }}</span>
+        <span class="badge bg-danger">Batas {{ "%.0f"|format(b.batas_minimal_stok) }} {{ b.satuan }}</span>
       </div>
       {% else %}
       <div class="text-muted small">Tidak ada bahan baku yang menipis saat ini.</div>

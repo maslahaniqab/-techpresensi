@@ -112,51 +112,152 @@
 </div>
 {% endif %}
 
-<div class="mb-4">
-  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#kepegawaianCollapse" aria-expanded="false" aria-controls="kepegawaianCollapse">
-    👥 Laporan Presensi &amp; Karyawan <span class="chevron-collapse">▾</span>
-  </button>
-  <div class="collapse mt-3" id="kepegawaianCollapse">
-    <div class="row g-3">
-      <div class="col-md-3 col-6">
-        <div class="card p-3 d-flex flex-row align-items-center gap-3">
-          <div class="stat-icon" style="background:#e7f0ff; color:#0d6efd;">👥</div>
-          <div>
-            <div class="text-muted small">Karyawan Aktif</div>
-            <div class="fs-5 fw-bold">{{ total_karyawan }}</div>
-          </div>
-        </div>
+<div class="d-flex justify-content-between align-items-center mb-3 mt-4 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0">Penjualan &amp; Inventory</h5>
+    <p class="text-muted small mb-0">{{ bulan_nama }} {{ tahun_ini }} &mdash; dari data pesanan, produk, dan bahan baku</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#fde8d2; color:#a8672f; width:32px; height:32px; font-size:1rem;">🛒</span>
+        <span class="text-muted small">Total Penjualan</span>
       </div>
-      <div class="col-md-3 col-6">
-        <div class="card p-3 d-flex flex-row align-items-center gap-3">
-          <div class="stat-icon" style="background:#fff3cd; color:#c8860d;">🕒</div>
-          <div>
-            <div class="text-muted small">Absen Hari Ini</div>
-            <div class="fs-5 fw-bold">{{ absen_hari_ini }} / {{ total_karyawan }}</div>
-          </div>
-        </div>
+      <div class="fs-5 fw-bold">{{ total_penjualan_bulan_ini | rupiah }}</div>
+      <span class="text-muted small">bulan ini, semua channel</span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#d1e7dd; color:#146c43; width:32px; height:32px; font-size:1rem;">📦</span>
+        <span class="text-muted small">Total Pesanan</span>
       </div>
-      <div class="col-md-3 col-6">
-        <div class="card p-3 d-flex flex-row align-items-center gap-3">
-          <div class="stat-icon" style="background:#d1e7dd; color:#146c43;">✅</div>
-          <div>
-            <div class="text-muted small">Hadir Hari Ini</div>
-            <div class="fs-5 fw-bold text-success">{{ hadir_hari_ini }}</div>
-          </div>
-        </div>
+      <div class="fs-5 fw-bold">{{ total_pesanan_bulan_ini }}</div>
+      <span class="text-muted small">bulan ini, semua channel</span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#fff3cd; color:#8a6a10; width:32px; height:32px; font-size:1rem;">⚠️</span>
+        <span class="text-muted small">Item Stok Rendah</span>
       </div>
-      <div class="col-md-3 col-6">
-        <div class="card p-3 d-flex flex-row align-items-center gap-3">
-          <div class="stat-icon" style="background:rgba(212,175,55,.15); color:#b8952c;">💰</div>
-          <div>
-            <div class="text-muted small">Total Gaji {{ bulan_nama }} {{ tahun_ini }}</div>
-            <div class="fs-6 fw-bold">{{ total_gaji_bulan_ini | rupiah }}</div>
-          </div>
-        </div>
+      <div class="fs-5 fw-bold">{{ item_stok_rendah }}</div>
+      <span class="text-muted small">bahan baku di bawah batas minimal</span>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="stat-icon" style="background:#f8d7da; color:#b02a37; width:32px; height:32px; font-size:1rem;">🚫</span>
+        <span class="text-muted small">Item Habis</span>
       </div>
+      <div class="fs-5 fw-bold">{{ item_stok_habis }}</div>
+      <span class="text-muted small">bahan baku stoknya 0</span>
     </div>
   </div>
 </div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-5">
+    <div class="card p-3 h-100">
+      <div class="text-muted small mb-2">Distribusi Penjualan per Channel &mdash; bulan ini</div>
+      {% if channel_omzet %}
+      <canvas id="chartChannelPenjualan" height="200"></canvas>
+      {% else %}
+      <div class="text-muted small py-4 text-center">Belum ada data penjualan bulan ini.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card p-3 h-100">
+      <div class="text-muted small mb-2">Status Stok Bahan Baku</div>
+      <canvas id="chartStatusStok" height="200"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-3">
+    <div class="card p-3 h-100 text-center d-flex flex-column justify-content-center">
+      <div class="text-muted small mb-1">Perputaran Inventory</div>
+      <div class="display-6 fw-bold">{{ "%.1f"|format(perputaran_inventory) }}x</div>
+      <div class="text-muted small">HPP terjual bulan ini &divide; nilai stok produk jadi saat ini ({{ nilai_inventory_saat_ini | rupiah }})</div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <div class="text-muted small mb-2">Tren Nilai Inventory (Produk Jadi)</div>
+  {% if tren_nilai_inventory|length > 1 %}
+  <canvas id="chartTrenInventory" height="90"></canvas>
+  {% else %}
+  <div class="text-muted small py-3">Baru mulai dicatat hari ini &mdash; grafik akan terisi bertahap tiap harinya.</div>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card p-3 h-100">
+      <div class="text-muted small mb-2">🔥 10 Produk Terlaris &mdash; {{ bulan_nama }} {{ tahun_ini }}</div>
+      {% if produk_terlaris_10 %}
+      {% for x in produk_terlaris_10 %}
+      <div class="d-flex justify-content-between align-items-center py-2 {{ 'border-bottom' if not loop.last }}">
+        <div>
+          <div class="small fw-semibold">{{ loop.index }}. {{ x.produk.nama_produk }}</div>
+          <div class="text-muted small">Stok: {{ x.produk.stok_jadi }} pcs</div>
+        </div>
+        <span class="badge bg-success">{{ x.qty_terjual }} terjual</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-muted small py-3">Belum ada produk dengan stok saat ini.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card p-3 h-100">
+      <div class="text-muted small mb-2">🐢 10 Produk Slow Move &mdash; {{ bulan_nama }} {{ tahun_ini }}</div>
+      {% if produk_slow_move_10 %}
+      {% for x in produk_slow_move_10 %}
+      <div class="d-flex justify-content-between align-items-center py-2 {{ 'border-bottom' if not loop.last }}">
+        <div>
+          <div class="small fw-semibold">{{ loop.index }}. {{ x.produk.nama_produk }}</div>
+          <div class="text-muted small">Stok: {{ x.produk.stok_jadi }} pcs</div>
+        </div>
+        <span class="badge {{ 'bg-danger' if x.qty_terjual == 0 else 'bg-warning text-dark' }}">{{ x.qty_terjual }} terjual</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-muted small py-3">Belum ada produk dengan stok saat ini.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if peringatan_stok_rendah %}
+<div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="text-muted small">⚠️ Peringatan Stok Rendah</div>
+    <a href="{{ url_for('bahan_baku_list') }}" class="small text-decoration-none">Lihat Semua Bahan Baku</a>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Nama Bahan</th><th class="text-end">Stok Saat Ini</th><th class="text-end">Batas Minimal</th></tr></thead>
+      <tbody>
+        {% for b in peringatan_stok_rendah %}
+        <tr>
+          <td class="small">{{ b.nama_bahan }}</td>
+          <td class="text-end small {{ 'text-danger fw-semibold' if b.stok_saat_ini <= 0 }}">{{ "%.1f"|format(b.stok_saat_ini) }} {{ b.satuan }}</td>
+          <td class="text-end small text-muted">{{ "%.1f"|format(b.batas_minimal_stok) }} {{ b.satuan }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <div class="row g-3 mt-1">
   <div class="col-md-3">
@@ -215,9 +316,9 @@
 {% endblock %}
 
 {% block scripts %}
-{% if ada_data_profit %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
+{% if ada_data_profit %}
 new Chart(document.getElementById('chartTrenDashboard'), {
   type: 'bar',
   data: {
@@ -237,6 +338,55 @@ new Chart(document.getElementById('chartTrenDashboard'), {
     } } } },
   },
 });
-</script>
 {% endif %}
+
+{% if channel_omzet %}
+new Chart(document.getElementById('chartChannelPenjualan'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ channel_omzet.keys() | list | tojson }},
+    datasets: [{
+      data: {{ channel_omzet.values() | list | tojson }},
+      backgroundColor: ['#ee4d2d', '#000000', '#8b2be2', '#0f52ba', '#a8672f', '#198754'],
+    }],
+  },
+  options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+});
+{% endif %}
+
+new Chart(document.getElementById('chartStatusStok'), {
+  type: 'bar',
+  data: {
+    labels: ['Dalam Stok', 'Stok Rendah', 'Stok Habis'],
+    datasets: [{
+      data: [{{ item_dalam_stok }}, {{ item_stok_rendah }}, {{ item_stok_habis }}],
+      backgroundColor: ['#198754', '#ffc107', '#dc3545'],
+      borderRadius: 4,
+    }],
+  },
+  options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+});
+
+{% if tren_nilai_inventory|length > 1 %}
+new Chart(document.getElementById('chartTrenInventory'), {
+  type: 'line',
+  data: {
+    labels: {{ tren_nilai_inventory | map(attribute='tanggal') | map('string') | list | tojson }},
+    datasets: [{
+      label: 'Nilai Inventory', data: {{ tren_nilai_inventory | map(attribute='nilai_total') | list | tojson }},
+      borderColor: '#a8672f', backgroundColor: 'rgba(168,103,47,.12)', fill: true, tension: .3,
+    }],
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: { y: { ticks: { callback: (v) => {
+      if (Math.abs(v) >= 1000000) return 'Rp ' + (v / 1000000).toFixed(1) + 'jt';
+      if (Math.abs(v) >= 1000) return 'Rp ' + (v / 1000).toFixed(0) + 'rb';
+      return 'Rp ' + v;
+    } } } },
+  },
+});
+{% endif %}
+</script>
 {% endblock %}

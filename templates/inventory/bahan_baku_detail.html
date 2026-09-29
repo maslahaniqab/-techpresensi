@@ -237,6 +237,11 @@
           </div>
         </div>
         <div class="mb-3">
+          <label class="form-label">Batas Minimal Stok <span class="text-muted small">(opsional)</span></label>
+          <input type="number" min="0" step="0.01" name="batas_minimal_stok" class="form-control" value="{{ bahan.batas_minimal_stok }}">
+          <div class="form-text">Di bawah angka ini, bahan dianggap "Stok Rendah" di Dashboard.</div>
+        </div>
+        <div class="mb-3">
           <label class="form-label">Suplier / Vendor Kain <span class="text-muted small">(opsional)</span></label>
           <select name="suplier" class="form-select">
             <option value="">- Pilih Vendor -</option>

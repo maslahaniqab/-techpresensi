@@ -237,11 +237,22 @@ class Produk(db.Model):
     diperbarui_pada = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
 
 
+class SnapshotNilaiInventory(db.Model):
+    """Nilai total inventory (stok_jadi x HPP semua Produk) dicatat 1x per hari --
+    dipakai buat grafik Tren Nilai Inventory di Dashboard. Mulai dicatat sejak fitur
+    ini dibuat, jadi grafiknya terisi bertahap (bukan histori dari sebelum ini ada)."""
+    id = db.Column(db.Integer, primary_key=True)
+    tanggal = db.Column(db.Date, nullable=False, unique=True)
+    nilai_total = db.Column(db.Integer, nullable=False, default=0)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class BahanBaku(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nama_bahan = db.Column(db.String(128), nullable=False)
     satuan = db.Column(db.String(16), nullable=False, default="Yard")
     stok_saat_ini = db.Column(db.Float, nullable=False, default=0)
+    batas_minimal_stok = db.Column(db.Float, nullable=False, default=0)  # di bawah ini dianggap "Stok Rendah" di Dashboard
     harga_per_yard = db.Column(db.Integer, default=0)  # Rp, dari input Masuk terakhir
     warna = db.Column(db.String(64))  # dari input Masuk terakhir
     tinggi_meter = db.Column(db.Float)  # lebar/tinggi kain (meter), dari input Masuk terakhir

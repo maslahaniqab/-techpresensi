@@ -48,7 +48,7 @@ from models import (
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
     KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi, PermohonanBarangItem,
-    PenerimaanBarangJadi,
+    PenerimaanBarangJadi, SnapshotNilaiInventory,
 )
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
@@ -1606,7 +1606,10 @@ def create_app():
             db.session.execute(db.text("ALTER TABLE payroll ADD COLUMN tarif_lembur INTEGER DEFAULT 0"))
             db.session.commit()
         kolom_bahan_baku = {c["name"] for c in db.inspect(db.engine).get_columns("bahan_baku")}
-        for kolom, tipe in [("warna", "VARCHAR(64)"), ("tinggi_meter", "FLOAT"), ("suplier", "VARCHAR(128)")]:
+        for kolom, tipe in [
+            ("warna", "VARCHAR(64)"), ("tinggi_meter", "FLOAT"), ("suplier", "VARCHAR(128)"),
+            ("batas_minimal_stok", "FLOAT DEFAULT 0"),
+        ]:
             if kolom not in kolom_bahan_baku:
                 db.session.execute(db.text(f"ALTER TABLE bahan_baku ADD COLUMN {kolom} {tipe}"))
                 db.session.commit()
@@ -1857,6 +1860,60 @@ def create_app():
             for i, (y, m) in enumerate(rentang_6bulan)
         ]
 
+        # ---- Ringkasan Penjualan & Inventory (kartu, diagram, watchlist stok) ----
+        awal_bulan = hari_ini.replace(day=1)
+        pesanan_mp_bulan_ini = PesananMarketplace.query.filter(
+            PesananMarketplace.status_pesanan.notin_(STATUS_BATAL_MARKETPLACE),
+            PesananMarketplace.tanggal_pesanan >= awal_bulan, PesananMarketplace.tanggal_pesanan <= hari_ini,
+        ).all()
+        channel_omzet = {}
+        for it in pesanan_mp_bulan_ini:
+            channel_omzet[it.marketplace] = channel_omzet.get(it.marketplace, 0) + it.subtotal
+        pesanan_manual_bulan_ini = PesananManual.query.filter(
+            PesananManual.tanggal >= awal_bulan, PesananManual.tanggal <= hari_ini,
+        ).all()
+        omzet_manual = sum(p.harga or 0 for p in pesanan_manual_bulan_ini)
+        if omzet_manual:
+            channel_omzet["Manual"] = channel_omzet.get("Manual", 0) + omzet_manual
+        total_penjualan_bulan_ini = sum(channel_omzet.values())
+        jumlah_pesanan_mp = len({(it.marketplace, it.no_pesanan) for it in pesanan_mp_bulan_ini})
+        total_pesanan_bulan_ini = jumlah_pesanan_mp + len(pesanan_manual_bulan_ini)
+
+        semua_bahan = BahanBaku.query.all()
+        item_stok_rendah = sum(
+            1 for b in semua_bahan if b.batas_minimal_stok > 0 and 0 < b.stok_saat_ini < b.batas_minimal_stok
+        )
+        item_stok_habis = sum(1 for b in semua_bahan if b.stok_saat_ini <= 0)
+        item_dalam_stok = len(semua_bahan) - item_stok_rendah - item_stok_habis
+        peringatan_stok_rendah = sorted(
+            (b for b in semua_bahan if b.batas_minimal_stok > 0 and b.stok_saat_ini < b.batas_minimal_stok),
+            key=lambda b: b.stok_saat_ini,
+        )[:8]
+
+        semua_produk = Produk.query.all()
+        nilai_inventory_saat_ini = sum((p.stok_jadi or 0) * (p.hpp or 0) for p in semua_produk)
+        snap = SnapshotNilaiInventory.query.filter_by(tanggal=hari_ini).first()
+        if not snap:
+            snap = SnapshotNilaiInventory(tanggal=hari_ini, nilai_total=nilai_inventory_saat_ini)
+            db.session.add(snap)
+            db.session.commit()
+        elif snap.nilai_total != nilai_inventory_saat_ini:
+            snap.nilai_total = nilai_inventory_saat_ini
+            db.session.commit()
+        tren_nilai_inventory = SnapshotNilaiInventory.query.order_by(SnapshotNilaiInventory.tanggal.asc()).limit(180).all()
+
+        qty_terjual_map = {p["nama_produk"]: p["qty"] for p in data_per_bulan[-1]["produk"]}
+        produk_dengan_qty = [
+            {"produk": p, "qty_terjual": qty_terjual_map.get(p.nama_produk, 0)}
+            for p in semua_produk if p.stok_jadi > 0
+        ]
+        produk_terlaris_10 = sorted(produk_dengan_qty, key=lambda x: -x["qty_terjual"])[:10]
+        produk_slow_move_10 = sorted(produk_dengan_qty, key=lambda x: x["qty_terjual"])[:10]
+
+        perputaran_inventory = (
+            (ringkasan_ini["total_hpp"] / nilai_inventory_saat_ini) if nilai_inventory_saat_ini else 0
+        )
+
         return render_template(
             "dashboard.html",
             total_karyawan=total_karyawan,
@@ -1869,6 +1926,18 @@ def create_app():
             kpi_profit=kpi_profit,
             tren_bulanan=tren_bulanan,
             produk_terlaris=produk_terlaris,
+            total_penjualan_bulan_ini=total_penjualan_bulan_ini,
+            total_pesanan_bulan_ini=total_pesanan_bulan_ini,
+            channel_omzet=channel_omzet,
+            item_stok_rendah=item_stok_rendah,
+            item_stok_habis=item_stok_habis,
+            item_dalam_stok=item_dalam_stok,
+            peringatan_stok_rendah=peringatan_stok_rendah,
+            tren_nilai_inventory=tren_nilai_inventory,
+            nilai_inventory_saat_ini=nilai_inventory_saat_ini,
+            produk_terlaris_10=produk_terlaris_10,
+            produk_slow_move_10=produk_slow_move_10,
+            perputaran_inventory=perputaran_inventory,
         )
 
     # ---------- KARYAWAN ----------
@@ -2245,12 +2314,13 @@ def create_app():
             stok_awal = parse_angka_iklan(request.form.get("stok_awal"))
             harga_per_yard = round(parse_angka_iklan(request.form.get("harga_per_yard")))
             suplier = request.form.get("suplier", "").strip()
+            batas_minimal_stok = parse_angka_iklan(request.form.get("batas_minimal_stok"))
             if not nama_bahan:
                 flash("Nama bahan baku wajib diisi.", "danger")
                 return redirect(url_for("bahan_baku_list"))
             bahan = BahanBaku(
                 nama_bahan=nama_bahan, satuan=satuan, stok_saat_ini=stok_awal, harga_per_yard=harga_per_yard,
-                suplier=suplier or None,
+                suplier=suplier or None, batas_minimal_stok=batas_minimal_stok,
             )
             db.session.add(bahan)
             db.session.flush()
@@ -2315,6 +2385,7 @@ def create_app():
         bahan.harga_per_yard = harga_input
         bahan.catatan = request.form.get("catatan", "").strip()
         bahan.suplier = request.form.get("suplier", "").strip() or None
+        bahan.batas_minimal_stok = parse_angka_iklan(request.form.get("batas_minimal_stok"))
 
         # Tambah Stok (opsional) -- dicatat sbg transaksi Masuk baru (bukan langsung nimpa
         # stok_saat_ini) supaya Riwayat Stok tetap punya jejaknya, sama kayak input dari
@@ -3182,8 +3253,6 @@ def create_app():
         flash("Catatan pembayaran dihapus.", "info")
         return redirect(url_for("purchase_order_pembayaran", po_id=po_id))
 
-    AMBANG_STOK_BAHAN_MENIPIS = 20  # dalam satuan bahan masing2 (yard/dll) -- belum ada field ambang per-bahan di data, jadi pakai satu angka tetap sbg perkiraan kasar
-
     def hitung_dashboard_produksi(semua_po):
         hari_ini = today_wib()
         awal_bulan_ini = hari_ini.replace(day=1)
@@ -3228,7 +3297,9 @@ def create_app():
             "cutting_qty": 0, "jahit_qty": 0, "finishing_qty": 0, "qc_qty": 0, "barang_jadi_qty": 0,
         }
         bahan_menipis_ids = {
-            b.id for b in BahanBaku.query.filter(BahanBaku.stok_saat_ini < AMBANG_STOK_BAHAN_MENIPIS).all()
+            b.id for b in BahanBaku.query.filter(
+                BahanBaku.batas_minimal_stok > 0, BahanBaku.stok_saat_ini < BahanBaku.batas_minimal_stok,
+            ).all()
         }
         for po in semua_po:
             if po.status_produksi == "Dibatalkan" or not po.item_produk_list:
@@ -3278,7 +3349,7 @@ def create_app():
         )[:3]
 
         bahan_menipis = (
-            BahanBaku.query.filter(BahanBaku.stok_saat_ini < AMBANG_STOK_BAHAN_MENIPIS)
+            BahanBaku.query.filter(BahanBaku.batas_minimal_stok > 0, BahanBaku.stok_saat_ini < BahanBaku.batas_minimal_stok)
             .order_by(BahanBaku.stok_saat_ini.asc()).limit(3).all()
         )
 
@@ -3360,7 +3431,7 @@ def create_app():
         return render_template(
             "inventory/progress_produksi_list.html", daftar=daftar, q=q, tab=tab,
             saran_qty=saran_qty, saran_biaya=saran_biaya, tanggal_hari_ini=today_wib().isoformat(),
-            jumlah_semua_po=len(semua_po), AMBANG_STOK_BAHAN_MENIPIS=AMBANG_STOK_BAHAN_MENIPIS, **dash,
+            jumlah_semua_po=len(semua_po), **dash,
         )
 
     @app.route("/inventory/master-data/purchase-order/<int:po_id>/progress-produksi/update", methods=["POST"])

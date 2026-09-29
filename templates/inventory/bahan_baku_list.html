@@ -77,11 +77,19 @@
             <input type="number" min="0" step="1" name="harga_per_yard" class="form-control" value="0">
           </div>
         </div>
-        <div class="mb-3 mt-3">
-          <label class="form-label">Stok Awal <span class="text-muted small">(opsional)</span></label>
-          <input type="number" min="0" step="0.01" name="stok_awal" class="form-control" value="0">
-          <div class="form-text">Kalau diisi, otomatis dicatat sebagai transaksi Masuk pertama.</div>
+        <div class="row g-3 mt-0">
+          <div class="col-6">
+            <label class="form-label">Stok Awal <span class="text-muted small">(opsional)</span></label>
+            <input type="number" min="0" step="0.01" name="stok_awal" class="form-control" value="0">
+            <div class="form-text">Otomatis dicatat sbg transaksi Masuk pertama.</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Batas Minimal Stok <span class="text-muted small">(opsional)</span></label>
+            <input type="number" min="0" step="0.01" name="batas_minimal_stok" class="form-control" value="0">
+            <div class="form-text">Di bawah ini dianggap "Stok Rendah" di Dashboard.</div>
+          </div>
         </div>
+        <div class="mb-3"></div>
         <div class="mb-3">
           <label class="form-label">Suplier / Vendor Kain <span class="text-muted small">(opsional)</span></label>
           <select name="suplier" class="form-select">
