@@ -622,6 +622,10 @@ def _cek_header_marketplace(sel):
         return "TikTok Shop", "order"
     if "id pesanan/penyesuaian" in sel and "jenis transaksi" in sel:
         return "TikTok Shop", "income"
+    if "orderitemid" in sel and "lazadasku" in sel:
+        return "Lazada", "order"
+    if "nama biaya" in sel and "lazada sku" in sel:
+        return "Lazada", "income"
     return None, None
 
 
@@ -640,7 +644,7 @@ def baca_laporan_marketplace(file_storage):
     raw = file_storage.read()
     pesan_gagal = (
         "File ini bukan Laporan Pesanan (Order) atau Laporan Pendapatan (Income) yang dikenali "
-        "(baru mendukung Shopee & TikTok Shop). Pastikan file yang diupload adalah hasil export asli "
+        "(baru mendukung Shopee, TikTok Shop & Lazada). Pastikan file yang diupload adalah hasil export asli "
         "dari Seller Center/Partner Center marketplace terkait."
     )
 
@@ -845,9 +849,96 @@ def parse_income_tiktok(headers, rows_data):
     return hasil
 
 
+def parse_order_lazada(headers, rows_data):
+    """Export 'Manage Orders' Lazada Seller Center -- 1 BARIS = 1 UNIT item (orderItemId
+    unik per baris, tidak ada kolom qty terpisah), jadi jumlah selalu 1 per baris; kalau
+    1 pesanan punya beberapa unit produk yg sama bakal muncul di beberapa baris terpisah
+    dan otomatis kejumlah pas diagregat di hitung_profit_agregat (per nama_produk)."""
+    idx = {str(h).strip().lower(): i for i, h in enumerate(headers)}
+
+    def ambil(row, nama):
+        i = idx.get(nama.lower())
+        return row[i] if i is not None and i < len(row) else None
+
+    hasil = []
+    for row in rows_data:
+        no_pesanan = str(ambil(row, "orderNumber") or "").strip()
+        if not no_pesanan:
+            continue
+        tanggal = parse_tanggal_iklan(ambil(row, "createTime"))
+        if not tanggal:
+            continue
+        nama_produk = str(ambil(row, "itemName") or "").strip()
+        variasi = str(ambil(row, "variation") or "").strip()
+        nama_final = f"{nama_produk} - {variasi}" if variasi and variasi != "-" else nama_produk
+        hasil.append({
+            "no_pesanan": no_pesanan,
+            "tanggal_pesanan": tanggal,
+            "status_pesanan": str(ambil(row, "status") or "").strip()[:32],
+            "nama_produk": nama_final.strip()[:256],
+            "sku": str(ambil(row, "sellerSku") or "").strip()[:128],
+            "jumlah": 1,
+            "subtotal": round(parse_angka_iklan(ambil(row, "paidPrice"))),
+            "subtotal_kotor": round(parse_angka_iklan(ambil(row, "unitPrice"))),
+        })
+    return hasil
+
+
+_KATA_BIAYA_ADMIN_LAZADA = ("komisi", "biaya transaksi", "order processing fee")
+_KATA_BIAYA_LAYANAN_LAZADA = ("shipping", "ongkir")
+
+
+def parse_income_lazada(headers, rows_data):
+    """Laporan Pendapatan (Income Overview) Lazada Seller Center -- beda format dari
+    Shopee/TikTok: bukan 1 baris = 1 pesanan, tapi 1 baris = 1 JENIS BIAYA/pendapatan
+    per pesanan (kolom 'Nama Biaya', mis. 'Omset Penjualan', 'Komisi', 'Biaya Free
+    Shipping Max', dst). Harus dikelompokkan per Nomor Pesanan dulu, dijumlah semua
+    barisnya (baris positif 'Omset Penjualan' + baris2 biaya yg sudah negatif) buat
+    dapat Total Penghasilan bersih yg sama artinya dgn kolom itu di Shopee/TikTok."""
+    idx = {str(h).strip().lower(): i for i, h in enumerate(headers)}
+
+    def ambil(row, nama):
+        i = idx.get(nama.strip().lower())
+        return row[i] if i is not None and i < len(row) else None
+
+    by_order = {}
+    for row in rows_data:
+        no_pesanan = str(ambil(row, "Nomor Pesanan") or "").strip()
+        if not no_pesanan:
+            continue
+        o = by_order.setdefault(no_pesanan, {
+            "no_pesanan": no_pesanan, "total_penghasilan": 0.0,
+            "biaya_admin": 0.0, "biaya_layanan": 0.0, "biaya_lainnya": 0.0,
+            "tanggal_dana_dilepas": None,
+        })
+        jumlah = parse_angka_iklan(ambil(row, "Jumlah (Termasuk Pajak)"))
+        o["total_penghasilan"] += jumlah
+        if not o["tanggal_dana_dilepas"]:
+            tgl = parse_tanggal_iklan(ambil(row, "Tanggal Dilepas"))
+            if tgl:
+                o["tanggal_dana_dilepas"] = tgl
+        nama_biaya = str(ambil(row, "Nama Biaya") or "").strip().lower()
+        if nama_biaya == "omset penjualan" or jumlah >= 0:
+            continue  # bukan biaya, ini pendapatan kotornya (atau penyesuaian positif)
+        if any(k in nama_biaya for k in _KATA_BIAYA_ADMIN_LAZADA):
+            o["biaya_admin"] += abs(jumlah)
+        elif any(k in nama_biaya for k in _KATA_BIAYA_LAYANAN_LAZADA):
+            o["biaya_layanan"] += abs(jumlah)
+        else:
+            o["biaya_lainnya"] += abs(jumlah)
+
+    for o in by_order.values():
+        o["total_penghasilan"] = round(o["total_penghasilan"])
+        o["biaya_admin"] = round(o["biaya_admin"])
+        o["biaya_layanan"] = round(o["biaya_layanan"])
+        o["biaya_lainnya"] = round(o["biaya_lainnya"])
+    return list(by_order.values())
+
+
 PARSER_ORDER_MARKETPLACE = {
     "Shopee": parse_order_shopee,
     "TikTok Shop": parse_order_tiktok,
+    "Lazada": parse_order_lazada,
     # Order Manual pakai format kolom yang sama persis dengan export Order Shopee
     # (No. Pesanan, Waktu Pesanan Dibuat, Status Pesanan, dst) -- untuk pesanan
     # langsung/di luar marketplace (WA, COD, dsb) yang diinput manual oleh admin
@@ -857,6 +948,7 @@ PARSER_ORDER_MARKETPLACE = {
 PARSER_INCOME_MARKETPLACE = {
     "Shopee": parse_income_shopee,
     "TikTok Shop": parse_income_tiktok,
+    "Lazada": parse_income_lazada,
 }
 
 
