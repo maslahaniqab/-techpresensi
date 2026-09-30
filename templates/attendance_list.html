@@ -77,7 +77,7 @@
 </div>
 
 {% if belum_absen %}
-<div class="card p-3 border-warning">
+<div class="card p-3 border-warning mb-3">
   <h6 class="text-warning">Belum absen ({{ belum_absen|length }} karyawan)</h6>
   <ul class="mb-0">
     {% for k in belum_absen %}
@@ -86,4 +86,62 @@
   </ul>
 </div>
 {% endif %}
+
+<div class="card p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <h6 class="mb-0">Rekap Bulanan &mdash; {{ bulan_nama_list[tanggal.month] }} {{ tanggal.year }}</h6>
+    <div class="small text-muted">
+      <span class="badge bg-success">H</span> Hadir &middot;
+      <span class="badge bg-warning text-dark">T</span> Telat &middot;
+      <span class="badge bg-info">S</span> Sakit &middot;
+      <span class="badge bg-primary">I</span> Izin &middot;
+      <span class="badge bg-secondary">C</span> Cuti &middot;
+      <span class="badge bg-danger">A</span> Alpha &middot;
+      <span class="badge bg-light text-dark border">-</span> Tidak Ada Catatan
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.78rem;">
+      <thead>
+        <tr>
+          <th class="text-nowrap" style="position:sticky; left:0; background:#f6f2ea; z-index:1;">Nama</th>
+          {% for h in rentang_hari_rekap %}
+          <th class="text-center text-nowrap">{{ h.day }}</th>
+          {% endfor %}
+          <th class="text-center text-nowrap">H</th>
+          <th class="text-center text-nowrap">T</th>
+          <th class="text-center text-nowrap">S</th>
+          <th class="text-center text-nowrap">I</th>
+          <th class="text-center text-nowrap">C</th>
+          <th class="text-center text-nowrap">A</th>
+          <th class="text-center text-nowrap">-</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set warna = {'H':'success','T':'warning','S':'info','I':'primary','C':'secondary','A':'danger'} %}
+        {% for baris in rekap_bulanan %}
+        <tr>
+          <td class="text-nowrap fw-semibold" style="position:sticky; left:0; background:#fff; z-index:1;">{{ baris.nama }}</td>
+          {% for h in baris.harian %}
+          <td class="text-center p-1">
+            {% if h.kode %}
+            <span class="badge {{ 'bg-' + warna.get(h.kode, 'light text-dark border') if h.kode != '-' else 'bg-light text-dark border' }}" style="min-width:22px; display:inline-block;">{{ h.kode }}</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td class="text-center">{{ baris.total.H }}</td>
+          <td class="text-center">{{ baris.total.T }}</td>
+          <td class="text-center">{{ baris.total.S }}</td>
+          <td class="text-center">{{ baris.total.I }}</td>
+          <td class="text-center">{{ baris.total.C }}</td>
+          <td class="text-center">{{ baris.total.A }}</td>
+          <td class="text-center {{ 'text-danger fw-semibold' if baris.total['-'] }}">{{ baris.total['-'] }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="100" class="text-center text-muted py-3">Belum ada karyawan aktif.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

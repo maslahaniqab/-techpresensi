@@ -4259,11 +4259,52 @@ def create_app():
             Employee.status == "Aktif", ~Employee.id.in_(sudah_absen_ids) if sudah_absen_ids else True
         ).order_by(Employee.nama).all()
 
+        # ---- Rekap Bulanan (grid Hadir/Telat/Sakit/Izin/Cuti/Alpha per hari) --
+        # bulan/tahun ikut tanggal yang lagi dipilih, biar 1 date-picker ngontrol
+        # keduanya (tabel harian di atas + rekap bulan ini di bawah).
+        awal_bulan = tanggal.replace(day=1)
+        akhir_bulan_penuh = date(tanggal.year, tanggal.month, calendar.monthrange(tanggal.year, tanggal.month)[1])
+        akhir_cek = min(akhir_bulan_penuh, today_wib())
+        jumlah_hari = (akhir_cek - awal_bulan).days + 1 if akhir_cek >= awal_bulan else 0
+
+        karyawan_aktif = Employee.query.filter_by(status="Aktif").order_by(Employee.nama).all()
+        att_bulan = Attendance.query.filter(
+            Attendance.tanggal >= awal_bulan, Attendance.tanggal <= akhir_cek,
+        ).all()
+        hari_libur_bulan = {
+            h.tanggal for h in HariLibur.query.filter(
+                HariLibur.tanggal >= awal_bulan, HariLibur.tanggal <= akhir_cek,
+            ).all()
+        }
+        peta_att = {(a.employee_id, a.tanggal): a for a in att_bulan}
+
+        kode_status = {"Hadir": "H", "Sakit": "S", "Izin": "I", "Cuti": "C", "Alpha": "A"}
+        rekap_bulanan = []
+        for emp in karyawan_aktif:
+            baris = {"nama": emp.nama, "harian": [], "total": {"H": 0, "T": 0, "S": 0, "I": 0, "C": 0, "A": 0, "-": 0}}
+            for i in range(jumlah_hari):
+                hari = awal_bulan + timedelta(days=i)
+                att = peta_att.get((emp.id, hari))
+                if att:
+                    kode = kode_status.get(att.status, "?")
+                    if kode == "H" and att.telat_menit:
+                        kode = "T"
+                elif hari in hari_libur_bulan:
+                    kode = None  # hari libur -- tampil kosong, tidak dihitung bolong
+                else:
+                    kode = "-"
+                baris["harian"].append({"tanggal": hari, "kode": kode})
+                if kode:
+                    baris["total"][kode] = baris["total"].get(kode, 0) + 1
+            rekap_bulanan.append(baris)
+
         return render_template(
             "attendance_list.html",
             data=data,
             tanggal=tanggal,
             belum_absen=belum_absen,
+            rekap_bulanan=rekap_bulanan,
+            rentang_hari_rekap=[awal_bulan + timedelta(days=i) for i in range(jumlah_hari)],
         )
 
     @app.route("/absensi/koreksi", methods=["GET", "POST"], defaults={"att_id": None})
