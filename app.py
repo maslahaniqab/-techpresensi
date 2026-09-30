@@ -5037,8 +5037,12 @@ def create_app():
         total_sakit = sum(1 for a in absensi if a.status == "Sakit")
         total_izin = sum(1 for a in absensi if a.status == "Izin")
         total_cuti = sum(1 for a in absensi if a.status == "Cuti")
-        total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+        total_alpha_eksplisit = sum(1 for a in absensi if a.status == "Alpha")
         total_tanpa_keterangan = _hitung_tanpa_keterangan(emp.id, awal, akhir, absensi)
+        # Hari yg sama sekali tidak ada catatan otomatis dihitung Alpha jg (bukan cuma
+        # info terpisah) -- ikut motong gaji lewat potongan_alpha di bawah, sesuai
+        # permintaan: berlaku utk semua karyawan (Tetap/Probation & Freelance).
+        total_alpha = total_alpha_eksplisit + total_tanpa_keterangan
         total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
         total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
 
@@ -5143,8 +5147,9 @@ def create_app():
         total_sakit = sum(1 for a in absensi if a.status == "Sakit")
         total_izin = sum(1 for a in absensi if a.status == "Izin")
         total_cuti = sum(1 for a in absensi if a.status == "Cuti")
-        total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+        total_alpha_eksplisit = sum(1 for a in absensi if a.status == "Alpha")
         total_tanpa_keterangan = _hitung_tanpa_keterangan(emp.id, awal, akhir, absensi)
+        total_alpha = total_alpha_eksplisit + total_tanpa_keterangan
         total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
         total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
 

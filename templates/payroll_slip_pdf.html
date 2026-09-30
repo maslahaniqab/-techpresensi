@@ -50,7 +50,9 @@
     <tr><td>Izin</td><td class="right">{{ p.total_izin }} hari</td></tr>
     <tr><td>Cuti</td><td class="right">{{ p.total_cuti }} hari</td></tr>
     <tr><td>Alpha (tanpa keterangan)</td><td class="right">{{ p.total_alpha }} hari</td></tr>
-    <tr><td>Tidak Ada Catatan Absensi</td><td class="right">{{ p.total_tanpa_keterangan or 0 }} hari</td></tr>
+    {% if p.total_tanpa_keterangan %}
+    <tr><td>&mdash; termasuk {{ p.total_tanpa_keterangan }} hari sama sekali tidak ada catatan (otomatis Alpha)</td><td class="right"></td></tr>
+    {% endif %}
     <tr><td>Total Keterlambatan</td><td class="right">{{ p.total_telat_menit }} menit</td></tr>
     <tr><td>Lembur</td><td class="right">{{ p.jumlah_lembur or 0 }} hari</td></tr>
   </table>
