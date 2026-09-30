@@ -2310,6 +2310,15 @@ def create_app():
         flash(f"Produk {nama} dihapus.", "info")
         return redirect(url_for("produk_list"))
 
+    @app.route("/produk/<int:produk_id>/reset-stok", methods=["POST"])
+    @admin_required
+    def produk_reset_stok(produk_id):
+        produk = db.session.get(Produk, produk_id) or abort_404()
+        produk.stok_jadi = 0
+        db.session.commit()
+        flash(f"Stok Jadi {produk.nama_produk} direset ke 0.", "info")
+        return redirect(url_for("produk_list"))
+
     @app.route("/produk/upload", methods=["GET", "POST"])
     @modul_required("produk")
     def produk_upload():

@@ -76,6 +76,12 @@
           <td class="text-end aksi-sticky">
             {% if current_user.role == 'admin' %}
             <a href="{{ url_for('produk_edit', produk_id=p.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+            {% if p.stok_jadi %}
+            <form method="post" action="{{ url_for('produk_reset_stok', produk_id=p.id) }}" class="d-inline"
+                  onsubmit="return confirm('Reset Stok Jadi {{ p.nama_produk }} ke 0? Ini cuma mengosongkan angka stok, produknya tidak dihapus.');">
+              <button type="submit" class="btn btn-sm btn-outline-warning">Reset Stok</button>
+            </form>
+            {% endif %}
             <form method="post" action="{{ url_for('produk_hapus', produk_id=p.id) }}" class="d-inline"
                   onsubmit="return confirm('Hapus produk {{ p.nama_produk }}?');">
               <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
