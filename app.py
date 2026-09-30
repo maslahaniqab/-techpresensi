@@ -5058,7 +5058,11 @@ def create_app():
         hari_kerja = settings.hari_kerja_per_bulan or 22
         gaji_harian = total_pokok / hari_kerja if hari_kerja else 0
 
-        potongan_alpha = round(total_alpha * gaji_harian)
+        # Potongan gaji HANYA dari Alpha yang eksplisit ditandai (mis. lewat koreksi
+        # absensi admin) -- hari yg cuma "tanpa catatan otomatis" tetap ditampilkan
+        # sbg bagian dari total_alpha di slip (transparansi), TAPI tidak ikut memotong
+        # gaji, sesuai permintaan.
+        potongan_alpha = round(total_alpha_eksplisit * gaji_harian)
         # Pemotongan gaji akibat keterlambatan dinonaktifkan sementara atas permintaan
         # -- total_telat_menit tetap dihitung & disimpan supaya laporan keterlambatan
         # per karyawan tetap tampil, hanya saja tidak lagi mengurangi gaji_bersih.
