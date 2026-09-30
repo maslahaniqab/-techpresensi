@@ -26,6 +26,7 @@
       </select>
       <div class="form-text">Buat/kelola kategori di menu <a href="{{ url_for('kategori_produk_list') }}" target="_blank">Kategori Produk</a>. Berguna biar gampang input Biaya Produksi (Menjahit) sekaligus per kategori.</div>
     </div>
+    {% if current_user.role == 'admin' %}
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Modal (Rp)</label>
@@ -37,10 +38,12 @@
         <div class="form-text">Harga Pokok Penjualan (modal + biaya tambahan lain).</div>
       </div>
     </div>
+    {% endif %}
     <div class="mb-3">
       <label class="form-label">Harga Dasar / Coret (Rp)</label>
       <input type="number" name="harga_dasar" class="form-control" value="{{ produk.harga_dasar if produk else 0 }}">
     </div>
+    {% if current_user.role == 'admin' %}
     <div class="row">
       <div class="col-md-4 mb-3">
         <label class="form-label">Harga Normal (Rp)</label>
@@ -55,6 +58,7 @@
         <input type="number" name="harga_big_campaign" class="form-control" value="{{ produk.harga_big_campaign if produk else 0 }}">
       </div>
     </div>
+    {% endif %}
     <button type="submit" class="btn btn-primary">Simpan</button>
   </form>
 </div>

@@ -2237,7 +2237,7 @@ def create_app():
         return render_template("produk_form.html", produk=None, daftar_kategori=daftar_kategori)
 
     @app.route("/produk/<int:produk_id>/edit", methods=["GET", "POST"])
-    @admin_required
+    @modul_required("produk")
     def produk_edit(produk_id):
         produk = db.session.get(Produk, produk_id) or abort_404()
         daftar_kategori = KategoriProduk.query.order_by(KategoriProduk.nama_kategori).all()
@@ -2246,12 +2246,17 @@ def create_app():
             produk.nama_produk = request.form.get("nama_produk", "").strip()
             produk.sku = request.form.get("sku", "").strip() or None
             produk.kategori_id = kategori_id or None
-            produk.modal = int(request.form.get("modal") or 0)
-            produk.hpp = int(request.form.get("hpp") or 0)
             produk.harga_dasar = int(request.form.get("harga_dasar") or 0)
-            produk.harga_normal = int(request.form.get("harga_normal") or 0)
-            produk.harga_flash_sale = int(request.form.get("harga_flash_sale") or 0)
-            produk.harga_big_campaign = int(request.form.get("harga_big_campaign") or 0)
+            if current_user.role == "admin":
+                # Modal/HPP & harga selain Harga Dasar cuma boleh diubah admin --
+                # non-admin tidak dikirimi field ini sama sekali di form (lihat
+                # produk_form.html), jadi kalau ikut ditimpa dari request.form yang
+                # kosong bakal ke-reset jadi 0, bukan cuma "hidden dari tampilan".
+                produk.modal = int(request.form.get("modal") or 0)
+                produk.hpp = int(request.form.get("hpp") or 0)
+                produk.harga_normal = int(request.form.get("harga_normal") or 0)
+                produk.harga_flash_sale = int(request.form.get("harga_flash_sale") or 0)
+                produk.harga_big_campaign = int(request.form.get("harga_big_campaign") or 0)
             if not produk.nama_produk:
                 flash("Nama produk wajib diisi.", "danger")
                 return render_template("produk_form.html", produk=produk, daftar_kategori=daftar_kategori)
