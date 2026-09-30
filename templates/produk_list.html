@@ -3,8 +3,8 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3>Data Produk &amp; Harga Jual</h3>
-  <div class="d-flex gap-2">
-    <a href="{{ url_for('produk_upload') }}" class="btn btn-outline-primary">+ Upload Data Produk</a>
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ url_for('produk_upload') }}" class="small text-decoration-none">📤 Upload Data Produk</a>
     <a href="{{ url_for('produk_tambah') }}" class="btn btn-primary">+ Tambah Produk</a>
   </div>
 </div>
@@ -52,7 +52,7 @@
           <th class="text-end">Margin</th>
           <th class="text-end">Harga BIG Campaign</th>
           <th class="text-end">Margin</th>
-          <th class="text-end">Aksi</th>
+          <th class="text-end aksi-sticky">Aksi</th>
         </tr>
       </thead>
       <tbody>
@@ -73,7 +73,7 @@
           <td class="text-end small text-muted">{{ d.margin_hfs | rupiah }}<br>{{ '%.1f'|format(d.persen_hfs) }}%</td>
           <td class="text-end">{{ p.harga_big_campaign | rupiah }}</td>
           <td class="text-end small text-muted">{{ d.margin_hc | rupiah }}<br>{{ '%.1f'|format(d.persen_hc) }}%</td>
-          <td class="text-end">
+          <td class="text-end aksi-sticky">
             {% if current_user.role == 'admin' %}
             <a href="{{ url_for('produk_edit', produk_id=p.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
             <form method="post" action="{{ url_for('produk_hapus', produk_id=p.id) }}" class="d-inline"
@@ -92,4 +92,15 @@
     </table>
   </div>
 </div>
+
+<style>
+  .aksi-sticky {
+    position: sticky;
+    right: 0;
+    background-color: #fff;
+    box-shadow: -2px 0 4px rgba(0,0,0,.06);
+    white-space: nowrap;
+  }
+  thead .aksi-sticky { background-color: #f6f2ea; z-index: 2; }
+</style>
 {% endblock %}
