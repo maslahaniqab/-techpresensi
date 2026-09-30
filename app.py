@@ -4590,13 +4590,50 @@ def create_app():
     @app.route("/pegawai/riwayat")
     @pegawai_required
     def pegawai_riwayat():
+        hari_ini = today_wib()
+        try:
+            bulan_pilih = int(request.args.get("bulan", hari_ini.month))
+            if not 1 <= bulan_pilih <= 12:
+                bulan_pilih = hari_ini.month
+        except ValueError:
+            bulan_pilih = hari_ini.month
+        try:
+            tahun_pilih = int(request.args.get("tahun", hari_ini.year))
+        except ValueError:
+            tahun_pilih = hari_ini.year
+        tahun_opsi = sorted(set(range(hari_ini.year - 2, hari_ini.year + 1)) | {tahun_pilih})
+
+        awal_bulan = date(tahun_pilih, bulan_pilih, 1)
+        akhir_bulan_penuh = date(tahun_pilih, bulan_pilih, calendar.monthrange(tahun_pilih, bulan_pilih)[1])
+        akhir_cek = min(akhir_bulan_penuh, hari_ini)
+
         riwayat = (
-            Attendance.query.filter_by(employee_id=current_user.id)
+            Attendance.query.filter(
+                Attendance.employee_id == current_user.id,
+                Attendance.tanggal >= awal_bulan, Attendance.tanggal <= akhir_bulan_penuh,
+            )
             .order_by(Attendance.tanggal.desc())
-            .limit(31)
             .all()
         )
-        return render_template("pegawai/riwayat.html", riwayat=riwayat)
+        tanggal_ada = {a.tanggal for a in riwayat}
+        hari_libur = {
+            h.tanggal: h.keterangan for h in HariLibur.query.filter(
+                HariLibur.tanggal >= awal_bulan, HariLibur.tanggal <= akhir_cek,
+            ).all()
+        }
+
+        hari_tidak_absen = []
+        if awal_bulan <= akhir_cek:
+            hari = awal_bulan
+            while hari <= akhir_cek:
+                if hari not in tanggal_ada and hari not in hari_libur:
+                    hari_tidak_absen.append(hari)
+                hari += timedelta(days=1)
+
+        return render_template(
+            "pegawai/riwayat.html", riwayat=riwayat, hari_tidak_absen=hari_tidak_absen,
+            bulan_filter=bulan_pilih, tahun_filter=tahun_pilih, tahun_opsi=tahun_opsi,
+        )
 
     @app.route("/pegawai/izin", methods=["GET", "POST"])
     @pegawai_required
@@ -4703,7 +4740,15 @@ def create_app():
             .limit(20)
             .all()
         )
-        return render_template("pegawai/koreksi_absensi.html", riwayat=riwayat, tanggal_hari_ini=today_wib().isoformat())
+        tanggal_prefill = request.args.get("tanggal", "")
+        try:
+            datetime.strptime(tanggal_prefill, "%Y-%m-%d")
+        except ValueError:
+            tanggal_prefill = today_wib().isoformat()
+        return render_template(
+            "pegawai/koreksi_absensi.html", riwayat=riwayat,
+            tanggal_hari_ini=today_wib().isoformat(), tanggal_prefill=tanggal_prefill,
+        )
 
     @app.route("/pegawai/akun", methods=["GET", "POST"])
     @pegawai_required

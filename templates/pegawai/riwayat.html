@@ -2,6 +2,35 @@
 {% block title %}Riwayat Absensi{% endblock %}
 {% block content %}
 <h3 class="mb-3">Riwayat Absensi Saya</h3>
+
+<form method="get" class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <span class="text-muted small">Tampilkan bulan:</span>
+  <select name="bulan" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+    {% for i in range(1, 13) %}
+    <option value="{{ i }}" {{ 'selected' if i == bulan_filter }}>{{ bulan_nama_list[i] }}</option>
+    {% endfor %}
+  </select>
+  <select name="tahun" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+    {% for th in tahun_opsi %}
+    <option value="{{ th }}" {{ 'selected' if th == tahun_filter }}>{{ th }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+{% if hari_tidak_absen %}
+<div class="card p-3 mb-3 border-danger-subtle">
+  <div class="fw-semibold small mb-1">⚠️ Hari Tidak Absen ({{ hari_tidak_absen | length }} hari)</div>
+  <p class="text-muted small mb-2">Tanggal di bawah ini tidak ada catatan absensi sama sekali (bukan Sakit/Izin/Cuti). Kalau Anda sebenarnya masuk kerja hari itu, klik untuk ajukan koreksi.</p>
+  <div class="d-flex flex-wrap gap-2">
+    {% for h in hari_tidak_absen %}
+    <a href="{{ url_for('pegawai_koreksi_absensi', tanggal=h.isoformat()) }}" class="badge bg-danger text-decoration-none">{{ h.strftime('%d-%m-%Y') }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% elif bulan_filter and riwayat is not none %}
+<div class="alert alert-success small">✅ Tidak ada hari yang bolong absensinya di bulan ini (sampai hari ini).</div>
+{% endif %}
+
 <div class="card p-3">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -29,7 +58,7 @@
           <td>{{ a.lembur_menit }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada riwayat absensi.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-4">Belum ada riwayat absensi di bulan ini.</td></tr>
         {% endfor %}
       </tbody>
     </table>
