@@ -4292,8 +4292,8 @@ def create_app():
                     kode = kode_status.get(att.status, "?")
                     if kode == "H" and att.telat_menit:
                         kode = "T"
-                elif hari in hari_libur_bulan:
-                    kode = None  # hari libur -- tampil kosong, tidak dihitung bolong
+                elif hari in hari_libur_bulan or hari.weekday() == 6:
+                    kode = None  # hari libur/Minggu -- tampil kosong, tidak dihitung bolong
                 else:
                     kode = "-"
                 baris["harian"].append({"tanggal": hari, "kode": kode})
@@ -4679,7 +4679,7 @@ def create_app():
         if awal_bulan <= akhir_cek:
             hari = awal_bulan
             while hari <= akhir_cek:
-                if hari not in tanggal_ada and hari not in hari_libur:
+                if hari.weekday() != 6 and hari not in tanggal_ada and hari not in hari_libur:
                     hari_tidak_absen.append(hari)
                 hari += timedelta(days=1)
 
@@ -4997,10 +4997,10 @@ def create_app():
 
     # ---------- PENGGAJIAN ----------
     def _hitung_tanpa_keterangan(employee_id, awal, akhir, absensi):
-        """Jumlah hari kerja dlm periode yg SAMA SEKALI tidak ada baris Attendance
-        (beda dari Alpha yg statusnya eksplisit ditandai) -- Hari Libur resmi & hari
-        yg belum lewat (di masa depan) dikecualikan dari hitungan, cuma informasi
-        di slip gaji, TIDAK memotong gaji_bersih."""
+        """Jumlah HARI KERJA dlm periode yg SAMA SEKALI tidak ada baris Attendance
+        (beda dari Alpha yg statusnya eksplisit ditandai) -- Hari Minggu (libur
+        mingguan) & Hari Libur resmi/tanggal merah dikecualikan, begitu juga hari
+        yg belum lewat (di masa depan)."""
         tanggal_ada = {a.tanggal for a in absensi}
         akhir_cek = min(akhir, today_wib())
         if akhir_cek < awal:
@@ -5013,7 +5013,7 @@ def create_app():
         jumlah = 0
         hari = awal
         while hari <= akhir_cek:
-            if hari not in tanggal_ada and hari not in hari_libur:
+            if hari.weekday() != 6 and hari not in tanggal_ada and hari not in hari_libur:
                 jumlah += 1
             hari += timedelta(days=1)
         return jumlah
