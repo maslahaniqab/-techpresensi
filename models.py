@@ -197,6 +197,24 @@ class PengajuanIzin(db.Model):
     employee = db.relationship("Employee", backref="pengajuan_izin")
 
 
+class PengajuanKoreksiAbsensi(db.Model):
+    """Pengajuan karyawan utk mencatat hari yg lupa/gagal tap absen (bukan Sakit/Izin/
+    Cuti -- karyawan ttp masuk kerja tapi gak sempat/lupa absen lewat sistem). Beda dari
+    PengajuanIzin yg buat izin tidak masuk; ini disetujui jadi Attendance status Hadir."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    jam_masuk = db.Column(db.String(8))
+    jam_pulang = db.Column(db.String(8))
+    alasan = db.Column(db.String(512))
+    status = db.Column(db.String(16), default="Menunggu")  # Menunggu / Disetujui / Ditolak
+    catatan_admin = db.Column(db.String(256))
+    tanggal_diajukan = db.Column(db.DateTime, default=now_wib)
+    tanggal_diproses = db.Column(db.DateTime)
+
+    employee = db.relationship("Employee", backref="pengajuan_koreksi_absensi")
+
+
 class LaporanPekerjaan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Lupa Absen / Koreksi{% endblock %}
+{% block content %}
+<h3 class="mb-3">Lupa Absen / Koreksi Absensi</h3>
+
+<div class="card p-4 mb-3" style="max-width: 560px;">
+  <div class="alert alert-info small mb-3">
+    Gunakan form ini kalau Anda <strong>sudah masuk kerja</strong> tapi lupa/gagal nge-tap absen lewat
+    menu "Absen Sekarang" (mis. HP mati, lokasi GPS error, dll). Untuk tidak masuk kerja (Sakit/Izin/Cuti),
+    gunakan menu <a href="{{ url_for('pegawai_izin') }}">Ajukan Izin/Sakit/Cuti</a>. Pengajuan ini perlu
+    disetujui admin dulu sebelum masuk ke data absensi.
+  </div>
+  <form method="post">
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Tanggal</label>
+        <input type="date" name="tanggal" class="form-control" max="{{ tanggal_hari_ini }}" value="{{ tanggal_hari_ini }}" required>
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Jam Masuk</label>
+        <input type="time" name="jam_masuk" class="form-control" required>
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Jam Pulang <span class="text-muted small">(opsional)</span></label>
+        <input type="time" name="jam_pulang" class="form-control">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Alasan</label>
+      <textarea name="alasan" class="form-control" rows="3" placeholder="Jelaskan kenapa lupa/gagal absen" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Kirim Pengajuan</button>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h6 class="mb-3">Riwayat Pengajuan Saya</h6>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Tanggal Diajukan</th>
+          <th>Untuk Tanggal</th>
+          <th>Jam Masuk</th>
+          <th>Jam Pulang</th>
+          <th>Alasan</th>
+          <th>Status</th>
+          <th>Catatan Admin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in riwayat %}
+        <tr>
+          <td>{{ p.tanggal_diajukan.strftime('%d-%m-%Y') }}</td>
+          <td>{{ p.tanggal.strftime('%d-%m-%Y') }}</td>
+          <td>{{ p.jam_masuk or '-' }}</td>
+          <td>{{ p.jam_pulang or '-' }}</td>
+          <td>{{ p.alasan or '-' }}</td>
+          <td>
+            {% if p.status == 'Disetujui' %}
+              <span class="badge bg-success">Disetujui</span>
+            {% elif p.status == 'Ditolak' %}
+              <span class="badge bg-danger">Ditolak</span>
+            {% else %}
+              <span class="badge bg-secondary">Menunggu</span>
+            {% endif %}
+          </td>
+          <td>{{ p.catatan_admin or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Belum ada pengajuan.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

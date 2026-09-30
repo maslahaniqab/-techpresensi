@@ -143,6 +143,7 @@
   ('absensi_list', 'Absensi', '🕒', 'absensi'),
   ('pengajuan_izin_list', 'Pengajuan Izin', '📄', 'pengajuan_izin'),
   ('pengajuan_lembur_list', 'Pengajuan Lembur', '⏱️', 'pengajuan_lembur'),
+  ('koreksi_absensi_list', 'Pengajuan Koreksi Absensi', '🕓', 'pengajuan_koreksi_absensi'),
   ('laporan_pekerjaan_list', 'Laporan Pekerjaan', '📝', 'laporan_pekerjaan'),
   ('hari_libur_list', 'Hari Libur', '📅', 'hari_libur'),
 ] %}
@@ -202,6 +203,7 @@
     {{ item[2] }} {{ item[1] }}
     {% if item[0] == 'pengajuan_izin_list' and pending_izin_count %}<span class="badge bg-danger">{{ pending_izin_count }}</span>{% endif %}
     {% if item[0] == 'pengajuan_lembur_list' and pending_lembur_count %}<span class="badge bg-danger">{{ pending_lembur_count }}</span>{% endif %}
+    {% if item[0] == 'koreksi_absensi_list' and pending_koreksi_absensi_count %}<span class="badge bg-danger">{{ pending_koreksi_absensi_count }}</span>{% endif %}
   </a>
   {% endfor %}
 </div>
@@ -260,6 +262,7 @@
 {% set menu_pegawai_utama = [
   ('pegawai_dashboard', 'Absen Sekarang', '🏠'),
   ('pegawai_riwayat', 'Riwayat Absensi', '📅'),
+  ('pegawai_koreksi_absensi', 'Lupa Absen / Koreksi', '🕓'),
   ('pegawai_izin', 'Ajukan Izin/Sakit/Cuti', '📄'),
   ('pegawai_lembur', 'Pengajuan Lembur', '⏱️'),
   ('pegawai_laporan', 'Laporan Pekerjaan', '📝'),

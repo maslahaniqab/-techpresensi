@@ -48,7 +48,7 @@ from models import (
     Vendor, Gudang, AkunPembayaran, PurchaseOrder, PurchaseOrderItemProduk,
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
     KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi, PermohonanBarangItem,
-    PenerimaanBarangJadi, SnapshotNilaiInventory,
+    PenerimaanBarangJadi, SnapshotNilaiInventory, PengajuanKoreksiAbsensi,
 )
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
@@ -153,6 +153,7 @@ DAFTAR_MODUL_AKSES = [
         ("absensi", "Absensi"),
         ("pengajuan_izin", "Pengajuan Izin"),
         ("pengajuan_lembur", "Pengajuan Lembur"),
+        ("pengajuan_koreksi_absensi", "Pengajuan Koreksi Absensi"),
         ("laporan_pekerjaan", "Laporan Pekerjaan"),
         ("hari_libur", "Hari Libur"),
     ]),
@@ -4430,6 +4431,73 @@ def create_app():
         flash(f"Pengajuan {p.employee.nama} ditolak.", "info")
         return redirect(url_for("pengajuan_izin_list"))
 
+    # ---------- PENGAJUAN KOREKSI ABSENSI / LUPA ABSEN (ADMIN) ----------
+    @app.route("/pengajuan-koreksi-absensi")
+    @modul_required("pengajuan_koreksi_absensi")
+    def koreksi_absensi_list():
+        status_filter = request.args.get("status", "Menunggu")
+        q = PengajuanKoreksiAbsensi.query.join(Employee)
+        if status_filter in ("Menunggu", "Disetujui", "Ditolak"):
+            q = q.filter(PengajuanKoreksiAbsensi.status == status_filter)
+        pengajuan = q.order_by(PengajuanKoreksiAbsensi.tanggal_diajukan.desc()).all()
+        jumlah_menunggu = PengajuanKoreksiAbsensi.query.filter_by(status="Menunggu").count()
+        return render_template(
+            "pengajuan_koreksi_absensi_list.html",
+            pengajuan=pengajuan,
+            status_filter=status_filter,
+            jumlah_menunggu=jumlah_menunggu,
+        )
+
+    @app.route("/pengajuan-koreksi-absensi/<int:pid>/setujui", methods=["POST"])
+    @modul_required("pengajuan_koreksi_absensi")
+    def koreksi_absensi_setujui(pid):
+        p = db.session.get(PengajuanKoreksiAbsensi, pid) or abort_404()
+        settings = get_settings()
+        p.status = "Disetujui"
+        p.tanggal_diproses = now_wib()
+
+        att = Attendance.query.filter_by(employee_id=p.employee_id, tanggal=p.tanggal).first()
+        telat, lembur = hitung_telat_lembur(
+            p.jam_masuk, p.jam_pulang, settings, p.employee.tipe_pegawai,
+            tanggal=p.tanggal, employee_id=p.employee_id,
+        )
+        if not att:
+            att = Attendance(employee_id=p.employee_id, tanggal=p.tanggal)
+            db.session.add(att)
+        att.status = "Hadir"
+        att.jam_masuk = p.jam_masuk
+        att.jam_pulang = p.jam_pulang
+        att.telat_menit = telat
+        att.lembur_menit = lembur
+        att.catatan = f"Koreksi absensi (lupa absen): {p.alasan}" if p.alasan else "Koreksi absensi (lupa absen)"
+
+        db.session.commit()
+
+        diperbarui = _reconcile_payroll_draft(p.employee, p.tanggal)
+        pesan = f"Pengajuan koreksi absensi {p.employee.nama} disetujui & tercatat di absensi."
+        kategori = "success"
+        if diperbarui is True:
+            pesan += " Slip gaji bulan ini otomatis ikut diperbarui."
+        elif diperbarui is False:
+            pesan += (
+                f" Perhatian: slip gaji {p.employee.nama} bulan ini sudah berstatus Dibayar, "
+                "jadi perubahan ini TIDAK otomatis masuk ke situ -- sesuaikan manual kalau perlu."
+            )
+            kategori = "warning"
+        flash(pesan, kategori)
+        return redirect(url_for("koreksi_absensi_list"))
+
+    @app.route("/pengajuan-koreksi-absensi/<int:pid>/tolak", methods=["POST"])
+    @modul_required("pengajuan_koreksi_absensi")
+    def koreksi_absensi_tolak(pid):
+        p = db.session.get(PengajuanKoreksiAbsensi, pid) or abort_404()
+        p.status = "Ditolak"
+        p.catatan_admin = request.form.get("catatan_admin", "").strip()
+        p.tanggal_diproses = now_wib()
+        db.session.commit()
+        flash(f"Pengajuan koreksi absensi {p.employee.nama} ditolak.", "info")
+        return redirect(url_for("koreksi_absensi_list"))
+
     # ---------- AREA PEGAWAI ----------
     @app.route("/pegawai")
     @pegawai_required
@@ -4591,6 +4659,51 @@ def create_app():
             .all()
         )
         return render_template("pegawai/izin.html", riwayat=riwayat)
+
+    @app.route("/pegawai/koreksi-absensi", methods=["GET", "POST"])
+    @pegawai_required
+    def pegawai_koreksi_absensi():
+        if request.method == "POST":
+            try:
+                tanggal = datetime.strptime(request.form.get("tanggal", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal = None
+            jam_masuk = request.form.get("jam_masuk") or None
+            jam_pulang = request.form.get("jam_pulang") or None
+            alasan = request.form.get("alasan", "").strip()
+
+            if not tanggal or tanggal > today_wib():
+                flash("Tanggal wajib diisi dan tidak boleh tanggal yang akan datang.", "danger")
+            elif not jam_masuk:
+                flash("Jam masuk wajib diisi.", "danger")
+            elif not alasan:
+                flash("Alasan lupa/gagal absen wajib diisi.", "danger")
+            else:
+                att_ada = Attendance.query.filter_by(employee_id=current_user.id, tanggal=tanggal).first()
+                if att_ada and att_ada.jam_masuk:
+                    flash("Anda sudah tercatat absen pada tanggal ini, tidak perlu mengajukan koreksi.", "warning")
+                else:
+                    sudah_ada = PengajuanKoreksiAbsensi.query.filter_by(
+                        employee_id=current_user.id, tanggal=tanggal, status="Menunggu"
+                    ).first()
+                    if sudah_ada:
+                        flash("Sudah ada pengajuan koreksi untuk tanggal ini yang masih menunggu persetujuan.", "warning")
+                    else:
+                        db.session.add(PengajuanKoreksiAbsensi(
+                            employee_id=current_user.id, tanggal=tanggal,
+                            jam_masuk=jam_masuk, jam_pulang=jam_pulang, alasan=alasan,
+                        ))
+                        db.session.commit()
+                        flash("Pengajuan koreksi absensi berhasil dikirim, menunggu persetujuan admin.", "success")
+            return redirect(url_for("pegawai_koreksi_absensi"))
+
+        riwayat = (
+            PengajuanKoreksiAbsensi.query.filter_by(employee_id=current_user.id)
+            .order_by(PengajuanKoreksiAbsensi.tanggal_diajukan.desc())
+            .limit(20)
+            .all()
+        )
+        return render_template("pegawai/koreksi_absensi.html", riwayat=riwayat, tanggal_hari_ini=today_wib().isoformat())
 
     @app.route("/pegawai/akun", methods=["GET", "POST"])
     @pegawai_required
@@ -8000,6 +8113,7 @@ def create_app():
     def inject_globals():
         pending_izin = 0
         pending_lembur = 0
+        pending_koreksi_absensi = 0
         akses_pegawai = set()
         notif_total = 0
         notif_belum = 0
@@ -8015,6 +8129,7 @@ def create_app():
         if current_user.is_authenticated and getattr(current_user, "role", None) == "admin":
             pending_izin = PengajuanIzin.query.filter_by(status="Menunggu").count()
             pending_lembur = PengajuanLembur.query.filter_by(status="Menunggu").count()
+            pending_koreksi_absensi = PengajuanKoreksiAbsensi.query.filter_by(status="Menunggu").count()
         if current_user.is_authenticated and getattr(current_user, "role", None) == "pegawai":
             akses_pegawai = {
                 row.modul for row in AksesKaryawan.query.filter_by(employee_id=current_user.id).all()
@@ -8024,6 +8139,7 @@ def create_app():
             "hari_ini": today_wib(),
             "pending_izin_count": pending_izin,
             "pending_lembur_count": pending_lembur,
+            "pending_koreksi_absensi_count": pending_koreksi_absensi,
             "site_settings": get_settings(),
             "akses_pegawai": akses_pegawai,
             "notif_total": notif_total,
