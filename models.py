@@ -137,6 +137,7 @@ class Payroll(db.Model):
     total_izin = db.Column(db.Integer, default=0)
     total_cuti = db.Column(db.Integer, default=0)
     total_alpha = db.Column(db.Integer, default=0)
+    total_tanpa_keterangan = db.Column(db.Integer, default=0)  # hari tanpa catatan Attendance sama sekali (bukan Alpha) -- info saja, tidak memotong gaji
     total_telat_menit = db.Column(db.Integer, default=0)
     total_lembur_menit = db.Column(db.Integer, default=0)
 

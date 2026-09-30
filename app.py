@@ -1707,6 +1707,9 @@ def create_app():
         if "tarif_lembur" not in kolom_payroll:
             db.session.execute(db.text("ALTER TABLE payroll ADD COLUMN tarif_lembur INTEGER DEFAULT 0"))
             db.session.commit()
+        if "total_tanpa_keterangan" not in kolom_payroll:
+            db.session.execute(db.text("ALTER TABLE payroll ADD COLUMN total_tanpa_keterangan INTEGER DEFAULT 0"))
+            db.session.commit()
         kolom_bahan_baku = {c["name"] for c in db.inspect(db.engine).get_columns("bahan_baku")}
         for kolom, tipe in [
             ("warna", "VARCHAR(64)"), ("tinggi_meter", "FLOAT"), ("suplier", "VARCHAR(128)"),
@@ -4993,6 +4996,28 @@ def create_app():
         return redirect(url_for("pengajuan_lembur_list"))
 
     # ---------- PENGGAJIAN ----------
+    def _hitung_tanpa_keterangan(employee_id, awal, akhir, absensi):
+        """Jumlah hari kerja dlm periode yg SAMA SEKALI tidak ada baris Attendance
+        (beda dari Alpha yg statusnya eksplisit ditandai) -- Hari Libur resmi & hari
+        yg belum lewat (di masa depan) dikecualikan dari hitungan, cuma informasi
+        di slip gaji, TIDAK memotong gaji_bersih."""
+        tanggal_ada = {a.tanggal for a in absensi}
+        akhir_cek = min(akhir, today_wib())
+        if akhir_cek < awal:
+            return 0
+        hari_libur = {
+            h.tanggal for h in HariLibur.query.filter(
+                HariLibur.tanggal >= awal, HariLibur.tanggal <= akhir_cek,
+            ).all()
+        }
+        jumlah = 0
+        hari = awal
+        while hari <= akhir_cek:
+            if hari not in tanggal_ada and hari not in hari_libur:
+                jumlah += 1
+            hari += timedelta(days=1)
+        return jumlah
+
     def _hitung_simpan_payroll_karyawan(emp, bulan, tahun, settings):
         """Hitung ulang & simpan slip gaji satu karyawan Tetap/Probation untuk bulan
         tsb dari data absensi terkini. Dipakai baik saat generate massal di menu
@@ -5013,6 +5038,7 @@ def create_app():
         total_izin = sum(1 for a in absensi if a.status == "Izin")
         total_cuti = sum(1 for a in absensi if a.status == "Cuti")
         total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+        total_tanpa_keterangan = _hitung_tanpa_keterangan(emp.id, awal, akhir, absensi)
         total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
         total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
 
@@ -5083,6 +5109,7 @@ def create_app():
         payroll.total_izin = total_izin
         payroll.total_cuti = total_cuti
         payroll.total_alpha = total_alpha
+        payroll.total_tanpa_keterangan = total_tanpa_keterangan
         payroll.total_telat_menit = total_telat_menit
         payroll.total_lembur_menit = total_lembur_menit
         payroll.potongan_alpha = potongan_alpha
@@ -5117,6 +5144,7 @@ def create_app():
         total_izin = sum(1 for a in absensi if a.status == "Izin")
         total_cuti = sum(1 for a in absensi if a.status == "Cuti")
         total_alpha = sum(1 for a in absensi if a.status == "Alpha")
+        total_tanpa_keterangan = _hitung_tanpa_keterangan(emp.id, awal, akhir, absensi)
         total_telat_menit = sum(a.telat_menit or 0 for a in absensi)
         total_lembur_menit = sum(a.lembur_menit or 0 for a in absensi)
 
@@ -5155,6 +5183,7 @@ def create_app():
         payroll.total_izin = total_izin
         payroll.total_cuti = total_cuti
         payroll.total_alpha = total_alpha
+        payroll.total_tanpa_keterangan = total_tanpa_keterangan
         payroll.total_telat_menit = total_telat_menit
         payroll.total_lembur_menit = total_lembur_menit
         payroll.potongan_alpha = 0
