@@ -46,6 +46,7 @@
           {{ item.nama_produk }}
           {% if item.sku %}<span class="text-muted">&middot; SKU: {{ item.sku }}</span>{% endif %}
           {% if not item.hpp %}<span class="badge bg-warning text-dark ms-1">belum diisi</span>{% endif %}
+          {% if item.nama_alt %}<div class="text-muted" style="font-size:.76rem;">+{{ item.nama_alt|length }} variasi judul listing lain, digabung di sini (SKU sama)</div>{% endif %}
         </td>
         <td class="text-end">{{ item.terjual }}</td>
         <td class="text-end">

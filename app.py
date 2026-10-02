@@ -8017,35 +8017,45 @@ def create_app():
         )
 
     def _daftar_produk_untuk_hpp():
-        """Link data produk Order ke master Produk by SKU dulu (lebih stabil -- nama
-        listing suka beda-beda meski produknya sama), fallback ke exact nama_produk,
-        lalu fallback ke nama yang sudah dinormalisasi (beda gaya penulisan varian
-        antar marketplace, misal 'Tampilan Warna:Hitam' vs 'Hitam')."""
-        nama_produk_list = []
-        qty_map = {}
-        sku_per_nama = {}
+        """Satu baris per SKU (bukan per nama_produk) -- judul listing suka diubah-ubah
+        berkali-kali meski SKU & produknya sama persis, jadi kalau dikelompokkan per nama
+        qty-nya kepecah-pecah dan harus diisi HPP berkali-kali untuk produk yang sama.
+        Baru fallback ke nama (exact lalu dinormalisasi) buat baris yang SKU-nya kosong."""
+        grup = {}  # key: sku asli, atau "nama:<nama_produk>" kalau SKU kosong
         for it in PesananMarketplace.query.with_entities(
             PesananMarketplace.nama_produk, PesananMarketplace.sku, PesananMarketplace.jumlah
         ).all():
-            if it.nama_produk not in qty_map:
-                nama_produk_list.append(it.nama_produk)
-            qty_map[it.nama_produk] = qty_map.get(it.nama_produk, 0) + it.jumlah
-            if it.sku and not sku_per_nama.get(it.nama_produk):
-                sku_per_nama[it.nama_produk] = it.sku
+            key = it.sku or ("nama:" + it.nama_produk)
+            g = grup.setdefault(key, {"nama_list": [], "sku": it.sku or "", "terjual": 0})
+            if it.nama_produk not in g["nama_list"]:
+                g["nama_list"].append(it.nama_produk)
+            g["terjual"] += it.jumlah
 
-        produk_by_nama = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_list)).all()}
-        sku_list = [s for s in sku_per_nama.values() if s]
+        sku_list = [g["sku"] for g in grup.values() if g["sku"]]
         produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.in_(sku_list)).all()} if sku_list else {}
+        semua_nama = [n for g in grup.values() for n in g["nama_list"]]
+        produk_by_nama = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(semua_nama)).all()}
         produk_by_nama_normal = {}
         for p in Produk.query.filter(Produk.hpp > 0).all():
             produk_by_nama_normal.setdefault(_normalisasi_nama_varian(p.nama_produk), p)
 
         daftar = []
-        for nama in sorted(nama_produk_list):
-            sku = sku_per_nama.get(nama, "")
-            p = _cari_produk_cocok(nama, sku, produk_by_sku, produk_by_nama, produk_by_nama_normal)
-            daftar.append({"nama_produk": nama, "sku": sku, "hpp": (p.hpp if p else 0), "terjual": qty_map.get(nama, 0)})
-        daftar.sort(key=lambda x: (x["hpp"] > 0, -x["terjual"]))
+        for g in grup.values():
+            nama_utama = g["nama_list"][0]
+            p = produk_by_sku.get(g["sku"]) if g["sku"] else None
+            if not p:
+                for n in g["nama_list"]:
+                    p = _cari_produk_cocok(n, "", {}, produk_by_nama, produk_by_nama_normal)
+                    if p:
+                        break
+            daftar.append({
+                "nama_produk": nama_utama,
+                "nama_alt": g["nama_list"][1:],
+                "sku": g["sku"],
+                "hpp": (p.hpp if p else 0),
+                "terjual": g["terjual"],
+            })
+        daftar.sort(key=lambda x: (x["hpp"] > 0, -x["terjual"], x["nama_produk"]))
         return daftar
 
     @app.route("/marketing/profit/hpp", methods=["GET", "POST"])
