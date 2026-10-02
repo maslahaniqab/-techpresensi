@@ -7408,6 +7408,18 @@ def create_app():
         )
 
     # ---------- MARKETING: PROFITABILITAS (ORDER + INCOME + HPP) ----------
+    def _status_pesanan_final(status):
+        """True kalau status pesanan sudah final/selesai (Selesai, Dibatalkan, Ditolak,
+        atau sudah Diterima pembeli) -- dipakai supaya upload ULANG file Order yang sama
+        tidak menimpa baris yang pesanannya sudah final, cuma baris yang statusnya masih
+        berjalan (mis. Diproses/Dikirim) yang diperbarui, biar tidak perlu menimpa data
+        yang sudah final berkali2 tiap kali file diupload ulang."""
+        s = (status or "").strip()
+        if s in STATUS_SELESAI_MARKETPLACE or s in STATUS_BATAL_MARKETPLACE:
+            return True
+        s_lower = s.lower()
+        return s_lower.startswith("pesanan diterima") or "ditolak" in s_lower
+
     def _simpan_order_marketplace(marketplace, file_storage, headers, rows_data):
         nama_file_aman = secure_filename(file_storage.filename)
         waktu_impor = now_wib()
@@ -7419,9 +7431,15 @@ def create_app():
                 PesananMarketplace.marketplace == marketplace, PesananMarketplace.no_pesanan.in_(no_pesanan_set),
             ).all()
         } if no_pesanan_set else {}
+        jumlah_dilewati = 0
         for item in item_list:
             kunci = (item["no_pesanan"], item["sku"], item["nama_produk"])
             existing = peta_existing.get(kunci)
+            if existing and _status_pesanan_final(existing.status_pesanan):
+                # Pesanan ini di upload sebelumnya sudah final -- lewati, jangan ditimpa
+                # lagi walau file yg diupload ulang ini membawa baris yg sama persis.
+                jumlah_dilewati += 1
+                continue
             if not existing:
                 existing = PesananMarketplace(
                     marketplace=marketplace, no_pesanan=item["no_pesanan"],
@@ -7435,6 +7453,12 @@ def create_app():
             existing.subtotal = item["subtotal"]
             existing.sumber_file = nama_file_aman
             existing.dibuat_pada = waktu_impor
+        if jumlah_dilewati:
+            flash(
+                f"{jumlah_dilewati} baris pesanan yang sebelumnya sudah berstatus final "
+                "(Selesai/Diterima/Dibatalkan/Ditolak) dilewati, tidak ditimpa ulang.",
+                "info",
+            )
         return item_list
 
     def _simpan_income_marketplace(marketplace, file_storage, headers, rows_data):
