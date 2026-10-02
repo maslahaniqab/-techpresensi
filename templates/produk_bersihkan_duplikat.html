@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Bersihkan Produk Duplikat{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Bersihkan Produk Duplikat</h3>
+  <a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Data Produk</a>
+</div>
+<p class="text-muted small">
+  Produk dikelompokkan berdasarkan <strong>SKU yang sama</strong> (atau nama persis sama kalau SKU kosong).
+  Untuk tiap grup, sistem menyimpan 1 produk "utama" (yang masih punya riwayat pemakaian di Purchase Order/Kebutuhan
+  Bahan/Permohonan/Biaya Jahit/Penerimaan Barang, atau yang paling lama dibuat kalau belum ada yang terpakai),
+  sisanya akan dihapus.
+</p>
+
+{% if grup_konflik %}
+<div class="card p-3 mb-3 border-warning">
+  <h6 class="text-warning">⚠️ {{ grup_konflik|length }} grup perlu dicek manual (lebih dari 1 baris sudah terpakai)</h6>
+  <p class="text-muted small">Grup ini TIDAK ikut dihapus otomatis karena lebih dari satu baris sudah punya riwayat pemakaian &mdash; perlu diputuskan manual mana yang benar.</p>
+  {% for g in grup_konflik %}
+  <div class="small mb-2">
+    <strong>{{ g.key[1] }}</strong> ({{ 'SKU' if g.key[0] == 'sku' else 'Nama' }})
+    <ul class="mb-0">
+      {% for p in g.items %}
+      <li>id={{ p.id }} &mdash; {{ p.nama_produk }} (SKU: {{ p.sku or '-' }}, Stok: {{ p.stok_jadi }}) &mdash; <a href="{{ url_for('produk_edit', produk_id=p.id) }}">Edit</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if grup_aman %}
+{% set ns = namespace(total=0) %}
+{% for g in grup_aman %}{% set ns.total = ns.total + g.hapus|length %}{% endfor %}
+<form method="post" onsubmit="return confirm('Hapus {{ ns.total }} produk duplikat ini? Data sudah di-backup, tapi aksi ini tetap permanen di aplikasi.');">
+  <div class="card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="mb-0">✅ {{ grup_aman|length }} grup ({{ ns.total }} produk) aman dibersihkan otomatis</h6>
+      <button type="submit" class="btn btn-danger btn-sm">Hapus Semua Duplikat Ini</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>SKU/Nama</th><th>Disimpan (utama)</th><th>Akan Dihapus</th></tr></thead>
+        <tbody>
+          {% for g in grup_aman %}
+          <tr>
+            <td class="small">{{ g.key[1] }}</td>
+            <td class="small text-success">id={{ g.canonical.id }} &mdash; {{ g.canonical.nama_produk }}</td>
+            <td class="small text-danger">
+              {% for p in g.hapus %}
+              id={{ p.id }} &mdash; {{ p.nama_produk }}{% if not loop.last %}<br>{% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</form>
+{% else %}
+<div class="alert alert-success">Tidak ada produk duplikat yang bisa dibersihkan otomatis saat ini.</div>
+{% endif %}
+{% endblock %}

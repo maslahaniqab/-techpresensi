@@ -2327,6 +2327,62 @@ def create_app():
         flash(f"Stok Jadi {produk.nama_produk} direset ke 0.", "info")
         return redirect(url_for("produk_list"))
 
+    def _cari_duplikat_produk():
+        """Grup produk duplikat berdasarkan SKU yang sama (atau nama persis sama kalau
+        SKU kosong) -- untuk tiap grup, pilih 1 "canonical" (yg masih punya riwayat
+        pemakaian di PO/kebutuhan bahan/permohonan/biaya jahit/penerimaan barang atau
+        stok_jadi > 0; kalau tidak ada yg terpakai, pilih yg paling lama dibuat), sisanya
+        jadi kandidat dihapus. Grup yg punya LEBIH DARI 1 baris terpakai dilewati (butuh
+        keputusan manual, bukan duplikat yg aman digabung otomatis)."""
+        from collections import defaultdict
+        semua = Produk.query.all()
+        by_key = defaultdict(list)
+        for p in semua:
+            key = ("sku", p.sku.strip().lower()) if p.sku else ("nama", p.nama_produk.strip().lower())
+            by_key[key].append(p)
+        dup = {k: v for k, v in by_key.items() if len(v) > 1}
+
+        def jumlah_pakai(pid):
+            return (
+                PurchaseOrderItemProduk.query.filter_by(produk_id=pid).count()
+                + BahanBakuKebutuhan.query.filter_by(produk_id=pid).count()
+                + PermohonanBarangItem.query.filter_by(produk_id=pid).count()
+                + BiayaJahit.query.filter_by(produk_id=pid).count()
+                + PenerimaanBarangJadi.query.filter_by(produk_id=pid).count()
+            )
+
+        grup_aman, grup_konflik = [], []
+        for key, items in dup.items():
+            skor = [(jumlah_pakai(p.id) + (1 if p.stok_jadi else 0), p) for p in items]
+            skor.sort(key=lambda x: (-x[0], x[1].dibuat_pada))
+            dipakai_count = sum(1 for s, p in skor if s > 0)
+            canonical = skor[0][1]
+            kandidat_hapus = [p for s, p in skor[1:]]
+            if dipakai_count > 1:
+                grup_konflik.append({"key": key, "items": items})
+            else:
+                grup_aman.append({"key": key, "canonical": canonical, "hapus": kandidat_hapus})
+        return grup_aman, grup_konflik
+
+    @app.route("/produk/bersihkan-duplikat", methods=["GET", "POST"])
+    @admin_required
+    def produk_bersihkan_duplikat():
+        if request.method == "POST":
+            grup_aman, _ = _cari_duplikat_produk()
+            total = 0
+            for g in grup_aman:
+                for p in g["hapus"]:
+                    db.session.delete(p)
+                    total += 1
+            db.session.commit()
+            flash(f"{total} produk duplikat berhasil dihapus.", "success")
+            return redirect(url_for("produk_list"))
+
+        grup_aman, grup_konflik = _cari_duplikat_produk()
+        return render_template(
+            "produk_bersihkan_duplikat.html", grup_aman=grup_aman, grup_konflik=grup_konflik,
+        )
+
     @app.route("/produk/upload", methods=["GET", "POST"])
     @modul_required("produk")
     def produk_upload():
