@@ -221,35 +221,37 @@
     (persentase untung terhadap nilai jual). Income bisa minus kalau potongan platform (fee, iklan, dll) lebih
     besar dari harga jual bersih pesanan itu.
   </div>
-  <table class="table table-sm align-middle mb-0">
-    <thead>
-      <tr>
-        <th>Produk</th>
-        <th class="text-end">Qty</th>
-        <th class="text-end">Omzet</th>
-        <th class="text-end">Income</th>
-        <th class="text-end">HPP Total</th>
-        <th class="text-end">Profit</th>
-        <th class="text-end">Margin</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in produk %}
-      <tr>
-        <td class="small">
-          {{ p.nama_produk }}
-          {% if not p.ada_hpp %}<span class="badge bg-warning text-dark ms-1">HPP belum diisi</span>{% endif %}
-        </td>
-        <td class="text-end">{{ p.qty }}</td>
-        <td class="text-end">{{ p.omzet | rupiah }}</td>
-        <td class="text-end {{ 'text-danger' if p.income < 0 }}">{{ p.income | rupiah }}</td>
-        <td class="text-end">{{ p.hpp_total | rupiah }}</td>
-        <td class="text-end fw-semibold {{ 'text-success' if p.profit >= 0 else 'text-danger' }}">{{ p.profit | rupiah }}</td>
-        <td class="text-end {{ 'text-success' if p.margin >= 0 else 'text-danger' }}">{{ "%.1f"|format(p.margin) }}%</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div style="max-height: 520px; overflow-y: auto;">
+    <table class="table table-sm align-middle mb-0">
+      <thead style="position: sticky; top: 0; z-index: 1;">
+        <tr>
+          <th>Produk</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Omzet</th>
+          <th class="text-end">Income</th>
+          <th class="text-end">HPP Total</th>
+          <th class="text-end">Profit</th>
+          <th class="text-end">Margin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in produk %}
+        <tr>
+          <td class="small">
+            {{ p.nama_produk }}
+            {% if not p.ada_hpp %}<span class="badge bg-warning text-dark ms-1">HPP belum diisi</span>{% endif %}
+          </td>
+          <td class="text-end">{{ p.qty }}</td>
+          <td class="text-end">{{ p.omzet | rupiah }}</td>
+          <td class="text-end {{ 'text-danger' if p.income < 0 }}">{{ p.income | rupiah }}</td>
+          <td class="text-end">{{ p.hpp_total | rupiah }}</td>
+          <td class="text-end fw-semibold {{ 'text-success' if p.profit >= 0 else 'text-danger' }}">{{ p.profit | rupiah }}</td>
+          <td class="text-end {{ 'text-success' if p.margin >= 0 else 'text-danger' }}">{{ "%.1f"|format(p.margin) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
