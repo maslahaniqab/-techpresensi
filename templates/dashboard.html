@@ -3,9 +3,9 @@
 {% block content %}
 
 <div class="welcome-banner mb-4">
-  <div class="small mb-1" style="color:#8a6d1f;">Selamat datang di</div>
-  <h3 class="mb-1 fw-bold" style="color:#6e4416;">Portal Maslaha</h3>
-  <div class="small" style="color:#8a6d1f;">Kelola presensi, gaji, dan operasional Toko Maslaha lebih mudah, cepat, dan terintegrasi.</div>
+  <div class="small mb-1" style="color:var(--ink-faint);">{{ hari_ini | tanggal_lengkap }}</div>
+  <h1 class="mb-1" style="font:500 28px/1.1 var(--font-serif); color:var(--ink);">Selamat datang, {{ current_user.nama.split(' ')[0] }}</h1>
+  <div class="small" style="color:var(--ink-muted);">Kelola presensi, gaji, dan operasional Toko Maslaha lebih mudah, cepat, dan terintegrasi.</div>
 </div>
 
 <form method="get" class="d-flex align-items-center gap-2 mb-3 flex-wrap">
@@ -55,30 +55,30 @@
   <div class="col-md-3 col-6">
     <div class="card p-3">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#e7f0ff; color:#0d6efd; width:32px; height:32px; font-size:1rem;">💵</span>
+        <span class="stat-icon" style="background:var(--accent-soft); color:var(--accent); width:32px; height:32px; font-size:1rem;">💵</span>
         <span class="text-muted small">Omzet Bulan Ini</span>
       </div>
-      <div class="fs-5 fw-bold">{{ kpi_profit.omzet.nilai | rupiah }}</div>
+      <div class="stat-value">{{ kpi_profit.omzet.nilai | rupiah }}</div>
       {{ badge_persen(kpi_profit.omzet.persen) }}
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card p-3">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#d1e7dd; color:#146c43; width:32px; height:32px; font-size:1rem;">📈</span>
+        <span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-dark); width:32px; height:32px; font-size:1rem;">📈</span>
         <span class="text-muted small">Profit Real Bulan Ini</span>
       </div>
-      <div class="fs-5 fw-bold {{ 'text-danger' if kpi_profit.profit_real.nilai < 0 else '' }}">{{ kpi_profit.profit_real.nilai | rupiah }}</div>
+      <div class="stat-value {{ 'text-danger' if kpi_profit.profit_real.nilai < 0 else '' }}">{{ kpi_profit.profit_real.nilai | rupiah }}</div>
       {{ badge_persen(kpi_profit.profit_real.persen) }}
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card p-3">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#fff3cd; color:#c8860d; width:32px; height:32px; font-size:1rem;">📐</span>
+        <span class="stat-icon" style="background:#F3EAD3; color:#A27A1F; width:32px; height:32px; font-size:1rem;">📐</span>
         <span class="text-muted small">Margin Real</span>
       </div>
-      <div class="fs-5 fw-bold">{{ "%.1f"|format(kpi_profit.margin_real.nilai) }}%</div>
+      <div class="stat-value">{{ "%.1f"|format(kpi_profit.margin_real.nilai) }}%</div>
       {% set sp = kpi_profit.margin_real.selisih_poin %}
       <span class="small fw-semibold {{ 'text-success' if sp >= 0 else 'text-danger' }}">
         {{ '▲' if sp >= 0 else '▼' }} {{ '%.1f'|format(sp if sp >= 0 else -sp) }} poin dari bulan lalu
@@ -88,10 +88,10 @@
   <div class="col-md-3 col-6">
     <div class="card p-3">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#f8d7da; color:#b02a37; width:32px; height:32px; font-size:1rem;">📣</span>
+        <span class="stat-icon" style="background:var(--risk-soft); color:var(--risk); width:32px; height:32px; font-size:1rem;">📣</span>
         <span class="text-muted small">Biaya Iklan Bulan Ini</span>
       </div>
-      <div class="fs-5 fw-bold">{{ kpi_profit.biaya_iklan.nilai | rupiah }}</div>
+      <div class="stat-value">{{ kpi_profit.biaya_iklan.nilai | rupiah }}</div>
       {{ badge_persen(kpi_profit.biaya_iklan.persen, invert=True) }}
     </div>
   </div>
@@ -138,40 +138,40 @@
   <div class="col-md-3 col-6">
     <div class="card p-3 h-100">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#fde8d2; color:#a8672f; width:32px; height:32px; font-size:1rem;">🛒</span>
+        <span class="stat-icon" style="background:var(--accent-soft); color:var(--accent); width:32px; height:32px; font-size:1rem;">🛒</span>
         <span class="text-muted small">Total Penjualan</span>
       </div>
-      <div class="fs-5 fw-bold">{{ total_penjualan_bulan_ini | rupiah }}</div>
+      <div class="stat-value">{{ total_penjualan_bulan_ini | rupiah }}</div>
       <span class="text-muted small">bulan ini, semua channel</span>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card p-3 h-100">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#d1e7dd; color:#146c43; width:32px; height:32px; font-size:1rem;">📦</span>
+        <span class="stat-icon" style="background:var(--accent-soft); color:var(--accent-dark); width:32px; height:32px; font-size:1rem;">📦</span>
         <span class="text-muted small">Total Pesanan</span>
       </div>
-      <div class="fs-5 fw-bold">{{ total_pesanan_bulan_ini }}</div>
+      <div class="stat-value">{{ total_pesanan_bulan_ini }}</div>
       <span class="text-muted small">bulan ini, semua channel</span>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card p-3 h-100">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#fff3cd; color:#8a6a10; width:32px; height:32px; font-size:1rem;">⚠️</span>
+        <span class="stat-icon" style="background:#F3EAD3; color:#A27A1F; width:32px; height:32px; font-size:1rem;">⚠️</span>
         <span class="text-muted small">Item Stok Rendah</span>
       </div>
-      <div class="fs-5 fw-bold">{{ item_stok_rendah }}</div>
+      <div class="stat-value">{{ item_stok_rendah }}</div>
       <span class="text-muted small">bahan baku di bawah batas minimal</span>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card p-3 h-100">
       <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="stat-icon" style="background:#f8d7da; color:#b02a37; width:32px; height:32px; font-size:1rem;">🚫</span>
+        <span class="stat-icon" style="background:var(--risk-soft); color:var(--risk); width:32px; height:32px; font-size:1rem;">🚫</span>
         <span class="text-muted small">Item Habis</span>
       </div>
-      <div class="fs-5 fw-bold">{{ item_stok_habis }}</div>
+      <div class="stat-value">{{ item_stok_habis }}</div>
       <span class="text-muted small">bahan baku stoknya 0</span>
     </div>
   </div>
@@ -197,7 +197,7 @@
   <div class="col-lg-3">
     <div class="card p-3 h-100 text-center d-flex flex-column justify-content-center">
       <div class="text-muted small mb-1">Perputaran Inventory</div>
-      <div class="display-6 fw-bold">{{ "%.1f"|format(perputaran_inventory) }}x</div>
+      <div class="stat-value" style="font-size:2.25rem;">{{ "%.1f"|format(perputaran_inventory) }}x</div>
       <div class="text-muted small">HPP terjual bulan ini &divide; nilai stok produk jadi saat ini ({{ nilai_inventory_saat_ini | rupiah }})</div>
     </div>
   </div>
@@ -313,11 +313,11 @@
 
 <style>
   .welcome-banner {
-    background: linear-gradient(135deg, #f6ead9 0%, #f0dcc0 100%);
-    border-radius: .9rem;
+    background: var(--card);
+    border-radius: .7rem;
     padding: 1.5rem 1.75rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,.06);
-    border: 1px solid #eddcc1;
+    box-shadow: 0 1px 3px rgba(30,27,22,.05);
+    border: 1px solid var(--line);
   }
   .stat-icon {
     width: 44px; height: 44px; min-width: 44px;
@@ -325,6 +325,7 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 1.2rem;
   }
+  .stat-value { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 500; }
   .chevron-collapse { display: inline-block; transition: transform .2s ease; }
   [aria-expanded="true"] .chevron-collapse { transform: rotate(180deg); }
 </style>
@@ -339,8 +340,8 @@ new Chart(document.getElementById('chartTrenDashboard'), {
   data: {
     labels: {{ tren_bulanan | map(attribute='label') | list | tojson }},
     datasets: [
-      { label: 'Omzet', data: {{ tren_bulanan | map(attribute='omzet') | list | tojson }}, backgroundColor: '#0d6efd', borderRadius: 4 },
-      { label: 'Profit Real', data: {{ tren_bulanan | map(attribute='profit') | list | tojson }}, backgroundColor: '#198754', borderRadius: 4 },
+      { label: 'Omzet', data: {{ tren_bulanan | map(attribute='omzet') | list | tojson }}, backgroundColor: '#2E6B58', borderRadius: 4 },
+      { label: 'Profit Real', data: {{ tren_bulanan | map(attribute='profit') | list | tojson }}, backgroundColor: '#C9BFAE', borderRadius: 4 },
     ],
   },
   options: {
@@ -375,7 +376,7 @@ new Chart(document.getElementById('chartStatusStok'), {
     labels: ['Dalam Stok', 'Stok Rendah', 'Stok Habis'],
     datasets: [{
       data: [{{ item_dalam_stok }}, {{ item_stok_rendah }}, {{ item_stok_habis }}],
-      backgroundColor: ['#198754', '#ffc107', '#dc3545'],
+      backgroundColor: ['#2E6B58', '#A27A1F', '#B4532A'],
       borderRadius: 4,
     }],
   },
@@ -389,7 +390,7 @@ new Chart(document.getElementById('chartTrenInventory'), {
     labels: {{ tren_nilai_inventory | map(attribute='tanggal') | map('string') | list | tojson }},
     datasets: [{
       label: 'Nilai Inventory', data: {{ tren_nilai_inventory | map(attribute='nilai_total') | list | tojson }},
-      borderColor: '#a8672f', backgroundColor: 'rgba(168,103,47,.12)', fill: true, tension: .3,
+      borderColor: '#2E6B58', backgroundColor: 'rgba(46,107,88,.12)', fill: true, tension: .3,
     }],
   },
   options: {
