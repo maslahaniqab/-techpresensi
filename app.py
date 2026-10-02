@@ -8031,10 +8031,24 @@ def create_app():
                 g["nama_list"].append(it.nama_produk)
             g["terjual"] += it.jumlah
 
+        def _peta_pilih_terisi(key_fn, daftar_produk):
+            """Dict key->Produk, tapi kalau ada beberapa Produk dengan key sama (duplikat
+            SKU/nama lama yang belum dibersihkan), yang HPP-nya sudah terisi menang --
+            jangan sampai duplikat kosong menimpa yang sudah ada datanya."""
+            peta = {}
+            for p in daftar_produk:
+                k = key_fn(p)
+                if not k:
+                    continue
+                ada = peta.get(k)
+                if ada is None or (not ada.hpp and p.hpp):
+                    peta[k] = p
+            return peta
+
         sku_list = [g["sku"] for g in grup.values() if g["sku"]]
-        produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.in_(sku_list)).all()} if sku_list else {}
+        produk_by_sku = _peta_pilih_terisi(lambda p: p.sku, Produk.query.filter(Produk.sku.in_(sku_list)).all()) if sku_list else {}
         semua_nama = [n for g in grup.values() for n in g["nama_list"]]
-        produk_by_nama = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(semua_nama)).all()}
+        produk_by_nama = _peta_pilih_terisi(lambda p: p.nama_produk, Produk.query.filter(Produk.nama_produk.in_(semua_nama)).all())
         produk_by_nama_normal = {}
         for p in Produk.query.filter(Produk.hpp > 0).all():
             produk_by_nama_normal.setdefault(_normalisasi_nama_varian(p.nama_produk), p)
