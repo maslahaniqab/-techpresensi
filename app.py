@@ -2384,6 +2384,54 @@ def create_app():
             "produk_bersihkan_duplikat.html", grup_aman=grup_aman, grup_konflik=grup_konflik,
         )
 
+    def _cari_harga_kosong_terisi():
+        """Produk yang Harga Normal-nya masih 0 padahal "saudara" warnanya (SKU dengan
+        prefix sama, misal NFK-HITAM-001 & NFK-BEIGE-005 sama-sama prefix NFK) sudah
+        punya harga lengkap dan SAMA PERSIS di semua saudaranya -- aman diisi otomatis.
+        Grup yang harga antar saudaranya beda-beda dilewati (butuh keputusan manual)."""
+        grup_sku = {}
+        for p in Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all():
+            prefix = p.sku.split("-")[0].strip().upper()
+            grup_sku.setdefault(prefix, []).append(p)
+
+        aman, dilewati = [], []
+        for prefix, anggota in grup_sku.items():
+            ada_harga = [p for p in anggota if p.harga_normal]
+            kosong = [p for p in anggota if not p.harga_normal]
+            if not (ada_harga and kosong):
+                continue
+            harga_set = {(p.harga_normal, p.harga_flash_sale, p.harga_big_campaign, p.harga_dasar) for p in ada_harga}
+            if len(harga_set) == 1:
+                hn, hf, hb, hd = next(iter(harga_set))
+                aman.append({
+                    "prefix": prefix, "contoh": ada_harga[0],
+                    "harga_normal": hn, "harga_flash_sale": hf, "harga_big_campaign": hb, "harga_dasar": hd,
+                    "kosong": kosong,
+                })
+            else:
+                dilewati.append({"prefix": prefix, "kosong": kosong, "jumlah_harga_beda": len(harga_set)})
+        return aman, dilewati
+
+    @app.route("/produk/lengkapi-harga", methods=["GET", "POST"])
+    @admin_required
+    def produk_lengkapi_harga():
+        if request.method == "POST":
+            aman, _ = _cari_harga_kosong_terisi()
+            total = 0
+            for g in aman:
+                for p in g["kosong"]:
+                    p.harga_normal = g["harga_normal"]
+                    p.harga_flash_sale = g["harga_flash_sale"]
+                    p.harga_big_campaign = g["harga_big_campaign"]
+                    p.harga_dasar = g["harga_dasar"]
+                    total += 1
+            db.session.commit()
+            flash(f"Harga {total} produk berhasil dilengkapi dari saudara satu SKU-nya.", "success")
+            return redirect(url_for("produk_list"))
+
+        aman, dilewati = _cari_harga_kosong_terisi()
+        return render_template("produk_lengkapi_harga.html", aman=aman, dilewati=dilewati)
+
     @app.route("/produk/upload", methods=["GET", "POST"])
     @modul_required("produk")
     def produk_upload():

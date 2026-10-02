@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Lengkapi Harga Kosong{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Lengkapi Harga Kosong</h3>
+  <a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Data Produk</a>
+</div>
+<p class="text-muted small">
+  Produk dikelompokkan berdasarkan <strong>awalan SKU yang sama</strong> (misal NFK-HITAM-001 dan NFK-BEIGE-005
+  sama-sama awalan NFK &mdash; beda warna, produk yang sama). Kalau Harga Normal-nya masih kosong (Rp 0) tapi
+  semua "saudara" warnanya di awalan SKU yang sama sudah punya harga dan <strong>sama persis</strong>, harga itu
+  dipakai untuk mengisi yang kosong. Grup yang harga antar saudaranya beda-beda TIDAK ikut diisi otomatis &mdash;
+  perlu dicek manual.
+</p>
+
+{% if dilewati %}
+<div class="card p-3 mb-3 border-warning">
+  <h6 class="text-warning">⚠️ {{ dilewati|length }} awalan SKU perlu dicek manual (harga antar saudaranya beda-beda)</h6>
+  <p class="text-muted small">Grup ini TIDAK ikut diisi otomatis karena produk yang sudah ada harganya ternyata beda-beda nilainya &mdash; sistem tidak bisa nebak mana yang benar untuk yang masih kosong.</p>
+  {% for g in dilewati %}
+  <div class="small mb-2">
+    <strong>{{ g.prefix }}</strong> ({{ g.jumlah_harga_beda }} variasi harga berbeda di antara saudaranya)
+    <ul class="mb-0">
+      {% for p in g.kosong %}
+      <li>{{ p.nama_produk }} (SKU: {{ p.sku }}) &mdash; <a href="{{ url_for('produk_edit', produk_id=p.id) }}">Edit</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if aman %}
+{% set ns = namespace(total=0) %}
+{% for g in aman %}{% set ns.total = ns.total + g.kosong|length %}{% endfor %}
+<form method="post" onsubmit="return confirm('Lengkapi harga {{ ns.total }} produk ini dari saudara satu SKU-nya?');">
+  <div class="card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="mb-0">✅ {{ aman|length }} awalan SKU ({{ ns.total }} produk) aman dilengkapi otomatis</h6>
+      <button type="submit" class="btn btn-success btn-sm">Lengkapi Semua Harga Ini</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Awalan SKU</th><th>Harga (dari saudaranya)</th><th>Akan Diisi</th></tr></thead>
+        <tbody>
+          {% for g in aman %}
+          <tr>
+            <td class="small">{{ g.prefix }}<br><span class="text-muted">contoh: {{ g.contoh.nama_produk }}</span></td>
+            <td class="small text-success">
+              Normal: {{ g.harga_normal | rupiah }}<br>
+              Flash Sale: {{ g.harga_flash_sale | rupiah }}<br>
+              BIG Campaign: {{ g.harga_big_campaign | rupiah }}
+            </td>
+            <td class="small">
+              {% for p in g.kosong %}
+              {{ p.nama_produk }} (SKU: {{ p.sku }}){% if not loop.last %}<br>{% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</form>
+{% else %}
+<div class="alert alert-success">Tidak ada harga kosong yang bisa dilengkapi otomatis saat ini.</div>
+{% endif %}
+{% endblock %}
