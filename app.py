@@ -8423,6 +8423,23 @@ def create_app():
             jumlah_produk_ada_hpp=data["ringkasan"]["jumlah_produk_ada_hpp"],
         )
 
+    @app.route("/marketing/profit/kalkulator")
+    @marketing_required
+    def kalkulator_biaya_profit():
+        daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
+        produk_json = {
+            p.id: {
+                "nama": p.nama_produk, "sku": p.sku or "", "hpp": p.hpp or 0,
+                "harga_normal": p.harga_normal or 0, "harga_flash_sale": p.harga_flash_sale or 0,
+                "harga_big_campaign": p.harga_big_campaign or 0,
+            }
+            for p in daftar_produk
+        }
+        return render_template(
+            "marketing/kalkulator_biaya_profit.html", aktif="kalkulator",
+            daftar_produk=daftar_produk, produk_json=produk_json,
+        )
+
     @app.route("/akun", methods=["GET", "POST"])
     @admin_required
     def akun():

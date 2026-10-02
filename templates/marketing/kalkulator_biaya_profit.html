@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Kalkulator Biaya & Profit{% endblock %}
+{% block content %}
+
+<h3 class="mb-1">Kalkulator Biaya & Profit</h3>
+<p class="text-muted small mb-3">Simulasi potongan marketplace &amp; proyeksi profit per produk &mdash; dari rumus kalkulator TikTok Shop yang sudah dipakai sebelumnya.</p>
+
+<div class="card p-3 mb-3">
+  <div class="mb-3">
+    <label class="form-label small">Pilih Produk</label>
+    <select id="selProduk" class="form-select produk-search">
+      <option value="">— pilih produk —</option>
+      {% for p in daftar_produk %}
+      <option value="{{ p.id }}">{{ p.nama_produk }}{% if p.sku %} — SKU: {{ p.sku }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-3 col-6">
+      <label class="form-label small">HPP</label>
+      <input type="number" id="inHpp" class="form-control" value="0">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Harga Jual Normal</label>
+      <input type="number" id="inNormal" class="form-control" value="0">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Harga Flash Sale</label>
+      <input type="number" id="inFlash" class="form-control" value="0">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Harga BIG Campaign</label>
+      <input type="number" id="inCampaign" class="form-control" value="0">
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-3">
+  <div class="fw-semibold small mb-2">Persentase Biaya (bisa diubah sesuai kebutuhan)</div>
+  <div class="row g-3">
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Admin (Mall) %</label>
+      <input type="number" step="0.01" id="pctAdmin" class="form-control form-control-sm" value="10">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Layanan Promo Xtra %</label>
+      <input type="number" step="0.01" id="pctLayanan1" class="form-control form-control-sm" value="4.55">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Layanan Promo Xtra (flat Rp)</label>
+      <input type="number" id="flatLayanan1" class="form-control form-control-sm" value="1250">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Komisi Dinamis %</label>
+      <input type="number" step="0.01" id="pctLayanan2" class="form-control form-control-sm" value="5.5">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Komisi Affiliate (AMS) %</label>
+      <input type="number" step="0.01" id="pctAms" class="form-control form-control-sm" value="3">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Iklan (opsional) %</label>
+      <input type="number" step="0.01" id="pctIklan" class="form-control form-control-sm" value="10">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small">Operasional Store (opsional) %</label>
+      <input type="number" step="0.01" id="pctOperasional" class="form-control form-control-sm" value="5">
+    </div>
+  </div>
+</div>
+
+<div class="card p-3" style="overflow-x:auto;">
+  <table class="table table-sm align-middle mb-0" id="tabelKalkulator">
+    <thead>
+      <tr>
+        <th>Ket.</th>
+        <th class="text-end">Diskon (Harga Normal)</th>
+        <th class="text-end">Flash Sale</th>
+        <th class="text-end">Terendah (BIG Campaign)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Admin (Mall)</td><td class="text-end" id="outAdmin0"></td><td class="text-end" id="outAdmin1"></td><td class="text-end" id="outAdmin2"></td></tr>
+      <tr><td>Layanan &mdash; Promo Xtra</td><td class="text-end" id="outL1_0"></td><td class="text-end" id="outL1_1"></td><td class="text-end" id="outL1_2"></td></tr>
+      <tr><td>Layanan &mdash; Komisi Dinamis</td><td class="text-end" id="outL2_0"></td><td class="text-end" id="outL2_1"></td><td class="text-end" id="outL2_2"></td></tr>
+      <tr><td>AMS &mdash; Komisi Affiliate</td><td class="text-end" id="outAms0"></td><td class="text-end" id="outAms1"></td><td class="text-end" id="outAms2"></td></tr>
+      <tr class="fw-semibold"><td>Total Biaya MP</td><td class="text-end" id="outTotalMp0"></td><td class="text-end" id="outTotalMp1"></td><td class="text-end" id="outTotalMp2"></td></tr>
+      <tr><td>Iklan (opsional)</td><td class="text-end" id="outIklan0"></td><td class="text-end" id="outIklan1"></td><td class="text-end" id="outIklan2"></td></tr>
+      <tr><td>Operasional Store (opsional)</td><td class="text-end" id="outOps0"></td><td class="text-end" id="outOps1"></td><td class="text-end" id="outOps2"></td></tr>
+      <tr class="fw-semibold"><td>Total Biaya + Iklan &amp; Operasional</td><td class="text-end" id="outTotalFull0"></td><td class="text-end" id="outTotalFull1"></td><td class="text-end" id="outTotalFull2"></td></tr>
+      <tr><td>Target Margin 10% Omset</td><td class="text-end" id="outT10_0"></td><td class="text-end" id="outT10_1"></td><td class="text-end" id="outT10_2"></td></tr>
+      <tr><td>Target Margin 20% Omset</td><td class="text-end" id="outT20_0"></td><td class="text-end" id="outT20_1"></td><td class="text-end" id="outT20_2"></td></tr>
+      <tr class="table-success"><td class="fw-semibold">Profit Margin Before Tax dll</td><td class="text-end fw-semibold" id="outProfit0"></td><td class="text-end fw-semibold" id="outProfit1"></td><td class="text-end fw-semibold" id="outProfit2"></td></tr>
+      <tr><td>% Profit Store <span class="text-muted">(dibagi harga Terendah)</span></td><td class="text-end" id="outPctStore0"></td><td class="text-end" id="outPctStore1"></td><td class="text-end" id="outPctStore2"></td></tr>
+      <tr class="table-primary"><td class="fw-semibold">Pencairan</td><td class="text-end fw-semibold" id="outPencairan0"></td><td class="text-end fw-semibold" id="outPencairan1"></td><td class="text-end fw-semibold" id="outPencairan2"></td></tr>
+      <tr><td>Gross Profit Sebelum Iklan</td><td class="text-end" id="outGross0"></td><td class="text-end" id="outGross1"></td><td class="text-end" id="outGross2"></td></tr>
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PRODUK = {{ produk_json | tojson }};
+
+  function rupiah(n) {
+    n = Math.round(n || 0);
+    return "Rp " + n.toLocaleString("id-ID");
+  }
+
+  function hitungUlang() {
+    const hpp = parseFloat(document.getElementById("inHpp").value) || 0;
+    const harga = [
+      parseFloat(document.getElementById("inNormal").value) || 0,
+      parseFloat(document.getElementById("inFlash").value) || 0,
+      parseFloat(document.getElementById("inCampaign").value) || 0,
+    ];
+    const hargaTerendah = harga[2];
+
+    const pctAdmin = parseFloat(document.getElementById("pctAdmin").value) || 0;
+    const pctL1 = parseFloat(document.getElementById("pctLayanan1").value) || 0;
+    const flatL1 = parseFloat(document.getElementById("flatLayanan1").value) || 0;
+    const pctL2 = parseFloat(document.getElementById("pctLayanan2").value) || 0;
+    const pctAms = parseFloat(document.getElementById("pctAms").value) || 0;
+    const pctIklan = parseFloat(document.getElementById("pctIklan").value) || 0;
+    const pctOps = parseFloat(document.getElementById("pctOperasional").value) || 0;
+
+    for (let i = 0; i < 3; i++) {
+      const h = harga[i];
+      const admin = h * pctAdmin / 100;
+      const l1 = h * pctL1 / 100 + flatL1;
+      const l2 = h * pctL2 / 100;
+      const ams = h * pctAms / 100;
+      const totalMp = admin + l1 + l2 + ams;
+      const iklan = h * pctIklan / 100;
+      const ops = h * pctOps / 100;
+      const totalFull = totalMp + iklan + ops;
+      const pencairan = h - totalMp;
+      const grossProfit = pencairan - hpp;
+      const profitMargin = h - (hpp + totalFull);
+      const pctStore = hargaTerendah ? (profitMargin / hargaTerendah * 100) : 0;
+
+      document.getElementById("outAdmin" + i).textContent = rupiah(admin);
+      document.getElementById("outL1_" + i).textContent = rupiah(l1);
+      document.getElementById("outL2_" + i).textContent = rupiah(l2);
+      document.getElementById("outAms" + i).textContent = rupiah(ams);
+      document.getElementById("outTotalMp" + i).textContent = rupiah(totalMp);
+      document.getElementById("outIklan" + i).textContent = rupiah(iklan);
+      document.getElementById("outOps" + i).textContent = rupiah(ops);
+      document.getElementById("outTotalFull" + i).textContent = rupiah(totalFull);
+      document.getElementById("outT10_" + i).textContent = rupiah(h * 0.10);
+      document.getElementById("outT20_" + i).textContent = rupiah(h * 0.20);
+      const elProfit = document.getElementById("outProfit" + i);
+      elProfit.textContent = rupiah(profitMargin);
+      elProfit.className = "text-end fw-semibold " + (profitMargin >= 0 ? "text-success" : "text-danger");
+      const elPct = document.getElementById("outPctStore" + i);
+      elPct.textContent = pctStore.toFixed(2) + "%";
+      elPct.className = "text-end " + (pctStore >= 0 ? "text-success" : "text-danger");
+      document.getElementById("outPencairan" + i).textContent = rupiah(pencairan);
+      document.getElementById("outGross" + i).textContent = rupiah(grossProfit);
+    }
+  }
+
+  document.getElementById("selProduk").addEventListener("change", function () {
+    const p = PRODUK[this.value];
+    if (!p) return;
+    document.getElementById("inHpp").value = p.hpp;
+    document.getElementById("inNormal").value = p.harga_normal;
+    document.getElementById("inFlash").value = p.harga_flash_sale;
+    document.getElementById("inCampaign").value = p.harga_big_campaign;
+    hitungUlang();
+  });
+
+  document.querySelectorAll("input[type=number]").forEach(function (el) {
+    el.addEventListener("input", hitungUlang);
+    el.addEventListener("focus", function () { this.select(); });
+  });
+
+  hitungUlang();
+</script>
+{% endblock %}
