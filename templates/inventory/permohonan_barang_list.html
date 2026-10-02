@@ -220,13 +220,15 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   var PRODUK = {{ daftar_produk | map(attribute='nama_produk') | list | tojson }};
+  var SKU = {{ daftar_produk | map(attribute='sku') | list | tojson }};
   var IDS = {{ daftar_produk | map(attribute='id') | list | tojson }};
   {% if current_user.role == 'admin' %}var DATA_EDIT = {{ data_edit | tojson }};{% endif %}
 
   function tambahBaris(tbody, item) {
     var opsi = '<option value="">Pilih produk...</option>';
     for (var i = 0; i < IDS.length; i++) {
-      opsi += '<option value="' + IDS[i] + '">' + PRODUK[i].replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</option>';
+      var label = PRODUK[i] + (SKU[i] ? " — SKU: " + SKU[i] : "");
+      opsi += '<option value="' + IDS[i] + '">' + label.replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</option>';
     }
     var tr = document.createElement("tr");
     tr.innerHTML =

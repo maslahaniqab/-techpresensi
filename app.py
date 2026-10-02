@@ -3203,7 +3203,7 @@ def create_app():
         daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
         daftar_bahan = BahanBaku.query.order_by(BahanBaku.nama_bahan).all()
         daftar_akun = AkunPembayaran.query.order_by(AkunPembayaran.nama_akun).all()
-        produk_json = {p.id: {"nama": p.nama_produk, "modal": p.modal or 0} for p in daftar_produk}
+        produk_json = {p.id: {"nama": p.nama_produk, "sku": p.sku or "", "modal": p.modal or 0} for p in daftar_produk}
         bahan_json = {
             b.id: {"nama": b.nama_bahan, "stok": b.stok_saat_ini or 0, "satuan": b.satuan} for b in daftar_bahan
         }

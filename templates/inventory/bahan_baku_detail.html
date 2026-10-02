@@ -88,7 +88,7 @@
           <select name="produk_id" class="form-select produk-search" required>
             <option value="">Pilih produk&hellip;</option>
             {% for p in produk_pilihan %}
-            <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+            <option value="{{ p.id }}">{{ p.nama_produk }}{% if p.sku %} — SKU: {{ p.sku }}{% endif %}</option>
             {% endfor %}
           </select>
         </div>
@@ -185,7 +185,7 @@
           <select name="produk_id" class="form-select produk-search">
             <option value="">- Tidak terkait produk tertentu -</option>
             {% for p in produk_list_semua %}
-            <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+            <option value="{{ p.id }}">{{ p.nama_produk }}{% if p.sku %} — SKU: {{ p.sku }}{% endif %}</option>
             {% endfor %}
           </select>
         </div>

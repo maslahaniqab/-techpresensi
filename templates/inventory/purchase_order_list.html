@@ -128,7 +128,7 @@
           <label class="form-label small">Produk</label>
           <select name="produk_id" class="form-select form-select-sm produk-search">
             {% for p in daftar_produk %}
-            <option value="{{ p.id }}" {{ 'selected' if p.id == ip.produk_id }}>{{ p.nama_produk }}</option>
+            <option value="{{ p.id }}" {{ 'selected' if p.id == ip.produk_id }}>{{ p.nama_produk }}{% if p.sku %} — SKU: {{ p.sku }}{% endif %}</option>
             {% endfor %}
           </select>
         </div>
@@ -265,7 +265,10 @@
 
   function optionsProduk() {
     let html = '<option value="">Pilih produk...</option>';
-    for (const id in PRODUK_DATA) html += `<option value="${id}">${PRODUK_DATA[id].nama}</option>`;
+    for (const id in PRODUK_DATA) {
+      const sku = PRODUK_DATA[id].sku ? ` — SKU: ${PRODUK_DATA[id].sku}` : "";
+      html += `<option value="${id}">${PRODUK_DATA[id].nama}${sku}</option>`;
+    }
     return html;
   }
   function optionsBahan() {

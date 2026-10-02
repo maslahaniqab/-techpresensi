@@ -37,7 +37,7 @@
       <select name="produk_id" class="form-select produk-search">
         <option value="">- Belum tentu, umum -</option>
         {% for p in produk_list %}
-        <option value="{{ p.id }}">{{ p.nama_produk }}</option>
+        <option value="{{ p.id }}">{{ p.nama_produk }}{% if p.sku %} — SKU: {{ p.sku }}{% endif %}</option>
         {% endfor %}
       </select>
     </div>
