@@ -240,13 +240,21 @@
           <td class="small">
             {{ p.nama_produk }}
             {% if not p.ada_hpp %}<span class="badge bg-warning text-dark ms-1">HPP belum diisi</span>{% endif %}
+            {% if not p.ada_income %}<span class="badge bg-secondary ms-1">Belum ada Income</span>{% endif %}
           </td>
           <td class="text-end">{{ p.qty }}</td>
           <td class="text-end">{{ p.omzet | rupiah }}</td>
+          {% if p.ada_income %}
           <td class="text-end {{ 'text-danger' if p.income < 0 }}">{{ p.income | rupiah }}</td>
           <td class="text-end">{{ p.hpp_total | rupiah }}</td>
           <td class="text-end fw-semibold {{ 'text-success' if p.profit >= 0 else 'text-danger' }}">{{ p.profit | rupiah }}</td>
           <td class="text-end {{ 'text-success' if p.margin >= 0 else 'text-danger' }}">{{ "%.1f"|format(p.margin) }}%</td>
+          {% else %}
+          <td class="text-end text-muted">&ndash;</td>
+          <td class="text-end">{{ p.hpp_total | rupiah }}</td>
+          <td class="text-end text-muted">&ndash;</td>
+          <td class="text-end text-muted">&ndash;</td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>

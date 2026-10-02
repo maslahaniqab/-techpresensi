@@ -8252,7 +8252,9 @@ def create_app():
     def profit_dashboard():
         bulan_filter = request.args.get("bulan", "")
         data = hitung_profit_agregat(bulan_filter or None)
-        data["produk"].sort(key=lambda p: p["profit"])
+        # Produk yang belum ada Income-nya profit-nya belum bisa dihitung (bukan beneran
+        # 0/BEP) -- taruh di bawah sendiri, jangan nyampur sama yang rugi/untung beneran.
+        data["produk"].sort(key=lambda p: (not p["ada_income"], p["profit"]))
 
         bulan_tersedia = sorted({
             r[0].strftime("%Y-%m")
@@ -8355,7 +8357,7 @@ def create_app():
     def profit_dashboard_export():
         bulan_filter = request.args.get("bulan", "")
         data = hitung_profit_agregat(bulan_filter or None)
-        data["produk"].sort(key=lambda p: p["profit"])
+        data["produk"].sort(key=lambda p: (not p["ada_income"], p["profit"]))
 
         wb = openpyxl.Workbook()
         ws = wb.active
