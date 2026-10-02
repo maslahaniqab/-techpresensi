@@ -8004,6 +8004,7 @@ def create_app():
         sementara Shopee/Lazada & input manual cuma 'Hitam' -- disamain dulu formatnya
         sebelum dibandingkan, supaya produk yang sama tidak dianggap beda gara-gara ini."""
         n = re.sub(r",?\s*(Tampilan\s*Warna|Warna|Motif|Ukuran|Size)\s*:\s*", " - ", nama, flags=re.I)
+        n = re.sub(r"(?:\s*-\s*){2,}", " - ", n)
         n = re.sub(r"\s*-\s*", " - ", n)
         n = re.sub(r"\s+", " ", n).strip()
         return n.lower()
