@@ -600,6 +600,45 @@ def deteksi_kolom_produk(headers):
     }
 
 
+def deteksi_kolom_produk_lengkap(headers):
+    """Deteksi format export/salinan tabel Data Produk SENDIRI (kolom: Produk, SKU, HPP,
+    Harga Dasar, Harga Normal, Harga Flash Sale, Harga BIG Campaign terpisah -- bukan satu
+    "Harga Jual" seperti laporan marketplace). Dipakai buat restore data yang di-backup
+    manual (copy tabel / export) sebelum dihapus, biar 4 tingkat harganya tidak kolaps
+    jadi satu nilai."""
+    headers_lower = [str(h).strip().lower() for h in headers]
+    idx_terpakai = set()
+
+    def cari(kata_kunci, wajib_persis=False):
+        for idx, h in enumerate(headers_lower):
+            if idx in idx_terpakai:
+                continue
+            cocok = (h in kata_kunci) if wajib_persis else any(kk in h for kk in kata_kunci)
+            if cocok:
+                idx_terpakai.add(idx)
+                return idx
+        return None
+
+    idx_dasar = cari(["harga dasar"])
+    idx_normal = cari(["harga normal"])
+    idx_flash = cari(["harga flash sale"])
+    idx_campaign = cari(["harga big campaign"])
+    idx_hpp = cari(["hpp"])
+    idx_nama = cari(["produk"], wajib_persis=True) or cari(["nama produk"])
+    if not (idx_nama is not None and idx_hpp is not None and (idx_normal is not None or idx_dasar is not None)):
+        return None
+
+    return {
+        "nama_produk": idx_nama,
+        "sku": cari(["sku"]),
+        "hpp": idx_hpp,
+        "harga_dasar": idx_dasar,
+        "harga_normal": idx_normal,
+        "harga_flash_sale": idx_flash,
+        "harga_big_campaign": idx_campaign,
+    }
+
+
 KOLOM_LAIN_INCOME_SHOPEE = [
     "Premi", "Biaya Transaksi", "Biaya Kampanye", "Biaya Komisi AMS",
     "Biaya Proses Pesanan", "FBS Fee", "Biaya Isi Saldo Otomatis (dari Penghasilan)", "PPh 22",
@@ -2526,6 +2565,61 @@ def create_app():
                 flash(error, "danger")
                 return redirect(url_for("produk_upload"))
 
+            mapping_lengkap = deteksi_kolom_produk_lengkap(headers)
+            if mapping_lengkap:
+                preview = []
+                dilewati = 0
+                for row in rows:
+                    def ambil(idx):
+                        return row[idx] if idx is not None and idx < len(row) else None
+
+                    nama_raw = ambil(mapping_lengkap["nama_produk"])
+                    nama = str(nama_raw).strip() if nama_raw is not None else ""
+                    if not nama:
+                        dilewati += 1
+                        continue
+                    sku_raw = ambil(mapping_lengkap["sku"])
+                    sku = str(sku_raw).strip()[:64] if sku_raw not in (None, "") else ""
+
+                    def angka(idx):
+                        v = ambil(idx)
+                        return round(parse_angka_iklan(v)) if v not in (None, "") else 0
+
+                    preview.append({
+                        "nama_produk": nama[:128], "sku": sku,
+                        "hpp": angka(mapping_lengkap["hpp"]),
+                        "harga_dasar": angka(mapping_lengkap["harga_dasar"]),
+                        "harga_normal": angka(mapping_lengkap["harga_normal"]),
+                        "harga_flash_sale": angka(mapping_lengkap["harga_flash_sale"]),
+                        "harga_big_campaign": angka(mapping_lengkap["harga_big_campaign"]),
+                    })
+
+                if not preview:
+                    flash("Tidak ada baris data produk yang valid di file ini (kolom Produk kosong semua).", "danger")
+                    return redirect(url_for("produk_upload"))
+
+                token = uuid.uuid4().hex
+                path_tmp = os.path.join(app.config["TMP_IKLAN_FOLDER"], f"produkharga_{token}.json")
+                with open(path_tmp, "w", encoding="utf-8") as f:
+                    json.dump({"preview": preview, "format_lengkap": True, "sumber_file": secure_filename(file.filename)}, f)
+
+                def nama_kolom_lengkap(idx):
+                    return str(headers[idx]).strip() if idx is not None and idx < len(headers) else None
+
+                kolom_terdeteksi = [
+                    ("Nama Produk", nama_kolom_lengkap(mapping_lengkap["nama_produk"])),
+                    ("SKU", nama_kolom_lengkap(mapping_lengkap["sku"])),
+                    ("HPP", nama_kolom_lengkap(mapping_lengkap["hpp"])),
+                    ("Harga Dasar", nama_kolom_lengkap(mapping_lengkap["harga_dasar"])),
+                    ("Harga Normal", nama_kolom_lengkap(mapping_lengkap["harga_normal"])),
+                    ("Harga Flash Sale", nama_kolom_lengkap(mapping_lengkap["harga_flash_sale"])),
+                    ("Harga BIG Campaign", nama_kolom_lengkap(mapping_lengkap["harga_big_campaign"])),
+                ]
+                return render_template(
+                    "produk_review.html", token=token, kolom_terdeteksi=kolom_terdeteksi,
+                    preview=preview, dilewati=dilewati, format_lengkap=True,
+                )
+
             mapping = deteksi_kolom_produk(headers)
             if mapping.get("nama_produk") is None or mapping.get("hpp") is None or mapping.get("harga_jual") is None:
                 flash(
@@ -2606,6 +2700,7 @@ def create_app():
         # Kalau produknya sudah ada (dicek dari SKU dulu, baru nama persis), DILEWATI --
         # tidak ditimpa, biar HPP/harga yang sudah dirapikan manual tidak hilang kalau
         # file yang sama di-upload ulang. Cuma produk yang benar-benar baru yang ditambah.
+        format_lengkap = data_tmp.get("format_lengkap", False)
         produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all()}
         produk_by_nama = {p.nama_produk: p for p in Produk.query.all()}
         jumlah_baru = jumlah_dilewati = 0
@@ -2616,12 +2711,20 @@ def create_app():
             if existing:
                 jumlah_dilewati += 1
                 continue
-            produk_baru = Produk(
-                nama_produk=nama, sku=sku or None,
-                modal=item["hpp"], hpp=item["hpp"],
-                harga_dasar=item["harga_jual"], harga_normal=item["harga_jual"],
-                harga_flash_sale=item["harga_jual"], harga_big_campaign=item["harga_jual"],
-            )
+            if format_lengkap:
+                produk_baru = Produk(
+                    nama_produk=nama, sku=sku or None,
+                    modal=item["hpp"], hpp=item["hpp"],
+                    harga_dasar=item["harga_dasar"], harga_normal=item["harga_normal"],
+                    harga_flash_sale=item["harga_flash_sale"], harga_big_campaign=item["harga_big_campaign"],
+                )
+            else:
+                produk_baru = Produk(
+                    nama_produk=nama, sku=sku or None,
+                    modal=item["hpp"], hpp=item["hpp"],
+                    harga_dasar=item["harga_jual"], harga_normal=item["harga_jual"],
+                    harga_flash_sale=item["harga_jual"], harga_big_campaign=item["harga_jual"],
+                )
             db.session.add(produk_baru)
             produk_by_nama[nama] = produk_baru
             if sku:

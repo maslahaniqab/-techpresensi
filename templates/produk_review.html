@@ -7,9 +7,16 @@
 </div>
 
 <div class="alert alert-success small">
-  Kolom berhasil dikenali otomatis dari file, tidak perlu diisi manual. Harga Jual dipakai untuk mengisi
-  Harga Dasar, Harga Normal, Harga Flash Sale, dan Harga BIG Campaign sekaligus (bisa dikoreksi manual per
-  produk setelah diimpor). Periksa hasilnya di bawah, lalu klik <strong>Import Data</strong> kalau sudah sesuai.
+  Kolom berhasil dikenali otomatis dari file, tidak perlu diisi manual.
+  {% if format_lengkap %}
+  Format tabel Data Produk sendiri terdeteksi &mdash; Harga Dasar, Harga Normal, Harga Flash Sale, dan Harga
+  BIG Campaign diimpor terpisah sesuai nilainya masing-masing di file.
+  {% else %}
+  Harga Jual dipakai untuk mengisi Harga Dasar, Harga Normal, Harga Flash Sale, dan Harga BIG Campaign sekaligus
+  (bisa dikoreksi manual per produk setelah diimpor).
+  {% endif %}
+  Produk yang SKU/namanya sudah ada di Data Produk akan <strong>dilewati</strong> (tidak ditimpa). Periksa
+  hasilnya di bawah, lalu klik <strong>Import Data</strong> kalau sudah sesuai.
 </div>
 
 <div class="card p-3 mb-4">
@@ -32,12 +39,24 @@
   <div class="text-muted small mb-2">Pratinjau {{ preview|length }} produk yang akan diimpor:</div>
   <table class="table table-sm align-middle mb-0">
     <thead>
+      {% if format_lengkap %}
+      <tr>
+        <th>Nama Produk</th>
+        <th>SKU</th>
+        <th class="text-end">HPP</th>
+        <th class="text-end">Harga Dasar</th>
+        <th class="text-end">Harga Normal</th>
+        <th class="text-end">Harga Flash Sale</th>
+        <th class="text-end">Harga BIG Campaign</th>
+      </tr>
+      {% else %}
       <tr>
         <th>Nama Produk</th>
         <th>SKU</th>
         <th class="text-end">Modal / HPP</th>
         <th class="text-end">Harga Jual (semua tingkat harga)</th>
       </tr>
+      {% endif %}
     </thead>
     <tbody>
       {% for p in preview %}
@@ -45,7 +64,14 @@
         <td>{{ p.nama_produk }}</td>
         <td class="small">{% if p.sku %}{{ p.sku }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         <td class="text-end">{{ p.hpp | rupiah }}</td>
+        {% if format_lengkap %}
+        <td class="text-end">{{ p.harga_dasar | rupiah }}</td>
+        <td class="text-end">{{ p.harga_normal | rupiah }}</td>
+        <td class="text-end">{{ p.harga_flash_sale | rupiah }}</td>
+        <td class="text-end">{{ p.harga_big_campaign | rupiah }}</td>
+        {% else %}
         <td class="text-end">{{ p.harga_jual | rupiah }}</td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
