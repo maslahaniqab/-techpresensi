@@ -7999,17 +7999,30 @@ def create_app():
         )
 
     def _daftar_produk_untuk_hpp():
-        nama_produk_list = [
-            r[0] for r in PesananMarketplace.query.with_entities(PesananMarketplace.nama_produk).distinct().all()
-        ]
+        """Link data produk Order ke master Produk by SKU dulu (lebih stabil -- nama
+        listing suka beda-beda meski produknya sama), baru fallback ke exact nama_produk
+        kalau SKU-nya kosong/tidak ketemu."""
+        nama_produk_list = []
         qty_map = {}
-        for it in PesananMarketplace.query.all():
+        sku_per_nama = {}
+        for it in PesananMarketplace.query.with_entities(
+            PesananMarketplace.nama_produk, PesananMarketplace.sku, PesananMarketplace.jumlah
+        ).all():
+            if it.nama_produk not in qty_map:
+                nama_produk_list.append(it.nama_produk)
             qty_map[it.nama_produk] = qty_map.get(it.nama_produk, 0) + it.jumlah
-        produk_map = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_list)).all()}
+            if it.sku and not sku_per_nama.get(it.nama_produk):
+                sku_per_nama[it.nama_produk] = it.sku
+
+        produk_by_nama = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_list)).all()}
+        sku_list = [s for s in sku_per_nama.values() if s]
+        produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.in_(sku_list)).all()} if sku_list else {}
+
         daftar = []
         for nama in sorted(nama_produk_list):
-            p = produk_map.get(nama)
-            daftar.append({"nama_produk": nama, "hpp": (p.hpp if p else 0), "terjual": qty_map.get(nama, 0)})
+            sku = sku_per_nama.get(nama, "")
+            p = produk_by_sku.get(sku) or produk_by_nama.get(nama)
+            daftar.append({"nama_produk": nama, "sku": sku, "hpp": (p.hpp if p else 0), "terjual": qty_map.get(nama, 0)})
         daftar.sort(key=lambda x: (x["hpp"] > 0, -x["terjual"]))
         return daftar
 
@@ -8018,15 +8031,16 @@ def create_app():
     def profit_hpp():
         if request.method == "POST":
             nama_list = request.form.getlist("nama_produk")
+            sku_list = request.form.getlist("sku")
             hpp_list = request.form.getlist("hpp")
             jumlah_disimpan = 0
-            for nama, hpp_raw in zip(nama_list, hpp_list):
+            for nama, sku, hpp_raw in zip(nama_list, sku_list, hpp_list):
                 if not nama:
                     continue
                 hpp_val = round(parse_angka_iklan(hpp_raw))
-                produk = Produk.query.filter_by(nama_produk=nama).first()
+                produk = (Produk.query.filter_by(sku=sku).first() if sku else None) or Produk.query.filter_by(nama_produk=nama).first()
                 if not produk:
-                    produk = Produk(nama_produk=nama)
+                    produk = Produk(nama_produk=nama, sku=sku or None)
                     db.session.add(produk)
                 produk.hpp = hpp_val
                 produk.modal = hpp_val
@@ -8043,9 +8057,9 @@ def create_app():
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Template HPP"
-        ws.append(["Nama Produk", "HPP"])
+        ws.append(["Nama Produk", "SKU", "HPP"])
         for item in _daftar_produk_untuk_hpp():
-            ws.append([item["nama_produk"], item["hpp"] or ""])
+            ws.append([item["nama_produk"], item["sku"], item["hpp"] or ""])
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -8072,6 +8086,7 @@ def create_app():
             idx_nama = headers_lower.index("nama produk")
         except ValueError:
             idx_nama = 0
+        idx_sku = headers_lower.index("sku") if "sku" in headers_lower else None
         idx_hpp = None
         for i, h in enumerate(headers_lower):
             if "hpp" in h:
@@ -8092,10 +8107,11 @@ def create_app():
             hpp_raw = row[idx_hpp] if idx_hpp < len(row) else None
             if hpp_raw in (None, ""):
                 continue
+            sku = str(row[idx_sku]).strip() if idx_sku is not None and idx_sku < len(row) and row[idx_sku] is not None else ""
             hpp_val = round(parse_angka_iklan(hpp_raw))
-            produk = Produk.query.filter_by(nama_produk=nama).first()
+            produk = (Produk.query.filter_by(sku=sku).first() if sku else None) or Produk.query.filter_by(nama_produk=nama).first()
             if not produk:
-                produk = Produk(nama_produk=nama)
+                produk = Produk(nama_produk=nama, sku=sku or None)
                 db.session.add(produk)
             produk.hpp = hpp_val
             produk.modal = hpp_val

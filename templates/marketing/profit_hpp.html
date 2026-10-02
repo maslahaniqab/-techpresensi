@@ -14,9 +14,9 @@
 <div class="card p-3 mb-4">
   <div class="fw-semibold mb-1">Upload HPP dari Excel <span class="text-muted fw-normal">(opsional)</span></div>
   <p class="text-muted small mb-2">
-    File Excel kamu harus punya 2 kolom: <strong>Nama Produk</strong> (harus sama persis dengan nama produk di
-    file Order kamu) dan <strong>HPP</strong> (angka HPP per unit). Supaya nama produknya dijamin sama persis,
-    download dulu template di samping ini, tinggal isi kolom HPP-nya lalu upload ulang di sini.
+    File Excel kamu harus punya kolom <strong>Nama Produk</strong>, <strong>SKU</strong>, dan <strong>HPP</strong>
+    (angka HPP per unit). Kalau SKU-nya cocok dengan SKU di Data Produk, HPP langsung nempel ke produk itu walau
+    nama listing-nya beda. Download dulu template di samping ini, tinggal isi kolom HPP-nya lalu upload ulang di sini.
   </p>
   <div class="d-flex gap-2 flex-wrap mb-2">
     <a href="{{ url_for('profit_hpp_template') }}" class="btn btn-outline-secondary">Download template Excel</a>
@@ -44,11 +44,13 @@
       <tr>
         <td class="small">
           {{ item.nama_produk }}
+          {% if item.sku %}<span class="text-muted">&middot; SKU: {{ item.sku }}</span>{% endif %}
           {% if not item.hpp %}<span class="badge bg-warning text-dark ms-1">belum diisi</span>{% endif %}
         </td>
         <td class="text-end">{{ item.terjual }}</td>
         <td class="text-end">
           <input type="hidden" name="nama_produk" value="{{ item.nama_produk }}">
+          <input type="hidden" name="sku" value="{{ item.sku }}">
           <input type="number" name="hpp" class="form-control form-control-sm text-end" min="0" value="{{ item.hpp or '' }}">
         </td>
       </tr>
