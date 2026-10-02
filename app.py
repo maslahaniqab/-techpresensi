@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import csv
 import math
 import calendar
@@ -7998,10 +7999,27 @@ def create_app():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+    def _normalisasi_nama_varian(nama):
+        """TikTok suka nulis nama varian 'Tampilan Warna:Hitam' / 'Warna:Hitam, Motif:Bordir',
+        sementara Shopee/Lazada & input manual cuma 'Hitam' -- disamain dulu formatnya
+        sebelum dibandingkan, supaya produk yang sama tidak dianggap beda gara-gara ini."""
+        n = re.sub(r",?\s*(Tampilan\s*Warna|Warna|Motif|Ukuran|Size)\s*:\s*", " - ", nama, flags=re.I)
+        n = re.sub(r"\s*-\s*", " - ", n)
+        n = re.sub(r"\s+", " ", n).strip()
+        return n.lower()
+
+    def _cari_produk_cocok(nama, sku, produk_by_sku, produk_by_nama, produk_by_nama_normal):
+        return (
+            (produk_by_sku.get(sku) if sku else None)
+            or produk_by_nama.get(nama)
+            or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
+        )
+
     def _daftar_produk_untuk_hpp():
         """Link data produk Order ke master Produk by SKU dulu (lebih stabil -- nama
-        listing suka beda-beda meski produknya sama), baru fallback ke exact nama_produk
-        kalau SKU-nya kosong/tidak ketemu."""
+        listing suka beda-beda meski produknya sama), fallback ke exact nama_produk,
+        lalu fallback ke nama yang sudah dinormalisasi (beda gaya penulisan varian
+        antar marketplace, misal 'Tampilan Warna:Hitam' vs 'Hitam')."""
         nama_produk_list = []
         qty_map = {}
         sku_per_nama = {}
@@ -8017,11 +8035,14 @@ def create_app():
         produk_by_nama = {p.nama_produk: p for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_list)).all()}
         sku_list = [s for s in sku_per_nama.values() if s]
         produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.in_(sku_list)).all()} if sku_list else {}
+        produk_by_nama_normal = {}
+        for p in Produk.query.filter(Produk.hpp > 0).all():
+            produk_by_nama_normal.setdefault(_normalisasi_nama_varian(p.nama_produk), p)
 
         daftar = []
         for nama in sorted(nama_produk_list):
             sku = sku_per_nama.get(nama, "")
-            p = produk_by_sku.get(sku) or produk_by_nama.get(nama)
+            p = _cari_produk_cocok(nama, sku, produk_by_sku, produk_by_nama, produk_by_nama_normal)
             daftar.append({"nama_produk": nama, "sku": sku, "hpp": (p.hpp if p else 0), "terjual": qty_map.get(nama, 0)})
         daftar.sort(key=lambda x: (x["hpp"] > 0, -x["terjual"]))
         return daftar
@@ -8033,15 +8054,24 @@ def create_app():
             nama_list = request.form.getlist("nama_produk")
             sku_list = request.form.getlist("sku")
             hpp_list = request.form.getlist("hpp")
+            produk_by_nama_normal = {}
+            for p in Produk.query.all():
+                produk_by_nama_normal.setdefault(_normalisasi_nama_varian(p.nama_produk), p)
             jumlah_disimpan = 0
             for nama, sku, hpp_raw in zip(nama_list, sku_list, hpp_list):
                 if not nama:
                     continue
                 hpp_val = round(parse_angka_iklan(hpp_raw))
-                produk = (Produk.query.filter_by(sku=sku).first() if sku else None) or Produk.query.filter_by(nama_produk=nama).first()
+                produk = (
+                    (Produk.query.filter_by(sku=sku).first() if sku else None)
+                    or Produk.query.filter_by(nama_produk=nama).first()
+                    or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
+                )
                 if not produk:
                     produk = Produk(nama_produk=nama, sku=sku or None)
                     db.session.add(produk)
+                elif sku and not produk.sku:
+                    produk.sku = sku
                 produk.hpp = hpp_val
                 produk.modal = hpp_val
                 jumlah_disimpan += 1
@@ -8099,6 +8129,10 @@ def create_app():
             flash("Kolom Nama Produk/HPP tidak ditemukan di file ini. Gunakan template yang sudah didownload.", "danger")
             return redirect(url_for("profit_hpp"))
 
+        produk_by_nama_normal = {}
+        for p in Produk.query.all():
+            produk_by_nama_normal.setdefault(_normalisasi_nama_varian(p.nama_produk), p)
+
         jumlah = 0
         for row in rows:
             nama = str(row[idx_nama]).strip() if idx_nama < len(row) and row[idx_nama] is not None else ""
@@ -8109,10 +8143,16 @@ def create_app():
                 continue
             sku = str(row[idx_sku]).strip() if idx_sku is not None and idx_sku < len(row) and row[idx_sku] is not None else ""
             hpp_val = round(parse_angka_iklan(hpp_raw))
-            produk = (Produk.query.filter_by(sku=sku).first() if sku else None) or Produk.query.filter_by(nama_produk=nama).first()
+            produk = (
+                (Produk.query.filter_by(sku=sku).first() if sku else None)
+                or Produk.query.filter_by(nama_produk=nama).first()
+                or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
+            )
             if not produk:
                 produk = Produk(nama_produk=nama, sku=sku or None)
                 db.session.add(produk)
+            elif sku and not produk.sku:
+                produk.sku = sku
             produk.hpp = hpp_val
             produk.modal = hpp_val
             jumlah += 1
