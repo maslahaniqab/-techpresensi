@@ -958,6 +958,40 @@ STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel")
 STATUS_SELESAI_MARKETPLACE = ("Selesai", "Selesai Pesanan")
 
 
+def _normalisasi_nama_varian(nama):
+    """TikTok suka nulis nama varian 'Tampilan Warna:Hitam' / 'Warna:Hitam, Motif:Bordir',
+    sementara Shopee/Lazada & input manual cuma 'Hitam' -- disamain dulu formatnya
+    sebelum dibandingkan, supaya produk yang sama tidak dianggap beda gara-gara ini."""
+    n = re.sub(r",?\s*(Tampilan\s*Warna|Warna|Motif|Ukuran|Size)\s*:\s*", " - ", nama, flags=re.I)
+    n = re.sub(r"(?:\s*-\s*){2,}", " - ", n)
+    n = re.sub(r"\s*-\s*", " - ", n)
+    n = re.sub(r"\s+", " ", n).strip()
+    return n.lower()
+
+
+def _cari_produk_cocok(nama, sku, produk_by_sku, produk_by_nama, produk_by_nama_normal):
+    return (
+        (produk_by_sku.get(sku) if sku else None)
+        or produk_by_nama.get(nama)
+        or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
+    )
+
+
+def _peta_pilih_terisi(key_fn, daftar_produk):
+    """Dict key->Produk, tapi kalau ada beberapa Produk dengan key sama (duplikat
+    SKU/nama lama yang belum dibersihkan), yang HPP-nya sudah terisi menang --
+    jangan sampai duplikat kosong menimpa yang sudah ada datanya."""
+    peta = {}
+    for p in daftar_produk:
+        k = key_fn(p)
+        if not k:
+            continue
+        ada = peta.get(k)
+        if ada is None or (not ada.hpp and p.hpp):
+            peta[k] = p
+    return peta
+
+
 def hitung_profit_agregat(bulan=None):
     """Hitung profit per produk untuk periode tertentu ('YYYY-MM' atau None = semua),
     digabung dari SEMUA marketplace yang datanya sudah diupload. Profit = Total
@@ -997,10 +1031,21 @@ def hitung_profit_agregat(bulan=None):
         if (p.marketplace, p.no_pesanan) in kunci_pesanan_set
     }
     nama_produk_set = {it.nama_produk for it in item_list}
-    hpp_map = {
-        p.nama_produk: (p.hpp or 0)
-        for p in Produk.query.filter(Produk.nama_produk.in_(nama_produk_set)).all()
-    }
+    sku_set = {it.sku for it in item_list if it.sku}
+    produk_by_nama = _peta_pilih_terisi(
+        lambda p: p.nama_produk, Produk.query.filter(Produk.nama_produk.in_(nama_produk_set)).all()
+    )
+    produk_by_sku = (
+        _peta_pilih_terisi(lambda p: p.sku, Produk.query.filter(Produk.sku.in_(sku_set)).all())
+        if sku_set else {}
+    )
+    produk_by_nama_normal = {}
+    for p in Produk.query.filter(Produk.hpp > 0).all():
+        produk_by_nama_normal.setdefault(_normalisasi_nama_varian(p.nama_produk), p)
+
+    def _hpp_untuk(it):
+        p = _cari_produk_cocok(it.nama_produk, it.sku, produk_by_sku, produk_by_nama, produk_by_nama_normal)
+        return p.hpp if p else 0
 
     by_order = {}
     for it in item_list:
@@ -1021,7 +1066,7 @@ def hitung_profit_agregat(bulan=None):
             else:
                 income_alokasi = round(total_income_order / len(items))
 
-            hpp_satuan = hpp_map.get(it.nama_produk, 0)
+            hpp_satuan = _hpp_untuk(it)
             hpp_total_item = hpp_satuan * it.jumlah
 
             a = agregat_produk.setdefault(it.nama_produk, {
@@ -8047,23 +8092,6 @@ def create_app():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    def _normalisasi_nama_varian(nama):
-        """TikTok suka nulis nama varian 'Tampilan Warna:Hitam' / 'Warna:Hitam, Motif:Bordir',
-        sementara Shopee/Lazada & input manual cuma 'Hitam' -- disamain dulu formatnya
-        sebelum dibandingkan, supaya produk yang sama tidak dianggap beda gara-gara ini."""
-        n = re.sub(r",?\s*(Tampilan\s*Warna|Warna|Motif|Ukuran|Size)\s*:\s*", " - ", nama, flags=re.I)
-        n = re.sub(r"(?:\s*-\s*){2,}", " - ", n)
-        n = re.sub(r"\s*-\s*", " - ", n)
-        n = re.sub(r"\s+", " ", n).strip()
-        return n.lower()
-
-    def _cari_produk_cocok(nama, sku, produk_by_sku, produk_by_nama, produk_by_nama_normal):
-        return (
-            (produk_by_sku.get(sku) if sku else None)
-            or produk_by_nama.get(nama)
-            or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
-        )
-
     def _daftar_produk_untuk_hpp():
         """Satu baris per SKU (bukan per nama_produk) -- judul listing suka diubah-ubah
         berkali-kali meski SKU & produknya sama persis, jadi kalau dikelompokkan per nama
@@ -8078,20 +8106,6 @@ def create_app():
             if it.nama_produk not in g["nama_list"]:
                 g["nama_list"].append(it.nama_produk)
             g["terjual"] += it.jumlah
-
-        def _peta_pilih_terisi(key_fn, daftar_produk):
-            """Dict key->Produk, tapi kalau ada beberapa Produk dengan key sama (duplikat
-            SKU/nama lama yang belum dibersihkan), yang HPP-nya sudah terisi menang --
-            jangan sampai duplikat kosong menimpa yang sudah ada datanya."""
-            peta = {}
-            for p in daftar_produk:
-                k = key_fn(p)
-                if not k:
-                    continue
-                ada = peta.get(k)
-                if ada is None or (not ada.hpp and p.hpp):
-                    peta[k] = p
-            return peta
 
         sku_list = [g["sku"] for g in grup.values() if g["sku"]]
         produk_by_sku = _peta_pilih_terisi(lambda p: p.sku, Produk.query.filter(Produk.sku.in_(sku_list)).all()) if sku_list else {}
