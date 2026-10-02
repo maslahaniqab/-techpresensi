@@ -7,6 +7,7 @@
     {% if current_user.role == 'admin' %}
     <a href="{{ url_for('produk_bersihkan_duplikat') }}" class="small text-decoration-none text-danger">🧹 Bersihkan Duplikat</a>
     <a href="{{ url_for('produk_lengkapi_harga') }}" class="small text-decoration-none">💲 Lengkapi Harga Kosong</a>
+    <a href="{{ url_for('produk_hapus_semua') }}" class="small text-decoration-none text-danger">🗑️ Hapus Semua Produk</a>
     {% endif %}
     <a href="{{ url_for('produk_upload') }}" class="small text-decoration-none">📤 Upload Data Produk</a>
     <a href="{{ url_for('produk_tambah') }}" class="btn btn-primary">+ Tambah Produk</a>

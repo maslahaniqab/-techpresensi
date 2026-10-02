@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Hapus Semua Produk{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Hapus Semua Produk</h3>
+  <a href="{{ url_for('produk_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali ke Data Produk</a>
+</div>
+
+<div class="alert alert-danger">
+  <strong>⚠️ Aksi ini permanen, tidak bisa dibatalkan.</strong> Semua produk di bawah (HPP, harga jual, SKU, dst.)
+  akan terhapus. Produk yang sedang dipesan di Purchase Order yang belum selesai/dibatalkan (status
+  "Menunggu Produksi" atau "Diproses") <strong>tidak</strong> ikut terhapus. Produk yang pernah dipakai di
+  PO yang sudah selesai/dibatalkan, Permohonan Barang, Biaya Jahit, atau Penerimaan Barang <strong>tetap ikut
+  terhapus</strong> &mdash; riwayat lama yang menyebut produk itu bisa jadi tidak lengkap setelahnya.
+</div>
+
+{% if dilindungi %}
+<div class="card p-3 mb-3 border-warning">
+  <h6 class="text-warning">🔒 {{ dilindungi|length }} produk dilindungi (sedang di PO aktif)</h6>
+  <div class="small">
+    {% for p in dilindungi %}
+    {{ p.nama_produk }}{% if p.sku %} (SKU: {{ p.sku }}){% endif %}{% if not loop.last %}<br>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<form method="post" onsubmit="return confirm('Hapus permanen {{ akan_dihapus|length }} produk? Aksi ini TIDAK BISA dibatalkan.') && confirm('Yakin sekali? Ini akan menghapus HPP, harga jual, dan semua data produk tersebut.');">
+  <div class="card p-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="mb-0 text-danger">{{ akan_dihapus|length }} produk akan dihapus</h6>
+      {% if akan_dihapus %}
+      <button type="submit" class="btn btn-danger btn-sm">Hapus Semua Produk Ini</button>
+      {% endif %}
+    </div>
+    {% if akan_dihapus %}
+    <div class="small" style="max-height:400px; overflow-y:auto;">
+      {% for p in akan_dihapus %}
+      {{ p.nama_produk }}{% if p.sku %} (SKU: {{ p.sku }}){% endif %}{% if not loop.last %}<br>{% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-muted small">Tidak ada produk yang bisa dihapus saat ini.</div>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}

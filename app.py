@@ -2429,6 +2429,40 @@ def create_app():
             "produk_bersihkan_duplikat.html", grup_aman=grup_aman, grup_konflik=grup_konflik,
         )
 
+    def _cari_produk_dilindungi_po_aktif():
+        """ID produk yang sedang dipesan di Purchase Order yang BELUM selesai/dibatalkan
+        (status Menunggu Produksi/Diproses) -- dilindungi dari "Hapus Semua Produk"."""
+        rows = (
+            db.session.query(PurchaseOrderItemProduk.produk_id)
+            .join(PurchaseOrder, PurchaseOrder.id == PurchaseOrderItemProduk.purchase_order_id)
+            .filter(PurchaseOrder.status.in_(("Menunggu Produksi", "Diproses")))
+            .distinct()
+            .all()
+        )
+        return {r[0] for r in rows}
+
+    @app.route("/produk/hapus-semua", methods=["GET", "POST"])
+    @admin_required
+    def produk_hapus_semua():
+        dilindungi_ids = _cari_produk_dilindungi_po_aktif()
+        semua = Produk.query.order_by(Produk.nama_produk).all()
+        akan_dihapus = [p for p in semua if p.id not in dilindungi_ids]
+        dilindungi = [p for p in semua if p.id in dilindungi_ids]
+
+        if request.method == "POST":
+            dilindungi_ids = _cari_produk_dilindungi_po_aktif()
+            total = 0
+            for p in Produk.query.filter(~Produk.id.in_(dilindungi_ids)).all():
+                db.session.delete(p)
+                total += 1
+            db.session.commit()
+            flash(f"{total} produk berhasil dihapus. {len(dilindungi_ids)} produk yang sedang di PO aktif tetap disimpan.", "success")
+            return redirect(url_for("produk_list"))
+
+        return render_template(
+            "produk_hapus_semua.html", akan_dihapus=akan_dihapus, dilindungi=dilindungi,
+        )
+
     def _cari_harga_kosong_terisi():
         """Produk yang Harga Normal-nya masih 0 padahal "saudara" warnanya (SKU dengan
         prefix sama, misal NFK-HITAM-001 & NFK-BEIGE-005 sama-sama prefix NFK) sudah
@@ -2569,29 +2603,35 @@ def create_app():
         with open(path_tmp, "r", encoding="utf-8") as f:
             data_tmp = json.load(f)
 
-        jumlah_baru = jumlah_update = 0
+        # Kalau produknya sudah ada (dicek dari SKU dulu, baru nama persis), DILEWATI --
+        # tidak ditimpa, biar HPP/harga yang sudah dirapikan manual tidak hilang kalau
+        # file yang sama di-upload ulang. Cuma produk yang benar-benar baru yang ditambah.
+        produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all()}
+        produk_by_nama = {p.nama_produk: p for p in Produk.query.all()}
+        jumlah_baru = jumlah_dilewati = 0
         for item in data_tmp["preview"]:
             nama = item["nama_produk"]
-            existing = Produk.query.filter_by(nama_produk=nama).first()
-            if not existing:
-                existing = Produk(nama_produk=nama)
-                db.session.add(existing)
-                jumlah_baru += 1
-            else:
-                jumlah_update += 1
-            if item.get("sku"):
-                existing.sku = item["sku"]
-            existing.modal = item["hpp"]
-            existing.hpp = item["hpp"]
-            existing.harga_dasar = item["harga_jual"]
-            existing.harga_normal = item["harga_jual"]
-            existing.harga_flash_sale = item["harga_jual"]
-            existing.harga_big_campaign = item["harga_jual"]
+            sku = item.get("sku") or ""
+            existing = (produk_by_sku.get(sku) if sku else None) or produk_by_nama.get(nama)
+            if existing:
+                jumlah_dilewati += 1
+                continue
+            produk_baru = Produk(
+                nama_produk=nama, sku=sku or None,
+                modal=item["hpp"], hpp=item["hpp"],
+                harga_dasar=item["harga_jual"], harga_normal=item["harga_jual"],
+                harga_flash_sale=item["harga_jual"], harga_big_campaign=item["harga_jual"],
+            )
+            db.session.add(produk_baru)
+            produk_by_nama[nama] = produk_baru
+            if sku:
+                produk_by_sku[sku] = produk_baru
+            jumlah_baru += 1
         db.session.commit()
         os.remove(path_tmp)
 
         flash(
-            f"Berhasil impor {len(data_tmp['preview'])} produk ({jumlah_baru} baru, {jumlah_update} diperbarui).",
+            f"Berhasil tambah {jumlah_baru} produk baru. {jumlah_dilewati} produk dilewati karena sudah ada datanya.",
             "success",
         )
         return redirect(url_for("produk_list"))
