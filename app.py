@@ -1367,6 +1367,50 @@ def parse_angka_iklan(value):
         return 0
 
 
+def parse_invoice_meta(headers, rows):
+    """Deteksi & baca format 'Invoice Summary' billing Meta Ads (download dari Meta Ads
+    Manager > Pembayaran, BUKAN laporan performa biasa) -- tabelnya cuma Tanggal/ID
+    Transaksi/Jumlah/Mata Uang per transaksi, ditutup baris total & satu angka VAT
+    untuk seluruh periode (bukan per transaksi). PPN-nya dialokasikan proporsional per
+    tanggal berdasarkan porsi Jumlah hari itu dari total. Return None kalau bukan format ini."""
+    headers_lower = [str(h).strip().lower() for h in headers]
+    if "tanggal" not in headers_lower or "jumlah" not in headers_lower:
+        return None
+    if "id transaksi" not in headers_lower and "mata uang" not in headers_lower:
+        return None
+
+    idx_tgl = headers_lower.index("tanggal")
+    idx_jumlah = headers_lower.index("jumlah")
+
+    per_tanggal = {}
+    vat_total = 0
+    for row in rows:
+        if len(row) == 1 and str(row[0]).strip().lower().startswith("vat amount"):
+            vat_total = parse_angka_iklan(str(row[0]).split(":", 1)[-1])
+            continue
+        if len(row) <= max(idx_tgl, idx_jumlah):
+            continue
+        tgl_raw = str(row[idx_tgl]).strip()
+        if not tgl_raw:
+            continue
+        tanggal = parse_tanggal_iklan(tgl_raw)
+        if not tanggal:
+            continue
+        per_tanggal[tanggal] = per_tanggal.get(tanggal, 0) + parse_angka_iklan(row[idx_jumlah])
+
+    if not per_tanggal:
+        return None
+
+    total_jumlah = sum(per_tanggal.values())
+    return {
+        tanggal: {
+            "biaya": round(jumlah),
+            "pajak": round(vat_total * (jumlah / total_jumlah)) if total_jumlah else 0,
+        }
+        for tanggal, jumlah in per_tanggal.items()
+    }
+
+
 SINGKATAN_BULAN_KHUSUS = {8: "ags"}  # Agustus umum disingkat "Ags", bukan "Agu"
 
 
@@ -7864,6 +7908,30 @@ def create_app():
                 if error_i:
                     hasil["iklan"] = {"ok": False, "nama": file_iklan.filename, "pesan": error_i}
                 else:
+                    agregat_meta = parse_invoice_meta(headers_i, rows_i)
+                    if agregat_meta is not None:
+                        nama_file_iklan_aman = secure_filename(file_iklan.filename)
+                        waktu_impor = now_wib()
+                        for tanggal, nilai in agregat_meta.items():
+                            existing = IklanMeta.query.filter_by(tanggal=tanggal).first()
+                            if not existing:
+                                existing = IklanMeta(tanggal=tanggal)
+                                db.session.add(existing)
+                            existing.biaya = nilai["biaya"]
+                            existing.pajak = nilai["pajak"]
+                            existing.sumber_file = nama_file_iklan_aman
+                            existing.dibuat_pada = waktu_impor
+                        iklan_preview_items = sorted(
+                            ({"tanggal": t, **v} for t, v in agregat_meta.items()),
+                            key=lambda x: x["tanggal"], reverse=True,
+                        )
+                        hasil["iklan"] = {
+                            "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_meta),
+                            "marketplace": "Meta", "preview_items": iklan_preview_items,
+                        }
+                        file_iklan = None  # tandai sudah diproses, skip jalur marketplace di bawah
+
+                if file_iklan and file_iklan.filename and hasil.get("iklan") is None:
                     mapping_i = deteksi_otomatis_kolom_iklan(headers_i, rows_i, KOLOM_TARGET_IKLAN)
                     if mapping_i.get("tanggal") is None or mapping_i.get("biaya") is None:
                         hasil["iklan"] = {
