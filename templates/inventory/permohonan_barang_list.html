@@ -74,6 +74,7 @@
           {% endif %}
           <button type="button" class="btn btn-sm btn-primary btn-proses-pb" data-id="{{ p.id }}">Proses</button>
           <a href="{{ wa_links[p.id] }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" title="Kirim ke WhatsApp (pilih grup)">WA</a>
+          <a href="{{ url_for('permohonan_barang_download', permohonan_id=p.id) }}" class="btn btn-sm btn-outline-secondary" title="Download PDF untuk dikirim sebagai file (lampiran WA/email)">⬇️ PDF</a>
           {% if current_user.role == 'admin' %}
           <button type="button" class="btn btn-sm btn-outline-primary btn-edit-pb" data-id="{{ p.id }}">Edit</button>
           {% endif %}

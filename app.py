@@ -4350,6 +4350,18 @@ def create_app():
         except Exception as e:
             return False, str(e)
 
+    @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/download")
+    @modul_required("permohonan_barang")
+    def permohonan_barang_download(permohonan_id):
+        p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
+        settings = get_settings()
+        html = render_template("inventory/permohonan_barang_pdf.html", p=p, settings=settings)
+        buffer = BytesIO()
+        pisa.CreatePDF(html, dest=buffer)
+        buffer.seek(0)
+        nama_file = "Permohonan_Produk_" + p.nomor_permohonan.replace("/", "-") + ".pdf"
+        return send_file(buffer, as_attachment=True, download_name=nama_file, mimetype="application/pdf")
+
     def teruskan_permohonan_ke_supervisor(p):
         """Masukkan ke Kotak Masuk semua Supervisor aktif + kirim email (PDF terlampir).
         Mengembalikan (jumlah_supervisor, hasil_email) -- hasil_email = None kalau tidak ada
