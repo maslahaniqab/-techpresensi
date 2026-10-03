@@ -4350,6 +4350,28 @@ def create_app():
         except Exception as e:
             return False, str(e)
 
+    @app.route("/inventory/master-data/permohonan-barang/download-semua")
+    @modul_required("permohonan_barang")
+    def permohonan_barang_download_semua():
+        q = request.args.get("q", "").strip()
+        query = PermohonanBarang.query
+        if q:
+            query = query.filter(PermohonanBarang.nomor_permohonan.ilike(f"%{q}%"))
+        daftar = query.order_by(PermohonanBarang.tanggal.desc(), PermohonanBarang.id.desc()).all()
+        if not daftar:
+            flash("Tidak ada permohonan untuk didownload.", "warning")
+            return redirect(url_for("permohonan_barang_list", q=q))
+
+        settings = get_settings()
+        html = render_template(
+            "inventory/permohonan_barang_pdf_semua.html", daftar=daftar, settings=settings, dicetak_pada=now_wib(),
+        )
+        buffer = BytesIO()
+        pisa.CreatePDF(html, dest=buffer)
+        buffer.seek(0)
+        nama_file = f"Rekap_Permohonan_Produk_{now_wib().strftime('%Y%m%d_%H%M')}.pdf"
+        return send_file(buffer, as_attachment=True, download_name=nama_file, mimetype="application/pdf")
+
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/download")
     @modul_required("permohonan_barang")
     def permohonan_barang_download(permohonan_id):

@@ -1,0 +1,55 @@
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #222; }
+  .penting { background-color: #b3261e; color: #fff; padding: 8px 12px; font-size: 16px; font-weight: bold; }
+  h2 { margin: 14px 0 4px 0; }
+  .blok { margin-bottom: 18px; page-break-inside: avoid; }
+  table.data { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.data td { border: 1px solid #999; padding: 6px 8px; }
+  table.data td.label { width: 32%; background-color: #eee; font-weight: bold; }
+  .foot { margin-top: 24px; font-size: 10px; color: #666; }
+  hr { border: none; border-top: 2px solid #999; margin: 18px 0; }
+</style>
+</head>
+<body>
+  <div class="penting">REKAP PERMOHONAN PRODUK ({{ daftar | length }} pengajuan)</div>
+  <h2>{{ settings.nama_perusahaan }}</h2>
+  <div>Dicetak {{ dicetak_pada.strftime("%d/%m/%Y %H:%M") }} WIB</div>
+
+  {% for p in daftar %}
+  <div class="blok">
+    <hr>
+    <table class="data">
+      <tr><td class="label">No Permohonan</td><td>{{ p.nomor_permohonan }}</td></tr>
+      <tr><td class="label">Tanggal Pengajuan</td><td>{{ p.tanggal.strftime("%d/%m/%Y") }}</td></tr>
+      <tr><td class="label">PIC (Pengaju)</td><td>{{ p.pemohon_nama or "-" }}</td></tr>
+      <tr><td class="label">Total Qty</td><td>{{ p.total_qty }} pcs ({{ p.item_list | length }} produk)</td></tr>
+      <tr><td class="label">Status</td><td>{{ p.status }}</td></tr>
+    </table>
+    <table class="data">
+      <tr>
+        <td class="label" style="width:6%;">No</td>
+        <td class="label" style="width:50%;">Produk</td>
+        <td class="label">SKU</td>
+        <td class="label">Warna</td>
+        <td class="label" style="width:10%;">Qty</td>
+      </tr>
+      {% for it in p.item_list %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ it.produk.nama_produk }}</td>
+        <td>{{ it.produk.sku or "-" }}</td>
+        <td>{{ it.warna or "-" }}</td>
+        <td>{{ it.qty }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endfor %}
+
+  <div class="foot">Dokumen ini dibuat otomatis oleh Maslaha Portal.</div>
+</body>
+</html>

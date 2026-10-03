@@ -26,6 +26,7 @@
     <input type="text" name="q" class="form-control" placeholder="Cari nomor permohonan..." value="{{ q }}">
     <button type="submit" class="btn btn-outline-secondary">🔍</button>
     {% if q %}<a href="{{ url_for('permohonan_barang_list') }}" class="btn btn-outline-secondary">&times;</a>{% endif %}
+    <a href="{{ url_for('permohonan_barang_download_semua', q=q) }}" class="btn btn-outline-secondary" title="Download 1 file PDF berisi semua permohonan yang tampil di tabel ini">⬇️ Download Semua (PDF)</a>
   </div>
 </form>
 
