@@ -4466,7 +4466,7 @@ def create_app():
                 f"Total: {p.total_qty} pcs\n"
                 f"Rincian PDF: {link_pdf_permohonan(p.id, app.config['SECRET_KEY'])}"
             )
-            ok_wa, info_wa = kirim_wa_grup(pesan_wa)
+            ok_wa, info_wa = kirim_wa_grup(pesan_wa, tujuan="permohonan")
             if not ok_wa:
                 flash(f"Permohonan tersimpan, tapi gagal kirim ke grup WA: {info_wa}", "warning")
             if current_user.role == "pegawai":

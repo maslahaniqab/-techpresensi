@@ -10,6 +10,7 @@ API_KEY = os.environ.get("NOTIF_API_KEY", "")
 PROVIDER = FontteProvider(os.environ.get("FONNTE_TOKEN", ""))
 
 GRUP = {
+    "permohonan": os.environ.get("GRUP_PERMOHONAN", ""),
     "produksi": os.environ.get("GRUP_PRODUKSI", ""),
     "aff": os.environ.get("GRUP_AFF", ""),
     "marketing": os.environ.get("GRUP_MARKETING", ""),
