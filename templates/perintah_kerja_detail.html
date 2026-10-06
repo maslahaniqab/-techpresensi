@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Pantau Perintah Kerja{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">{{ perintah.judul }}</h3>
+    <p class="text-muted small mb-0">
+      {% if perintah.tenggat %}Tenggat {{ perintah.tenggat.strftime('%d/%m/%Y') }} &middot; {% endif %}
+      Dibuat {{ perintah.dibuat_pada.strftime('%d/%m/%Y %H:%M') }}
+    </p>
+  </div>
+  <a href="{{ url_for('perintah_kerja_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali</a>
+</div>
+
+{% if perintah.deskripsi %}
+<div class="card p-3 mb-3"><div class="small" style="white-space: pre-line;">{{ perintah.deskripsi }}</div></div>
+{% endif %}
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>Karyawan</th><th>WA</th><th>Dibaca</th><th>Selesai</th></tr></thead>
+      <tbody>
+        {% for p in penerima %}
+        <tr>
+          <td>{{ p.employee.nama }}</td>
+          <td>{% if p.wa_terkirim %}<span class="badge bg-success">Terkirim</span>{% else %}<span class="badge bg-warning text-dark">Belum terkirim</span>{% endif %}</td>
+          <td class="small">{{ p.dibaca_pada.strftime('%d/%m %H:%M') if p.dibaca_pada else '-' }}</td>
+          <td class="small">
+            {% if p.selesai_pada %}<span class="badge bg-success">{{ p.selesai_pada.strftime('%d/%m %H:%M') }}</span>{% else %}<span class="text-muted">Belum</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

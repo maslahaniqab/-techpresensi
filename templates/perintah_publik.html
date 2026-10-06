@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perintah Kerja · Maslaha</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: #F7F4EE; color: #1E1B16; margin: 0; padding: 20px 16px; }
+    .kartu { background: #FFFDF9; border: 1px solid #E2DCD1; border-radius: 12px; padding: 18px; max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 6px 0; }
+    .muted { color: #6B645A; font-size: 14px; }
+    .isi { white-space: pre-line; margin: 14px 0; font-size: 15px; line-height: 1.5; }
+    .tombol { display: inline-block; width: 100%; box-sizing: border-box; padding: 12px; border: 0; border-radius: 8px; background: #2E6B58; color: #fff; font-size: 16px; cursor: pointer; }
+    .sudah { background: #E7EFEA; color: #1F4D3F; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="kartu">
+    <div class="muted">Halo {{ p.employee.nama }}</div>
+    <h1>{{ perintah.judul }}</h1>
+    {% if perintah.tenggat %}<div class="muted">Tenggat: {{ perintah.tenggat.strftime('%d/%m/%Y') }}</div>{% endif %}
+    {% if perintah.deskripsi %}<div class="isi">{{ perintah.deskripsi }}</div>{% endif %}
+
+    {% if p.selesai_pada %}
+      <div class="sudah">Sudah ditandai selesai ({{ p.selesai_pada.strftime('%d/%m/%Y %H:%M') }})</div>
+    {% else %}
+      <form method="post" action="{{ url_for('perintah_publik_selesai', token=p.token) }}">
+        <button type="submit" class="tombol">Tandai Selesai</button>
+      </form>
+    {% endif %}
+  </div>
+</body>
+</html>

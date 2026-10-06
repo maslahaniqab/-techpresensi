@@ -17,13 +17,13 @@ def verifikasi_sig_permohonan(permohonan_id, sig, secret_key):
     return hmac.compare_digest(harapan, sig)
 
 
-def kirim_wa_grup(pesan, tujuan="produksi"):
+def kirim_wa(pesan, tujuan="", nomor=None):
     url = os.environ.get("NOTIFICATION_SERVICE_URL", "").rstrip("/")
     api_key = os.environ.get("NOTIF_API_KEY", "")
     if not url or not api_key:
         return False, "Notification Service belum diatur di server."
 
-    body = json.dumps({"tujuan": tujuan, "pesan": pesan}).encode()
+    body = json.dumps({"tujuan": tujuan, "nomor": nomor or [], "pesan": pesan}).encode()
     req = urllib.request.Request(
         f"{url}/kirim", data=body, method="POST",
         headers={"Content-Type": "application/json", "X-API-Key": api_key},
@@ -34,3 +34,7 @@ def kirim_wa_grup(pesan, tujuan="produksi"):
     except Exception as e:
         return False, str(e)
     return bool(hasil.get("status")), hasil.get("info")
+
+
+def kirim_wa_grup(pesan, tujuan="produksi"):
+    return kirim_wa(pesan, tujuan=tujuan)

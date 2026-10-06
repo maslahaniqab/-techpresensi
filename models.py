@@ -228,6 +228,28 @@ class LaporanPekerjaan(db.Model):
     employee = db.relationship("Employee", backref="laporan_pekerjaan")
 
 
+class PerintahKerja(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    judul = db.Column(db.String(200), nullable=False)
+    deskripsi = db.Column(db.Text)
+    tenggat = db.Column(db.Date)
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    penerima = db.relationship("PenerimaPerintah", backref="perintah", cascade="all, delete-orphan")
+
+
+class PenerimaPerintah(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    perintah_id = db.Column(db.Integer, db.ForeignKey("perintah_kerja.id"), nullable=False)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    token = db.Column(db.String(48), unique=True, nullable=False)
+    wa_terkirim = db.Column(db.Boolean, default=False)
+    dibaca_pada = db.Column(db.DateTime)
+    selesai_pada = db.Column(db.DateTime)
+
+    employee = db.relationship("Employee")
+
+
 class KategoriProduk(db.Model):
     """Klasifikasi produk (mis. Khimar, Gamis, Abaya, dst) -- dipakai buat
     ngelompokin produk biar gampang input Biaya Produksi (Menjahit) per

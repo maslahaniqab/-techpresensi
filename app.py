@@ -1,7 +1,7 @@
 import os
 import io
 import re
-from notifikasi_wa import kirim_wa_grup, link_pdf_permohonan, verifikasi_sig_permohonan
+from notifikasi_wa import kirim_wa, kirim_wa_grup, link_pdf_permohonan, verifikasi_sig_permohonan
 import csv
 import math
 import calendar
@@ -43,6 +43,7 @@ from xhtml2pdf import pisa
 
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
+    PerintahKerja, PenerimaPerintah,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
@@ -8707,6 +8708,94 @@ def create_app():
             "marketing/kalkulator_biaya_profit.html", aktif="kalkulator",
             daftar_produk=daftar_produk, produk_json=produk_json,
         )
+
+    def _nomor_wa_internasional(no_hp):
+        digit = re.sub(r"\D", "", no_hp or "")
+        if digit.startswith("0"):
+            digit = "62" + digit[1:]
+        return digit
+
+    @app.route("/perintah-kerja")
+    @admin_required
+    def perintah_kerja_list():
+        daftar = PerintahKerja.query.order_by(PerintahKerja.dibuat_pada.desc()).all()
+        return render_template("perintah_kerja_list.html", daftar=daftar)
+
+    @app.route("/perintah-kerja/baru", methods=["GET", "POST"])
+    @admin_required
+    def perintah_kerja_baru():
+        if request.method == "POST":
+            judul = request.form.get("judul", "").strip()
+            deskripsi = request.form.get("deskripsi", "").strip()
+            tenggat_raw = request.form.get("tenggat", "")
+            try:
+                tenggat = datetime.strptime(tenggat_raw, "%Y-%m-%d").date() if tenggat_raw else None
+            except ValueError:
+                tenggat = None
+            ids = [int(i) for i in request.form.getlist("employee_id") if i.isdigit()]
+            penerima_aktif = Employee.query.filter(Employee.id.in_(ids), Employee.status == "Aktif").all() if ids else []
+            if not judul or not penerima_aktif:
+                flash("Judul dan minimal satu karyawan aktif wajib dipilih.", "danger")
+                return redirect(url_for("perintah_kerja_baru"))
+
+            perintah = PerintahKerja(judul=judul, deskripsi=deskripsi, tenggat=tenggat)
+            db.session.add(perintah)
+            db.session.flush()
+            for emp in penerima_aktif:
+                db.session.add(PenerimaPerintah(
+                    perintah_id=perintah.id, employee_id=emp.id, token=uuid.uuid4().hex,
+                ))
+            db.session.commit()
+
+            base = os.environ.get("PUBLIC_BASE_URL", "https://maslahaportal.online").rstrip("/")
+            terkirim = 0
+            for p in perintah.penerima:
+                nomor = _nomor_wa_internasional(p.employee.no_hp)
+                if not nomor:
+                    continue
+                pesan = (
+                    f"*PERINTAH KERJA: {perintah.judul}*\n"
+                    + (f"{perintah.deskripsi}\n" if perintah.deskripsi else "")
+                    + (f"Tenggat: {perintah.tenggat.strftime('%d/%m/%Y')}\n" if perintah.tenggat else "")
+                    + f"\nHalo {p.employee.nama}, buka link ini untuk melihat detail dan menandai selesai:\n"
+                    + f"{base}/perintah/{p.token}"
+                )
+                ok, _info = kirim_wa(pesan, nomor=[nomor])
+                if ok:
+                    p.wa_terkirim = True
+                    terkirim += 1
+            db.session.commit()
+            flash(
+                f"Perintah kerja dibuat. WA terkirim ke {terkirim} dari {len(perintah.penerima)} karyawan.",
+                "success",
+            )
+            return redirect(url_for("perintah_kerja_detail", perintah_id=perintah.id))
+
+        karyawan = Employee.query.filter_by(status="Aktif").order_by(Employee.nama).all()
+        return render_template("perintah_kerja_baru.html", karyawan=karyawan)
+
+    @app.route("/perintah-kerja/<int:perintah_id>")
+    @admin_required
+    def perintah_kerja_detail(perintah_id):
+        perintah = db.session.get(PerintahKerja, perintah_id) or abort_404()
+        penerima = sorted(perintah.penerima, key=lambda p: p.employee.nama)
+        return render_template("perintah_kerja_detail.html", perintah=perintah, penerima=penerima)
+
+    @app.route("/perintah/<token>")
+    def perintah_publik(token):
+        p = PenerimaPerintah.query.filter_by(token=token).first() or abort_404()
+        if not p.dibaca_pada:
+            p.dibaca_pada = now_wib()
+            db.session.commit()
+        return render_template("perintah_publik.html", p=p, perintah=p.perintah)
+
+    @app.route("/perintah/<token>/selesai", methods=["POST"])
+    def perintah_publik_selesai(token):
+        p = PenerimaPerintah.query.filter_by(token=token).first() or abort_404()
+        if not p.selesai_pada:
+            p.selesai_pada = now_wib()
+            db.session.commit()
+        return redirect(url_for("perintah_publik", token=token))
 
     @app.route("/akun", methods=["GET", "POST"])
     @admin_required

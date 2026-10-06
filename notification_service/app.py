@@ -25,11 +25,12 @@ def kirim():
 
     data = request.get_json(silent=True) or {}
     tujuan = data.get("tujuan", "")
+    nomor = [str(n).strip() for n in data.get("nomor", []) if str(n).strip()]
     pesan = (data.get("pesan") or "").strip()
     if not pesan:
         return jsonify({"status": False, "reason": "pesan kosong"}), 400
 
-    target_ids = [GRUP[t] for t in tujuan.split(",") if GRUP.get(t)]
+    target_ids = [GRUP[t] for t in tujuan.split(",") if GRUP.get(t)] + nomor
     if not target_ids:
         return jsonify({"status": False, "reason": "tujuan tidak dikenal"}), 400
 

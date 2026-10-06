@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Buat Perintah Kerja{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Buat Perintah Kerja</h3>
+  <a href="{{ url_for('perintah_kerja_list') }}" class="btn btn-outline-secondary btn-sm">&larr; Kembali</a>
+</div>
+
+<form method="post" class="card p-3">
+  <div class="mb-3">
+    <label class="form-label">Judul perintah *</label>
+    <input type="text" name="judul" class="form-control" required maxlength="200" placeholder="mis. Packing pesanan Oktober">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Deskripsi</label>
+    <textarea name="deskripsi" class="form-control" rows="4" placeholder="Rincian pekerjaan yang harus dikerjakan"></textarea>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Tenggat (opsional)</label>
+    <input type="date" name="tenggat" class="form-control" style="max-width: 220px;">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Penerima *</label>
+    <div class="d-flex gap-3 mb-2 small">
+      <a href="#" onclick="document.querySelectorAll('.cb-penerima').forEach(c=>c.checked=true); return false;">Pilih semua</a>
+      <a href="#" onclick="document.querySelectorAll('.cb-penerima').forEach(c=>c.checked=false); return false;">Kosongkan</a>
+    </div>
+    {% for emp in karyawan %}
+    <div class="form-check">
+      <input class="form-check-input cb-penerima" type="checkbox" name="employee_id" value="{{ emp.id }}" id="emp{{ emp.id }}" checked>
+      <label class="form-check-label" for="emp{{ emp.id }}">
+        {{ emp.nama }} <span class="text-muted small">{{ '(' ~ emp.no_hp ~ ')' if emp.no_hp else '(nomor HP belum ada)' }}</span>
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+  <button type="submit" class="btn btn-primary">Kirim via WhatsApp</button>
+</form>
+{% endblock %}
