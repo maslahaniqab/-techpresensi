@@ -17,19 +17,20 @@ def verifikasi_sig_permohonan(permohonan_id, sig, secret_key):
     return hmac.compare_digest(harapan, sig)
 
 
-def kirim_wa_grup(pesan):
-    token = os.environ.get("FONNTE_TOKEN", "").strip()
-    target = os.environ.get("FONNTE_TARGET_GROUP", "").strip()
-    if not token or not target:
-        return False, "Token atau grup tujuan WA belum diatur di server."
+def kirim_wa_grup(pesan, tujuan="produksi"):
+    url = os.environ.get("NOTIFICATION_SERVICE_URL", "").rstrip("/")
+    api_key = os.environ.get("NOTIF_API_KEY", "")
+    if not url or not api_key:
+        return False, "Notification Service belum diatur di server."
 
-    data = urllib.parse.urlencode({"target": target, "message": pesan, "countryCode": "0"}).encode()
+    body = json.dumps({"tujuan": tujuan, "pesan": pesan}).encode()
     req = urllib.request.Request(
-        "https://api.fonnte.com/send", data=data, method="POST", headers={"Authorization": token},
+        f"{url}/kirim", data=body, method="POST",
+        headers={"Content-Type": "application/json", "X-API-Key": api_key},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             hasil = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         return False, str(e)
-    return bool(hasil.get("status")), hasil.get("reason") or hasil.get("detail")
+    return bool(hasil.get("status")), hasil.get("info")
