@@ -1,6 +1,7 @@
 import os
 import io
 import re
+from notifikasi_wa import kirim_wa_grup, link_pdf_permohonan, verifikasi_sig_permohonan
 import csv
 import math
 import calendar
@@ -4372,6 +4373,17 @@ def create_app():
         nama_file = f"Rekap_Permohonan_Produk_{now_wib().strftime('%Y%m%d_%H%M')}.pdf"
         return send_file(buffer, as_attachment=True, download_name=nama_file, mimetype="application/pdf")
 
+    @app.route("/publik/permohonan/<int:permohonan_id>/<sig>.pdf")
+    def permohonan_publik_pdf(permohonan_id, sig):
+        if not verifikasi_sig_permohonan(permohonan_id, sig, app.config["SECRET_KEY"]):
+            abort_404()
+        p = db.session.get(PermohonanBarang, permohonan_id) or abort_404()
+        html = render_template("inventory/permohonan_barang_pdf.html", p=p, settings=get_settings())
+        buffer = BytesIO()
+        pisa.CreatePDF(html, dest=buffer)
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/pdf")
+
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/download")
     @modul_required("permohonan_barang")
     def permohonan_barang_download(permohonan_id):
@@ -4446,6 +4458,17 @@ def create_app():
             p.nomor_permohonan = nomor
             db.session.commit()
             flash(f"Permohonan {nomor} berhasil diajukan ({len(items)} produk).", "success")
+            pesan_wa = (
+                f"*PERMOHONAN PRODUK {p.nomor_permohonan}*\n"
+                f"Tanggal: {p.tanggal.strftime('%d/%m/%Y')}\n"
+                f"PIC: {p.pemohon_nama or '-'}\n\n"
+                f"{teks_item_permohonan(p)}\n\n"
+                f"Total: {p.total_qty} pcs\n"
+                f"Rincian PDF: {link_pdf_permohonan(p.id, app.config['SECRET_KEY'])}"
+            )
+            ok_wa, info_wa = kirim_wa_grup(pesan_wa)
+            if not ok_wa:
+                flash(f"Permohonan tersimpan, tapi gagal kirim ke grup WA: {info_wa}", "warning")
             if current_user.role == "pegawai":
                 jumlah_sv, hasil_email = teruskan_permohonan_ke_supervisor(p)
                 if not jumlah_sv:
