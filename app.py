@@ -8781,6 +8781,17 @@ def create_app():
         penerima = sorted(perintah.penerima, key=lambda p: p.employee.nama)
         return render_template("perintah_kerja_detail.html", perintah=perintah, penerima=penerima)
 
+    @app.route("/pegawai/perintah-kerja")
+    @pegawai_required
+    def pegawai_perintah_kerja():
+        daftar = (
+            PenerimaPerintah.query.filter_by(employee_id=current_user.id)
+            .join(PerintahKerja)
+            .order_by(PerintahKerja.dibuat_pada.desc())
+            .all()
+        )
+        return render_template("pegawai/perintah_kerja.html", daftar=daftar)
+
     @app.route("/perintah/<token>")
     def perintah_publik(token):
         p = PenerimaPerintah.query.filter_by(token=token).first() or abort_404()
