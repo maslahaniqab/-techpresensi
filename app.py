@@ -4578,11 +4578,30 @@ def create_app():
                 if it.status == "Menunggu":
                     it.status = "Diproses"
         db.session.commit()
+        _kirim_wa_status_permohonan(p, status, p.catatan)
         pesan = f"Status permohonan {p.nomor_permohonan} diubah jadi {status}."
         if status == "Diproses" and any(it.status == "Diproses" for it in p.item_list):
             return arahkan_setelah_diproses(p, pesan + " Lanjut buat Purchase Order.")
         flash(pesan, "success")
         return redirect(url_for("permohonan_barang_list"))
+
+    def _kirim_wa_status_permohonan(p, status, catatan=None):
+        daftar_teks = "\n".join(
+            f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in p.item_list
+        )
+        pesan = (
+            f"*PERMOHONAN {p.nomor_permohonan} - {status.upper()}*\n"
+            f"Tanggal: {p.tanggal.strftime('%d/%m/%Y')}\n"
+            f"Produk:\n{daftar_teks}\n"
+            + (f"Catatan: {catatan}\n" if catatan else "")
+            + f"Diubah oleh: {current_user.nama}"
+        )
+        kirim_wa_grup(pesan, tujuan="permohonan")
+        if p.pemohon_id:
+            pemohon = db.session.get(Employee, p.pemohon_id)
+            nomor = _nomor_wa_internasional(pemohon.no_hp) if pemohon else ""
+            if nomor:
+                kirim_wa(f"Halo {pemohon.nama},\n{pesan}", nomor=[nomor])
 
     def _kirim_wa_permohonan_kembali(p, kembali, status_sisa, alasan):
         daftar_teks = "\n".join(
