@@ -354,6 +354,10 @@
         {% if po.item_produk_list | selectattr("id", "in", saran_biaya.keys()) | list %}
         <div class="text-muted small mb-3">Biaya Produksi di atas sudah keisi otomatis dari <a href="{{ url_for('biaya_jahit_list') }}">rate card Biaya Produksi (Menjahit)</a> &mdash; boleh diedit kalau tarif utk PO ini beda.</div>
         {% endif %}
+        <div class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
+          <span class="small">Perkiraan total produk jadi dari PO ini (jumlah semua Qty Pcs di atas):</span>
+          <strong class="total-pcs-preview">0 pcs</strong>
+        </div>
         <div class="fw-semibold small mb-1 text-danger">✂️ Pemakaian Bahan (final)</div>
         <div class="table-responsive">
           <table class="table table-sm align-middle">
@@ -462,6 +466,23 @@ new Chart(document.getElementById('chartDistribusiStatus'), {
     }],
   },
   options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+});
+
+function hitungTotalPcsModal(modal) {
+  var total = 0;
+  modal.querySelectorAll('input[name="qty[]"]').forEach(function (inp) {
+    total += parseFloat(inp.value) || 0;
+  });
+  var out = modal.querySelector('.total-pcs-preview');
+  if (out) out.textContent = total + ' pcs';
+}
+document.addEventListener('input', function (e) {
+  if (!e.target.matches('input[name="qty[]"]')) return;
+  var modal = e.target.closest('.modal');
+  if (modal) hitungTotalPcsModal(modal);
+});
+document.addEventListener('shown.bs.modal', function (e) {
+  if (e.target.querySelector('.total-pcs-preview')) hitungTotalPcsModal(e.target);
 });
 </script>
 {% endblock %}
