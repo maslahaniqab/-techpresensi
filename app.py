@@ -3618,11 +3618,15 @@ def create_app():
             item.biaya_produksi = biaya
             item.total = qty * biaya
 
-        # Kalau semua Item Produk (yg qty-nya kepakai) sama-sama 1 produk, aman
-        # ditebak itu peruntukan bahannya -- Produk Jadi kehitung otomatis dari
-        # Kebutuhan Yard per Pcs, persis pola yg sama kayak di form Buat PO dulu.
-        produk_ids_po = {ip.produk_id for ip in po.item_produk_list if ip.qty > 0}
-        produk_id_tunggal = next(iter(produk_ids_po)) if len(produk_ids_po) == 1 else None
+        # Produk Jadi (pcs) dihitung per bahan: jumlahkan qty final semua produk di PO
+        # ini yang memang punya Kebutuhan Yard per Pcs utk bahan tsb (bukan cuma kalau
+        # PO-nya 1 produk doang -- kalau dibatasi gitu, PO multi-produk/multi-warna
+        # [paling umum terjadi] jadi gak pernah kehitung sama sekali).
+        produk_qty_map = {}
+        for ip in po.item_produk_list:
+            if ip.qty > 0:
+                produk_qty_map[ip.produk_id] = produk_qty_map.get(ip.produk_id, 0) + ip.qty
+        produk_id_tunggal = next(iter(produk_qty_map)) if len(produk_qty_map) == 1 else None
 
         by_bp_id = {bp.id: bp for bp in po.bahan_pakai_list}
         stok_minus = False
@@ -3638,13 +3642,13 @@ def create_app():
             if bahan.stok_saat_ini < 0:
                 stok_minus = True
 
-            produk_jadi_pcs = None
-            if produk_id_tunggal:
-                kebutuhan = BahanBakuKebutuhan.query.filter_by(
-                    bahan_baku_id=bahan.id, produk_id=produk_id_tunggal,
-                ).first()
-                if kebutuhan and kebutuhan.jumlah_yard:
-                    produk_jadi_pcs = round(bp.qty_pakai / kebutuhan.jumlah_yard)
+            kebutuhan_terkait = BahanBakuKebutuhan.query.filter(
+                BahanBakuKebutuhan.bahan_baku_id == bahan.id,
+                BahanBakuKebutuhan.produk_id.in_(produk_qty_map.keys()),
+                BahanBakuKebutuhan.jumlah_yard.isnot(None),
+            ).all() if produk_qty_map else []
+            pcs_terkait = sum(produk_qty_map.get(k.produk_id, 0) for k in kebutuhan_terkait)
+            produk_jadi_pcs = pcs_terkait if kebutuhan_terkait else None
 
             db.session.add(BahanBakuTransaksi(
                 bahan_baku_id=bahan.id, tanggal=today_wib(), jenis="Keluar", jumlah_yard=bp.qty_pakai,
