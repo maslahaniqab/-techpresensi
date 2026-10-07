@@ -3447,10 +3447,16 @@ def create_app():
                 ))
             if full_order:
                 po.total_biaya = sum(r[2] * r[3] for r in item_produk_rows)
-            if pb_asal:
-                ikut = {(r[0].id, r[1]) for r in item_produk_rows}
-                for it in pb_asal.item_list:
-                    if it.status == "Diproses" and not it.po_id and (it.produk_id, it.warna or "") in ikut:
+
+            # Tandai SEMUA item permohonan yang cocok (produk+warna) sebagai sudah masuk PO
+            # ini -- bukan cuma item permohonan yg PO-nya dibuka lewat link "Buat PO" (pb_asal).
+            # Kalau cuma pb_asal yg dicek, PO yang dibuat lewat "+ Tambah PO" biasa (tanpa
+            # link permohonan) tidak menandai item permohonan manapun, jadi item itu masih
+            # kelihatan "belum PO" dan bisa dibuatkan PO kedua untuk produk yang sama persis.
+            ikut = {(r[0].id, r[1]) for r in item_produk_rows}
+            if ikut:
+                for it in PermohonanBarangItem.query.filter_by(status="Diproses", po_id=None).all():
+                    if (it.produk_id, it.warna or "") in ikut:
                         it.po_id = po.id
 
             for bahan, qty in bahan_pakai_rows:
