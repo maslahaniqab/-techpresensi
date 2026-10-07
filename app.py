@@ -4574,6 +4574,24 @@ def create_app():
         flash(pesan, "success")
         return redirect(url_for("permohonan_barang_list"))
 
+    def _kirim_wa_permohonan_kembali(p, kembali, status_sisa, alasan):
+        daftar_teks = "\n".join(
+            f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in kembali
+        )
+        pesan = (
+            f"*PERMOHONAN {p.nomor_permohonan} - {status_sisa.upper()}*\n"
+            f"Tanggal: {p.tanggal.strftime('%d/%m/%Y')}\n"
+            f"Produk yang tidak diproduksi:\n{daftar_teks}\n"
+            + (f"Alasan: {alasan}\n" if alasan else "")
+            + f"Diputuskan oleh: {current_user.nama}"
+        )
+        kirim_wa_grup(pesan, tujuan="permohonan")
+        if p.pemohon_id:
+            pemohon = db.session.get(Employee, p.pemohon_id)
+            nomor = _nomor_wa_internasional(pemohon.no_hp) if pemohon else ""
+            if nomor:
+                kirim_wa(f"Halo {pemohon.nama},\n{pesan}", nomor=[nomor])
+
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/proses", methods=["POST"])
     @modul_required("permohonan_barang")
     def permohonan_barang_proses(permohonan_id):
@@ -4623,6 +4641,8 @@ def create_app():
                 ),
             ))
         db.session.commit()
+        if kembali and status_sisa in ("Kendala Bahan", "Ditolak"):
+            _kirim_wa_permohonan_kembali(p, kembali, status_sisa, alasan)
         pesan = f"Permohonan {p.nomor_permohonan}: {len(dipilih & {it.id for it in p.item_list})} produk diproses"
         if kembali:
             pesan += f", {len(kembali)} produk dikembalikan ke pengajuan ({status_sisa})"
