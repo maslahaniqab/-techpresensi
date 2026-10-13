@@ -496,7 +496,15 @@ def _cari_baris_header(semua):
         if non_kosong < 2:
             continue
         cocok = sum(1 for c in sel if any(kk in c.lower() for kk in _KATA_KUNCI_HEADER))
-        skor = non_kosong + cocok * 5
+        # Baris data (bukan header) biasanya padat tanggal/angka di banyak kolom --
+        # dipakai buat menetralkan kata kunci header (mis. "gmv") yang kebetulan nyangkut
+        # di isi baris data (mis. "GMV Pay" di kolom metode pembayaran), yang kalau tidak
+        # dicek bisa membuat baris data itu salah terpilih jadi baris header.
+        mirip_data = sum(
+            1 for c, asli in zip(sel, row)
+            if c and (parse_tanggal_iklan(asli) or re.fullmatch(r"-?[\d.,]+%?", c))
+        )
+        skor = non_kosong + cocok * 5 - mirip_data * 3
         if skor > skor_terbaik:
             skor_terbaik, idx_terbaik = skor, idx
     return idx_terbaik
