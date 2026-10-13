@@ -1053,10 +1053,19 @@ def _gabung_semua_marketplace(agregat_marketplace):
     """Gabungkan hasil agregasi per marketplace (dari order yang sudah diupload) dengan
     SEMUA marketplace yang didukung (MARKETPLACE_LIST) -- biar marketplace yang belum
     ada data pesanan/pendapatannya (mis. Tokopedia, Blibli) tetap tampil dengan angka 0,
-    bukan hilang begitu saja dari daftar. Diurutkan dari omzet terbesar ke terkecil."""
+    bukan hilang begitu saja dari daftar. Diurutkan dari omzet terbesar ke terkecil.
+
+    Potongan (omzet - income) cuma dihitung kalau marketplace itu SUDAH ada laporan
+    Income yang terupload (ada_income) -- kalau belum (mis. Lazada baru ada laporan
+    Order, belum Income), potongannya 0 bukan dihitung seolah-olah potongan 100% dari
+    omzet (yang akan salah/menyesatkan, padahal itu cuma data yang belum lengkap)."""
     hasil = dict(agregat_marketplace)
     for mp in MARKETPLACE_LIST:
-        hasil.setdefault(mp, {"marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0})
+        hasil.setdefault(mp, {
+            "marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0, "ada_income": False,
+        })
+    for m in hasil.values():
+        m["potongan"] = (m["omzet"] - m["income"]) if m.get("ada_income") else 0
     return sorted(hasil.values(), key=lambda m: m["omzet"], reverse=True)
 
 
@@ -1142,13 +1151,14 @@ def hitung_profit_agregat(bulan=None):
         # yang sudah masuk, biar kelihatan kalau ada marketplace yang belum diupload.
         mp = kunci_order[0]
         mdata = agregat_marketplace.setdefault(mp, {
-            "marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0,
+            "marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0, "ada_income": False,
         })
         mdata["jumlah_pesanan"] += 1
         mdata["qty"] += sum(it.jumlah for it in items)
         mdata["omzet"] += total_subtotal_order
         if total_income_order is not None:
             mdata["income"] += total_income_order
+            mdata["ada_income"] = True
 
         for it in items:
             if total_income_order is None:

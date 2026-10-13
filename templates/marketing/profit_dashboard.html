@@ -134,7 +134,17 @@
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Potongan</div>
           <div class="fs-4 fw-bold text-danger">{{ ringkasan.total_potongan | rupiah }}</div>
-          <span class="badge bg-danger-subtle text-danger-emphasis">{{ '%.1f'|format((ringkasan.total_potongan / ringkasan.total_omzet * 100) if ringkasan.total_omzet else 0) }}% dari sales</span>
+          <span class="badge bg-danger-subtle text-danger-emphasis mb-2">{{ '%.1f'|format((ringkasan.total_potongan / ringkasan.total_omzet * 100) if ringkasan.total_omzet else 0) }}% dari sales</span>
+          {% for m in ringkasan.per_marketplace | sort(attribute='potongan', reverse=true) %}
+          <div class="small text-muted d-flex justify-content-between">
+            <span>{{ m.marketplace }}</span>
+            {% if not m.ada_income %}
+            <span class="text-danger fw-semibold">Rp 0 (belum ada data)</span>
+            {% else %}
+            <span>{{ m.potongan | rupiah }} ({{ '%.1f'|format((m.potongan / m.omzet * 100) if m.omzet else 0) }}%)</span>
+            {% endif %}
+          </div>
+          {% endfor %}
         </div>
       </div>
       <div class="col-md-6 col-6">
