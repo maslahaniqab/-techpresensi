@@ -108,14 +108,26 @@
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Penjualan</div>
           <div class="fs-4 fw-bold">{{ ringkasan.total_qty }} pcs</div>
-          <span class="badge bg-light text-dark">{{ ringkasan.jumlah_pesanan }} pesanan</span>
+          <span class="badge bg-light text-dark mb-2">{{ ringkasan.jumlah_pesanan }} pesanan</span>
+          {% for m in ringkasan.per_marketplace %}
+          <div class="small text-muted d-flex justify-content-between">
+            <span>{{ m.marketplace }}</span>
+            <span>{{ m.qty }} pcs</span>
+          </div>
+          {% endfor %}
         </div>
       </div>
       <div class="col-md-6 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Sales</div>
           <div class="fs-4 fw-bold">{{ ringkasan.total_omzet | rupiah }}</div>
-          <span class="badge bg-light text-dark">Subtotal Pesanan</span>
+          <span class="badge bg-light text-dark mb-2">Subtotal Pesanan</span>
+          {% for m in ringkasan.per_marketplace %}
+          <div class="small text-muted d-flex justify-content-between">
+            <span>{{ m.marketplace }}</span>
+            <span>{{ m.omzet | rupiah }}</span>
+          </div>
+          {% endfor %}
         </div>
       </div>
       <div class="col-md-6 col-6">
@@ -129,7 +141,13 @@
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Penghasilan</div>
           <div class="fs-4 fw-bold text-success">{{ ringkasan.total_income | rupiah }}</div>
-          <span class="badge bg-success-subtle text-success-emphasis">Final dari Marketplace</span>
+          <span class="badge bg-success-subtle text-success-emphasis mb-2">Final dari Marketplace</span>
+          {% for m in ringkasan.per_marketplace %}
+          <div class="small text-muted d-flex justify-content-between">
+            <span>{{ m.marketplace }}</span>
+            <span>{{ m.income | rupiah }}</span>
+          </div>
+          {% endfor %}
         </div>
       </div>
       <div class="col-md-6 col-6">

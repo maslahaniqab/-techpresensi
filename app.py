@@ -1076,6 +1076,7 @@ def hitung_profit_agregat(bulan=None):
             "total_qty": 0, "total_potongan": 0, "total_biaya_admin": 0, "total_biaya_layanan": 0,
             "total_biaya_lainnya": 0, "total_biaya_iklan": 0, "total_biaya_iklan_marketplace": 0,
             "total_biaya_iklan_meta": 0, "total_profit_real": 0, "margin_real": 0,
+            "per_marketplace": [],
         },
     }
     if not item_list:
@@ -1118,11 +1119,26 @@ def hitung_profit_agregat(bulan=None):
 
     agregat_produk = {}
     tren_harian = {}
+    agregat_marketplace = {}
 
     for kunci_order, items in by_order.items():
         inc = income_map.get(kunci_order)
         total_income_order = inc.total_penghasilan if inc else None
         total_subtotal_order = sum(it.subtotal for it in items)
+
+        # Breakdown per marketplace (Shopee/TikTok Shop/Lazada/Manual) dari data yang
+        # sudah diupload -- dipakai buat nunjukin di Dashboard Profit sumber mana saja
+        # yang sudah masuk, biar kelihatan kalau ada marketplace yang belum diupload.
+        mp = kunci_order[0]
+        mdata = agregat_marketplace.setdefault(mp, {
+            "marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0,
+        })
+        mdata["jumlah_pesanan"] += 1
+        mdata["qty"] += sum(it.jumlah for it in items)
+        mdata["omzet"] += total_subtotal_order
+        if total_income_order is not None:
+            mdata["income"] += total_income_order
+
         for it in items:
             if total_income_order is None:
                 income_alokasi = None
@@ -1210,6 +1226,7 @@ def hitung_profit_agregat(bulan=None):
         "total_biaya_iklan": total_biaya_iklan,
         "total_biaya_iklan_marketplace": total_biaya_iklan_marketplace,
         "total_biaya_iklan_meta": total_biaya_iklan_meta,
+        "per_marketplace": sorted(agregat_marketplace.values(), key=lambda m: m["omzet"], reverse=True),
     }
     ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_omzet"] * 100) if ringkasan["total_omzet"] else 0
     ringkasan["total_potongan"] = ringkasan["total_omzet"] - ringkasan["total_income"]
