@@ -1184,13 +1184,25 @@ def hitung_profit_agregat(bulan=None):
             hpp_satuan = _hpp_untuk(it)
             hpp_total_item = hpp_satuan * it.jumlah
 
+            # "nama_produk" dari order bisa membungkus BEBERAPA SKU beda (mis. SKU lama
+            # yang sudah diganti/dihentikan, atau salah satu variannya belum ada HPP) --
+            # kalau cuma diambil dari item PERTAMA yang diproses (dulu: hpp_satuan/ada_hpp
+            # di-set sekali waktu dict dibikin), produk yang item pertamanya kebetulan
+            # tidak ketemu HPP bakal SELAMANYA ditandai "belum ada HPP" walau item lain di
+            # nama yang sama sebenarnya sudah lengkap. Sekarang ada_hpp dicek per ITEM:
+            # tetap True selama semua item yang sudah diproses punya HPP, begitu ketemu 1
+            # item yang hpp-nya 0 baru ditandai False (dan tidak pernah balik True lagi).
             a = agregat_produk.setdefault(it.nama_produk, {
                 "nama_produk": it.nama_produk, "qty": 0, "omzet": 0, "income": 0, "hpp_total": 0,
-                "profit": 0, "hpp_satuan": hpp_satuan, "ada_hpp": hpp_satuan > 0, "ada_income": False,
+                "profit": 0, "hpp_satuan": 0, "ada_hpp": True, "ada_income": False,
             })
             a["qty"] += it.jumlah
             a["omzet"] += it.subtotal
             a["hpp_total"] += hpp_total_item
+            if hpp_satuan > 0:
+                a["hpp_satuan"] = hpp_satuan
+            else:
+                a["ada_hpp"] = False
             if income_alokasi is not None:
                 a["income"] += income_alokasi
                 a["ada_income"] = True
@@ -1287,7 +1299,7 @@ def hitung_profit_agregat(bulan=None):
         "total_hpp": sum(p["hpp_total"] for p in daftar_produk),
         "total_profit": sum(p["profit"] for p in daftar_produk),
         "jumlah_produk": len(daftar_produk),
-        "jumlah_produk_ada_hpp": sum(1 for p in daftar_produk if p["hpp_satuan"] > 0),
+        "jumlah_produk_ada_hpp": sum(1 for p in daftar_produk if p["ada_hpp"]),
         "jumlah_pesanan": len(by_order),
         "total_qty": sum(p["qty"] for p in daftar_produk),
         "total_biaya_admin": total_biaya_admin,
