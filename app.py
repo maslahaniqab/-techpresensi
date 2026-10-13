@@ -1414,6 +1414,61 @@ def parse_invoice_meta(headers, rows):
     }
 
 
+PLATFORM_EVERPRO_KE_MARKETPLACE = {
+    "tiktok ads": "TikTok Shop",
+    "shopee ads": "Shopee",
+    "lazada ads": "Lazada",
+    "tokopedia ads": "Tokopedia",
+    "blibli ads": "Blibli",
+}
+
+
+def parse_everpro_topup(headers, rows):
+    """Deteksi & baca laporan 'Top Up Saldo Iklan' dari Everpro (reseller saldo iklan
+    TikTok Ads/dll -- beda dari laporan performa iklan native platform). Biaya Iklan
+    diambil dari Topup Amount (jumlah KOTOR yang keluar dari rekening, termasuk fee
+    top-up Everpro) -- bukan Allocation Amount (jumlah bersih yang masuk ke saldo iklan,
+    tidak termasuk fee). Cuma baris berstatus 'Paid' yang dihitung."""
+    headers_lower = [str(h).strip().lower() for h in headers]
+    kolom_wajib = {"topup id", "topup amount", "topup status", "platform", "paid at"}
+    if not kolom_wajib.issubset(set(headers_lower)):
+        return None
+
+    idx = {h: i for i, h in enumerate(headers_lower)}
+    per_marketplace = {}
+    platform_tak_dikenal = set()
+    for row in rows:
+        if len(row) <= max(idx.values()):
+            continue
+        if str(row[idx["topup status"]]).strip().lower() != "paid":
+            continue
+        tanggal = None
+        paid_at = str(row[idx["paid at"]]).strip()
+        for fmt in ("%d %b %y %H:%M:%S", "%d %b %Y %H:%M:%S"):
+            try:
+                tanggal = datetime.strptime(paid_at, fmt).date()
+                break
+            except ValueError:
+                continue
+        if not tanggal:
+            tanggal = parse_tanggal_iklan(row[idx["created at"]]) if "created at" in idx else None
+        if not tanggal:
+            continue
+
+        platform = str(row[idx["platform"]]).strip().lower()
+        marketplace = PLATFORM_EVERPRO_KE_MARKETPLACE.get(platform)
+        if not marketplace:
+            platform_tak_dikenal.add(str(row[idx["platform"]]).strip())
+            continue
+
+        jumlah = parse_angka_iklan(row[idx["topup amount"]])
+        per_marketplace[(marketplace, tanggal)] = per_marketplace.get((marketplace, tanggal), 0) + jumlah
+
+    if not per_marketplace and not platform_tak_dikenal:
+        return None
+    return {"marketplace": per_marketplace, "platform_tak_dikenal": platform_tak_dikenal}
+
+
 SINGKATAN_BULAN_KHUSUS = {8: "ags"}  # Agustus umum disingkat "Ags", bukan "Agu"
 
 
@@ -8090,6 +8145,48 @@ def create_app():
                             "marketplace": "Meta", "preview_items": iklan_preview_items,
                         }
                         file_iklan = None  # tandai sudah diproses, skip jalur marketplace di bawah
+
+                if file_iklan and file_iklan.filename and hasil.get("iklan") is None:
+                    agregat_everpro = parse_everpro_topup(headers_i, rows_i)
+                    if agregat_everpro is not None:
+                        per_mp = agregat_everpro["marketplace"]
+                        tak_dikenal = agregat_everpro["platform_tak_dikenal"]
+                        if not per_mp:
+                            hasil["iklan"] = {
+                                "ok": False, "nama": file_iklan.filename,
+                                "pesan": (
+                                    "File Everpro terbaca, tapi platform-nya belum dikenali sistem: "
+                                    + ", ".join(sorted(tak_dikenal))
+                                    + ". Kirimkan nama platform ini biar bisa ditambahkan."
+                                ),
+                            }
+                        else:
+                            nama_file_iklan_aman = secure_filename(file_iklan.filename)
+                            waktu_impor = now_wib()
+                            for (mp, tanggal), biaya in per_mp.items():
+                                existing = IklanMarketplace.query.filter_by(marketplace=mp, tanggal=tanggal).first()
+                                if not existing:
+                                    existing = IklanMarketplace(marketplace=mp, tanggal=tanggal)
+                                    db.session.add(existing)
+                                existing.biaya = round(biaya)
+                                existing.sumber_file = nama_file_iklan_aman
+                                existing.dibuat_pada = waktu_impor
+                            marketplace_set_everpro = {mp for mp, _ in per_mp}
+                            label_mp = next(iter(marketplace_set_everpro)) if len(marketplace_set_everpro) == 1 else "Multi-platform (Everpro)"
+                            iklan_preview_items = sorted(
+                                ({"tanggal": t, "biaya": b, "platform": mp} for (mp, t), b in per_mp.items()),
+                                key=lambda x: x["tanggal"], reverse=True,
+                            )
+                            pesan_tambahan = (
+                                f" {len(tak_dikenal)} baris platform tidak dikenal dilewati ({', '.join(sorted(tak_dikenal))})."
+                                if tak_dikenal else ""
+                            )
+                            hasil["iklan"] = {
+                                "ok": True, "nama": file_iklan.filename, "jumlah": len(per_mp),
+                                "marketplace": label_mp, "preview_items": iklan_preview_items,
+                                "format_ringkas": True, "pesan_tambahan": pesan_tambahan,
+                            }
+                        file_iklan = None
 
                 if file_iklan and file_iklan.filename and hasil.get("iklan") is None:
                     mapping_i = deteksi_otomatis_kolom_iklan(headers_i, rows_i, KOLOM_TARGET_IKLAN)

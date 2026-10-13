@@ -197,11 +197,31 @@
     <span class="badge {{ mp_badge.get(hasil.iklan.marketplace, 'bg-secondary') }}">{{ hasil.iklan.marketplace }}</span>
     <span class="text-muted small">{{ hasil.iklan.jumlah }} hari &middot; {{ hasil.iklan.nama }}</span>
   </div>
+  {% if hasil.iklan.pesan_tambahan %}
+  <div class="alert alert-warning small py-2">{{ hasil.iklan.pesan_tambahan }}</div>
+  {% endif %}
   <div class="card p-3">
     <div class="text-muted small mb-2">Semua {{ hasil.iklan.preview_items|length }} hari berhasil diimpor. Tabelnya bisa di-scroll kalau datanya banyak, tidak perlu geser halaman.</div>
     <div style="max-height: 620px; overflow-y: auto; overflow-x: auto;">
     <table class="table table-sm align-middle mb-0">
-      {% if hasil.iklan.marketplace == 'Meta' %}
+      {% if hasil.iklan.format_ringkas %}
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
+        <tr>
+          <th>Tanggal</th>
+          <th>Platform</th>
+          <th class="text-end">Biaya Iklan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in hasil.iklan.preview_items %}
+        <tr>
+          <td class="small">{{ it.tanggal.strftime("%d/%m/%Y") if it.tanggal else "-" }}</td>
+          <td class="small">{{ it.platform or '-' }}</td>
+          <td class="text-end">{{ it.biaya | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% elif hasil.iklan.marketplace == 'Meta' %}
       <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
         <tr>
           <th>Tanggal</th>
