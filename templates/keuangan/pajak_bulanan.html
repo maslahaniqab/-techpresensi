@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Pajak (PPh Final UMKM){% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-1">Pajak (PPh Final UMKM)</h3>
+    <p class="text-muted small mb-0">Perkiraan PPh Final {{ "%.1f"|format(tarif_persen) }}% dari omzet bulanan, sesuai PP 55 Tahun 2022.</p>
+  </div>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <select name="tahun" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      {% for th in tahun_opsi %}
+      <option value="{{ th }}" {{ 'selected' if th == tahun }}>{{ th }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="alert alert-warning small">
+  <strong>Catatan penting:</strong> Ini angka perkiraan otomatis dari data Laba/Rugi di portal, <strong>bukan hitungan resmi dari DJP</strong>.
+  Dasar hukum: PP 55/2022, tarif 0,5% dari omzet (peredaran bruto) untuk badan usaha (CV/PT), berlaku dari rupiah pertama
+  (tanpa bagian Rp 500 juta bebas pajak seperti usaha perorangan). Skema ini ada batas waktu pakai sejak badan usaha
+  terdaftar/mulai memanfaatkannya: <strong>PT maksimal 3 tahun, CV maksimal 4 tahun</strong>. Setor pajak dilakukan
+  sendiri lewat <a href="https://djponline.pajak.go.id/account/login" target="_blank" rel="noopener">DJP Online</a>
+  (bikin kode billing &amp; bayar), paling lambat <strong>tanggal 15 bulan berikutnya</strong>. Selalu cek ulang ke
+  konsultan pajak/kantor pajak kalau ada perubahan status usaha atau omzet yang signifikan.
+</div>
+
+<div class="card p-3 mb-3">
+  <div class="row text-center">
+    <div class="col-md-4">
+      <div class="text-muted small">Total Omzet {{ tahun }}</div>
+      <div class="fs-5 fw-bold">{{ (daftar | sum(attribute='omzet')) | rupiah }}</div>
+    </div>
+    <div class="col-md-4">
+      <div class="text-muted small">Total Pajak {{ tahun }} (perkiraan)</div>
+      <div class="fs-5 fw-bold">{{ total_pajak_tahun | rupiah }}</div>
+    </div>
+    <div class="col-md-4">
+      <div class="text-muted small">Bulan Belum Dibayar</div>
+      <div class="fs-5 fw-bold {{ 'text-danger' if daftar | selectattr('lewat_tempo') | list else '' }}">
+        {{ daftar | rejectattr('dibayar') | list | length }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Bulan</th>
+          <th class="text-end">Omzet</th>
+          <th class="text-end">Pajak ({{ "%.1f"|format(tarif_persen) }}%)</th>
+          <th>Jatuh Tempo</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in daftar %}
+        <tr class="{{ 'table-danger' if d.lewat_tempo else '' }}">
+          <td>{{ d.nama_bulan }} {{ tahun }}</td>
+          <td class="text-end">{{ d.omzet | rupiah }}</td>
+          <td class="text-end fw-semibold">{{ d.pajak | rupiah }}</td>
+          <td class="small">
+            {{ d.jatuh_tempo.strftime('%d/%m/%Y') }}
+            {% if d.lewat_tempo %}<span class="badge bg-danger ms-1">Lewat tempo</span>{% endif %}
+          </td>
+          <td>
+            {% if d.dibayar %}
+            <span class="badge bg-success">Sudah dibayar{% if d.tanggal_dibayar %} ({{ d.tanggal_dibayar.strftime('%d/%m/%Y') }}){% endif %}</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">Belum dibayar</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('pajak_bulanan_status', bulan=d.bulan, tahun=tahun) }}" class="d-inline">
+              <input type="hidden" name="dibayar" value="{{ '0' if d.dibayar else '1' }}">
+              <button type="submit" class="btn btn-sm {{ 'btn-outline-secondary' if d.dibayar else 'btn-outline-success' }}">
+                {{ 'Batalkan' if d.dibayar else 'Tandai Sudah Dibayar' }}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -43,7 +43,7 @@ from xhtml2pdf import pisa
 
 from models import (
     db, User, Employee, Attendance, Settings, Payroll, PengajuanIzin,
-    PerintahKerja, PenerimaPerintah,
+    PerintahKerja, PenerimaPerintah, PajakBulanan,
     LaporanPekerjaan, PengajuanLembur, IklanMarketplace, ProdukIklan,
     PengeluaranOperasional, ItemLabaRugi, PenjualanMarketplace, Produk,
     IklanMeta, HariLibur, PesananMarketplace, PendapatanPesanan,
@@ -165,6 +165,7 @@ DAFTAR_MODUL_AKSES = [
         ("pengeluaran", "Laporan Pengeluaran"),
         ("laba_rugi", "Laporan Laba/Rugi"),
         ("laba_rugi_input", "Input Pendapatan & HPP"),
+        ("pajak_bulanan", "Pajak (PPh Final UMKM)"),
     ]),
     ("Inventory", [
         ("bahan_baku", "Bahan Baku"),
@@ -6396,6 +6397,58 @@ def create_app():
         db.session.commit()
         flash("Item dihapus.", "info")
         return redirect(url_for("laba_rugi_input", bulan=bulan, tahun=tahun))
+
+    # ---------- KEUANGAN: PAJAK (PPh FINAL UMKM 0,5%) ----------
+    TARIF_PPH_FINAL_UMKM = 0.005  # PP 55/2022 -- 0,5% dari omzet (peredaran bruto)
+
+    @app.route("/keuangan/pajak")
+    @modul_required("pajak_bulanan")
+    def pajak_bulanan_list():
+        tahun = int(request.args.get("tahun", today_wib().year))
+        bulan_terakhir = today_wib().month if tahun == today_wib().year else 12
+        status_map = {(p.bulan, p.tahun): p for p in PajakBulanan.query.filter_by(tahun=tahun).all()}
+
+        daftar = []
+        total_pajak_tahun = 0
+        for bulan in range(1, bulan_terakhir + 1):
+            omzet = hitung_labarugi_periode(bulan, tahun)["total_pendapatan"]
+            pajak = round(omzet * TARIF_PPH_FINAL_UMKM)
+            total_pajak_tahun += pajak
+            if bulan == 12:
+                jatuh_tempo = date(tahun + 1, 1, 15)
+            else:
+                jatuh_tempo = date(tahun, bulan + 1, 15)
+            status = status_map.get((bulan, tahun))
+            daftar.append({
+                "bulan": bulan, "nama_bulan": BULAN_NAMA[bulan], "omzet": omzet, "pajak": pajak,
+                "jatuh_tempo": jatuh_tempo, "lewat_tempo": (not status or not status.dibayar) and jatuh_tempo < today_wib(),
+                "dibayar": bool(status and status.dibayar),
+                "tanggal_dibayar": status.tanggal_dibayar if status else None,
+            })
+        daftar.reverse()
+
+        tahun_opsi = sorted({r[0] for r in db.session.query(db.extract("year", PesananMarketplace.tanggal_pesanan)).distinct()} | {today_wib().year})
+        return render_template(
+            "keuangan/pajak_bulanan.html", daftar=daftar, tahun=tahun, tahun_opsi=tahun_opsi,
+            total_pajak_tahun=total_pajak_tahun, tarif_persen=TARIF_PPH_FINAL_UMKM * 100,
+        )
+
+    @app.route("/keuangan/pajak/<int:bulan>/<int:tahun>/status", methods=["POST"])
+    @modul_required("pajak_bulanan")
+    def pajak_bulanan_status(bulan, tahun):
+        p = PajakBulanan.query.filter_by(bulan=bulan, tahun=tahun).first()
+        if not p:
+            p = PajakBulanan(bulan=bulan, tahun=tahun)
+            db.session.add(p)
+        p.dibayar = request.form.get("dibayar") == "1"
+        p.tanggal_dibayar = today_wib() if p.dibayar else None
+        p.catatan = request.form.get("catatan", "").strip()[:256] or None
+        db.session.commit()
+        flash(
+            f"Status pajak {BULAN_NAMA[bulan]} {tahun} ditandai {'sudah dibayar' if p.dibayar else 'belum dibayar'}.",
+            "success",
+        )
+        return redirect(url_for("pajak_bulanan_list", tahun=tahun))
 
     # ---------- PENDAPATAN: PENJUALAN PER MARKETPLACE ----------
     def proses_baris_penjualan(rows, mapping):

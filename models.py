@@ -228,6 +228,20 @@ class LaporanPekerjaan(db.Model):
     employee = db.relationship("Employee", backref="laporan_pekerjaan")
 
 
+class PajakBulanan(db.Model):
+    """Catatan status bayar PPh Final UMKM (0,5% dari omzet) per bulan -- angka omzet
+    & pajaknya dihitung otomatis dari data Laba/Rugi, ini cuma nyimpen status bayar
+    (DJP Online tidak terhubung otomatis, status dicentang manual oleh admin)."""
+    id = db.Column(db.Integer, primary_key=True)
+    bulan = db.Column(db.Integer, nullable=False)
+    tahun = db.Column(db.Integer, nullable=False)
+    dibayar = db.Column(db.Boolean, default=False, nullable=False)
+    tanggal_dibayar = db.Column(db.Date)
+    catatan = db.Column(db.String(256))
+
+    __table_args__ = (db.UniqueConstraint("bulan", "tahun", name="uq_pajak_bulanan"),)
+
+
 class PerintahKerja(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     judul = db.Column(db.String(200), nullable=False)
