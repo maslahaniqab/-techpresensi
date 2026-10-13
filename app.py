@@ -1606,6 +1606,34 @@ def parse_everpro_topup(headers, rows):
     return {"marketplace": per_marketplace, "platform_tak_dikenal": platform_tak_dikenal}
 
 
+def parse_lazada_topup(headers, rows):
+    """Deteksi & baca laporan 'Deal History' dari Lazada Ads Wallet (riwayat top up
+    saldo iklan Sponsored Solutions) -- beda dari laporan performa iklan Lazada biasa.
+    Biaya Iklan diambil dari Amount (jumlah top up), cuma baris berstatus SUCCESS yang
+    dihitung."""
+    headers_lower = [str(h).strip().lower() for h in headers]
+    kolom_wajib = {"date & time", "wallettype", "amount", "status"}
+    if not kolom_wajib.issubset(set(headers_lower)):
+        return None
+
+    idx = {h: i for i, h in enumerate(headers_lower)}
+    per_tanggal = {}
+    for row in rows:
+        if len(row) <= max(idx.values()):
+            continue
+        if str(row[idx["status"]]).strip().upper() != "SUCCESS":
+            continue
+        tanggal = parse_tanggal_iklan(row[idx["date & time"]])
+        if not tanggal:
+            continue
+        jumlah = parse_angka_iklan(row[idx["amount"]])
+        per_tanggal[tanggal] = per_tanggal.get(tanggal, 0) + jumlah
+
+    if not per_tanggal:
+        return None
+    return per_tanggal
+
+
 def baca_file_analitik_harian(file_storage):
     """Baca file export 'Shop Analytics - Key metrics' -- laporan ringkasan harian
     (GMV, Pesanan, Produk terjual, Pendapatan Bruto) dari dashboard Analitik, dipakai
@@ -8440,6 +8468,30 @@ def create_app():
                                 "marketplace": label_mp, "preview_items": iklan_preview_items,
                                 "format_ringkas": True, "pesan_tambahan": pesan_tambahan,
                             }
+                        file_iklan = None
+
+                if file_iklan and file_iklan.filename and hasil.get("iklan") is None:
+                    agregat_lazada = parse_lazada_topup(headers_i, rows_i)
+                    if agregat_lazada is not None:
+                        nama_file_iklan_aman = secure_filename(file_iklan.filename)
+                        waktu_impor = now_wib()
+                        for tanggal, biaya in agregat_lazada.items():
+                            existing = IklanMarketplace.query.filter_by(marketplace="Lazada", tanggal=tanggal).first()
+                            if not existing:
+                                existing = IklanMarketplace(marketplace="Lazada", tanggal=tanggal)
+                                db.session.add(existing)
+                            existing.biaya = round(biaya)
+                            existing.sumber_file = nama_file_iklan_aman
+                            existing.dibuat_pada = waktu_impor
+                        iklan_preview_items = sorted(
+                            ({"tanggal": t, "biaya": b, "platform": "Lazada"} for t, b in agregat_lazada.items()),
+                            key=lambda x: x["tanggal"], reverse=True,
+                        )
+                        hasil["iklan"] = {
+                            "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_lazada),
+                            "marketplace": "Lazada", "preview_items": iklan_preview_items,
+                            "format_ringkas": True,
+                        }
                         file_iklan = None
 
                 if file_iklan and file_iklan.filename and hasil.get("iklan") is None:
