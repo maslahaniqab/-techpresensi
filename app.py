@@ -1011,9 +1011,16 @@ def _normalisasi_nama_varian(nama):
     return n.lower()
 
 
+def _norm_sku(sku):
+    """SKU dari order (sering huruf besar semua, mis. 'NTB-HITAM-001') vs SKU yang
+    diketik manual di Data Produk (sering 'NTB-Hitam-001') -- disamain uppercase dulu
+    sebelum dibandingkan, supaya beda besar-kecil huruf tidak dianggap SKU berbeda."""
+    return (sku or "").strip().upper()
+
+
 def _cari_produk_cocok(nama, sku, produk_by_sku, produk_by_nama, produk_by_nama_normal):
     return (
-        (produk_by_sku.get(sku) if sku else None)
+        (produk_by_sku.get(_norm_sku(sku)) if sku else None)
         or produk_by_nama.get(nama)
         or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
     )
@@ -1077,8 +1084,15 @@ def hitung_profit_agregat(bulan=None):
     produk_by_nama = _peta_pilih_terisi(
         lambda p: p.nama_produk, Produk.query.filter(Produk.nama_produk.in_(nama_produk_set)).all()
     )
+    # Ambil SEMUA produk yang punya SKU (bukan filter .in_(sku_set) di SQL) karena
+    # perbandingan SKU persis case-sensitive di database -- "NTB-HITAM-001" (dari
+    # order) vs "NTB-Hitam-001" (di Data Produk) dianggap beda kalau difilter di SQL;
+    # disamakan uppercase-nya di Python lewat _peta_pilih_terisi + _norm_sku.
     produk_by_sku = (
-        _peta_pilih_terisi(lambda p: p.sku, Produk.query.filter(Produk.sku.in_(sku_set)).all())
+        _peta_pilih_terisi(
+            lambda p: _norm_sku(p.sku),
+            Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all(),
+        )
         if sku_set else {}
     )
     produk_by_nama_normal = {}
@@ -2803,13 +2817,13 @@ def create_app():
         # tidak ditimpa, biar HPP/harga yang sudah dirapikan manual tidak hilang kalau
         # file yang sama di-upload ulang. Cuma produk yang benar-benar baru yang ditambah.
         format_lengkap = data_tmp.get("format_lengkap", False)
-        produk_by_sku = {p.sku: p for p in Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all()}
+        produk_by_sku = {_norm_sku(p.sku): p for p in Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all()}
         produk_by_nama = {p.nama_produk: p for p in Produk.query.all()}
         jumlah_baru = jumlah_dilewati = 0
         for item in data_tmp["preview"]:
             nama = item["nama_produk"]
             sku = item.get("sku") or ""
-            existing = (produk_by_sku.get(sku) if sku else None) or produk_by_nama.get(nama)
+            existing = (produk_by_sku.get(_norm_sku(sku)) if sku else None) or produk_by_nama.get(nama)
             if existing:
                 jumlah_dilewati += 1
                 continue
@@ -2830,7 +2844,7 @@ def create_app():
             db.session.add(produk_baru)
             produk_by_nama[nama] = produk_baru
             if sku:
-                produk_by_sku[sku] = produk_baru
+                produk_by_sku[_norm_sku(sku)] = produk_baru
             jumlah_baru += 1
         db.session.commit()
         os.remove(path_tmp)
@@ -8576,7 +8590,13 @@ def create_app():
             g["terjual"] += it.jumlah
 
         sku_list = [g["sku"] for g in grup.values() if g["sku"]]
-        produk_by_sku = _peta_pilih_terisi(lambda p: p.sku, Produk.query.filter(Produk.sku.in_(sku_list)).all()) if sku_list else {}
+        produk_by_sku = (
+            _peta_pilih_terisi(
+                lambda p: _norm_sku(p.sku),
+                Produk.query.filter(Produk.sku.isnot(None), Produk.sku != "").all(),
+            )
+            if sku_list else {}
+        )
         semua_nama = [n for g in grup.values() for n in g["nama_list"]]
         produk_by_nama = _peta_pilih_terisi(lambda p: p.nama_produk, Produk.query.filter(Produk.nama_produk.in_(semua_nama)).all())
         produk_by_nama_normal = {}
@@ -8586,7 +8606,7 @@ def create_app():
         daftar = []
         for g in grup.values():
             nama_utama = g["nama_list"][0]
-            p = produk_by_sku.get(g["sku"]) if g["sku"] else None
+            p = produk_by_sku.get(_norm_sku(g["sku"])) if g["sku"] else None
             if not p:
                 for n in g["nama_list"]:
                     p = _cari_produk_cocok(n, "", {}, produk_by_nama, produk_by_nama_normal)
@@ -8618,7 +8638,7 @@ def create_app():
                     continue
                 hpp_val = round(parse_angka_iklan(hpp_raw))
                 produk = (
-                    (Produk.query.filter_by(sku=sku).first() if sku else None)
+                    (Produk.query.filter(db.func.upper(Produk.sku) == _norm_sku(sku)).first() if sku else None)
                     or Produk.query.filter_by(nama_produk=nama).first()
                     or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
                 )
@@ -8699,7 +8719,7 @@ def create_app():
             sku = str(row[idx_sku]).strip() if idx_sku is not None and idx_sku < len(row) and row[idx_sku] is not None else ""
             hpp_val = round(parse_angka_iklan(hpp_raw))
             produk = (
-                (Produk.query.filter_by(sku=sku).first() if sku else None)
+                (Produk.query.filter(db.func.upper(Produk.sku) == _norm_sku(sku)).first() if sku else None)
                 or Produk.query.filter_by(nama_produk=nama).first()
                 or produk_by_nama_normal.get(_normalisasi_nama_varian(nama))
             )
