@@ -112,7 +112,7 @@
           {% for m in ringkasan.per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
             <span>{{ m.marketplace }}</span>
-            <span>{{ m.qty }} pcs</span>
+            <span class="{{ 'text-danger fw-semibold' if not m.qty }}">{{ m.qty }} pcs{% if not m.qty %} (belum ada data){% endif %}</span>
           </div>
           {% endfor %}
         </div>
@@ -125,7 +125,7 @@
           {% for m in ringkasan.per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
             <span>{{ m.marketplace }}</span>
-            <span>{{ m.omzet | rupiah }}</span>
+            <span class="{{ 'text-danger fw-semibold' if not m.omzet }}">{{ m.omzet | rupiah }}{% if not m.omzet %} (belum ada data){% endif %}</span>
           </div>
           {% endfor %}
         </div>
@@ -145,7 +145,7 @@
           {% for m in ringkasan.per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
             <span>{{ m.marketplace }}</span>
-            <span>{{ m.income | rupiah }}</span>
+            <span class="{{ 'text-danger fw-semibold' if not m.income }}">{{ m.income | rupiah }}{% if not m.income %} (belum ada data){% endif %}</span>
           </div>
           {% endfor %}
         </div>

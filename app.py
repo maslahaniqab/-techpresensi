@@ -1049,6 +1049,17 @@ def _peta_pilih_terisi(key_fn, daftar_produk):
     return peta
 
 
+def _gabung_semua_marketplace(agregat_marketplace):
+    """Gabungkan hasil agregasi per marketplace (dari order yang sudah diupload) dengan
+    SEMUA marketplace yang didukung (MARKETPLACE_LIST) -- biar marketplace yang belum
+    ada data pesanan/pendapatannya (mis. Tokopedia, Blibli) tetap tampil dengan angka 0,
+    bukan hilang begitu saja dari daftar. Diurutkan dari omzet terbesar ke terkecil."""
+    hasil = dict(agregat_marketplace)
+    for mp in MARKETPLACE_LIST:
+        hasil.setdefault(mp, {"marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0})
+    return sorted(hasil.values(), key=lambda m: m["omzet"], reverse=True)
+
+
 def hitung_profit_agregat(bulan=None):
     """Hitung profit per produk untuk periode tertentu ('YYYY-MM' atau None = semua),
     digabung dari SEMUA marketplace yang datanya sudah diupload. Profit = Total
@@ -1242,7 +1253,7 @@ def hitung_profit_agregat(bulan=None):
         "total_biaya_iklan": total_biaya_iklan,
         "total_biaya_iklan_marketplace": total_biaya_iklan_marketplace,
         "total_biaya_iklan_meta": total_biaya_iklan_meta,
-        "per_marketplace": sorted(agregat_marketplace.values(), key=lambda m: m["omzet"], reverse=True),
+        "per_marketplace": _gabung_semua_marketplace(agregat_marketplace),
         "biaya_iklan_per_marketplace": biaya_iklan_per_marketplace,
     }
     ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_omzet"] * 100) if ringkasan["total_omzet"] else 0
