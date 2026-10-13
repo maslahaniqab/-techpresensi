@@ -996,7 +996,7 @@ PARSER_INCOME_MARKETPLACE = {
 }
 
 
-STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel")
+STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel", "returned")
 STATUS_SELESAI_MARKETPLACE = ("Selesai", "Selesai Pesanan")
 
 
