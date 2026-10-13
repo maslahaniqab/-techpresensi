@@ -54,6 +54,7 @@
           <th class="text-end">Pajak ({{ "%.1f"|format(tarif_persen) }}%)</th>
           <th>Jatuh Tempo</th>
           <th>Status</th>
+          <th>Untuk DJP Online</th>
           <th></th>
         </tr>
       </thead>
@@ -74,6 +75,15 @@
             <span class="badge bg-warning text-dark">Belum dibayar</span>
             {% endif %}
           </td>
+          <td class="small">
+            <div>Jenis Pajak: <strong>411128</strong> (PPh Final Ps. 4(2))</div>
+            <div>Kode Setoran: <strong>420</strong></div>
+            <div>Masa Pajak: {{ '%02d'|format(d.bulan) }}/{{ tahun }}</div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mt-1 btn-salin-djp"
+                    data-teks="Jenis Pajak: 411128 (PPh Final Pasal 4 ayat 2)&#10;Kode Jenis Setoran: 420&#10;Masa Pajak: {{ '%02d'|format(d.bulan) }}/{{ tahun }}&#10;Jumlah Setor: {{ d.pajak }}">
+              📋 Salin data setoran
+            </button>
+          </td>
           <td class="text-end">
             <form method="post" action="{{ url_for('pajak_bulanan_status', bulan=d.bulan, tahun=tahun) }}" class="d-inline">
               <input type="hidden" name="dibayar" value="{{ '0' if d.dibayar else '1' }}">
@@ -87,5 +97,21 @@
       </tbody>
     </table>
   </div>
+  <div class="text-muted small mt-2">
+    Kode Jenis Pajak/Setoran di atas (411128-420) adalah kode standar PPh Final UMKM yang umum dipakai sejak PP 46/2013 s.d. PP 55/2022.
+    Tetap cocokkan dengan pilihan yang muncul di dropdown DJP Online saat bikin kode billing, karena kode bisa berbeda tergantung versi sistemnya.
+  </div>
 </div>
+
+<script>
+document.querySelectorAll('.btn-salin-djp').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    navigator.clipboard.writeText(btn.dataset.teks).then(function () {
+      const asli = btn.textContent;
+      btn.textContent = '✅ Tersalin';
+      setTimeout(function () { btn.textContent = asli; }, 1500);
+    });
+  });
+});
+</script>
 {% endblock %}
