@@ -52,6 +52,7 @@ from models import (
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
     KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi, PermohonanBarangItem,
     PenerimaanBarangJadi, SnapshotNilaiInventory, PengajuanKoreksiAbsensi,
+    RingkasanHarianMarketplace,
 )
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
@@ -1049,7 +1050,7 @@ def _peta_pilih_terisi(key_fn, daftar_produk):
     return peta
 
 
-def _gabung_semua_marketplace(agregat_marketplace):
+def _gabung_semua_marketplace(agregat_marketplace, ringkasan_harian_per_mp=None):
     """Gabungkan hasil agregasi per marketplace (dari order yang sudah diupload) dengan
     SEMUA marketplace yang didukung (MARKETPLACE_LIST) -- biar marketplace yang belum
     ada data pesanan/pendapatannya (mis. Tokopedia, Blibli) tetap tampil dengan angka 0,
@@ -1058,12 +1059,24 @@ def _gabung_semua_marketplace(agregat_marketplace):
     Potongan (omzet - income) cuma dihitung kalau marketplace itu SUDAH ada laporan
     Income yang terupload (ada_income) -- kalau belum (mis. Lazada baru ada laporan
     Order, belum Income), potongannya 0 bukan dihitung seolah-olah potongan 100% dari
-    omzet (yang akan salah/menyesatkan, padahal itu cuma data yang belum lengkap)."""
+    omzet (yang akan salah/menyesatkan, padahal itu cuma data yang belum lengkap).
+
+    ringkasan_harian_per_mp (dari RingkasanHarianMarketplace, mis. Tokopedia) cuma
+    dipakai untuk marketplace yang BELUM punya data pesanan per-produk asli -- biar
+    tidak menimpa/dobel-hitung data yang lebih detail kalau suatu saat marketplace itu
+    sudah punya laporan Order/Income beneran."""
     hasil = dict(agregat_marketplace)
     for mp in MARKETPLACE_LIST:
         hasil.setdefault(mp, {
             "marketplace": mp, "qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0, "ada_income": False,
         })
+    for mp, data in (ringkasan_harian_per_mp or {}).items():
+        if hasil.get(mp, {}).get("jumlah_pesanan"):
+            continue
+        hasil[mp] = {
+            "marketplace": mp, "qty": data["qty"], "omzet": data["omzet"], "income": data["income"],
+            "jumlah_pesanan": data["jumlah_pesanan"], "ada_income": data["income"] > 0,
+        }
     for m in hasil.values():
         m["potongan"] = (m["omzet"] - m["income"]) if m.get("ada_income") else 0
     return sorted(hasil.values(), key=lambda m: m["omzet"], reverse=True)
@@ -1248,6 +1261,26 @@ def hitung_profit_agregat(bulan=None):
         {"marketplace": mp, "biaya": biaya_iklan_per_mp_map.get(mp, 0)} for mp in MARKETPLACE_LIST
     ]
 
+    # Omzet/Penghasilan harian dari marketplace yang tidak punya laporan Pesanan/Income
+    # per-produk (mis. Tokopedia, lihat RingkasanHarianMarketplace) -- cuma dipakai buat
+    # mengisi breakdown per-marketplace di kartu Dashboard Profit, BUKAN ikut ke total
+    # produk/HPP (karena tidak ada data SKU-nya sama sekali).
+    q_ringkasan_harian = RingkasanHarianMarketplace.query
+    if tahun_f and bulan_f:
+        q_ringkasan_harian = q_ringkasan_harian.filter(
+            db.extract("year", RingkasanHarianMarketplace.tanggal) == tahun_f,
+            db.extract("month", RingkasanHarianMarketplace.tanggal) == bulan_f,
+        )
+    ringkasan_harian_per_mp = {}
+    for r in q_ringkasan_harian.all():
+        d = ringkasan_harian_per_mp.setdefault(
+            r.marketplace, {"qty": 0, "omzet": 0, "income": 0, "jumlah_pesanan": 0}
+        )
+        d["qty"] += r.qty or 0
+        d["omzet"] += r.omzet or 0
+        d["income"] += r.income or 0
+        d["jumlah_pesanan"] += r.jumlah_pesanan or 0
+
     ringkasan = {
         "total_omzet": sum(p["omzet"] for p in daftar_produk),
         "total_income": sum(p["income"] for p in daftar_produk),
@@ -1263,7 +1296,7 @@ def hitung_profit_agregat(bulan=None):
         "total_biaya_iklan": total_biaya_iklan,
         "total_biaya_iklan_marketplace": total_biaya_iklan_marketplace,
         "total_biaya_iklan_meta": total_biaya_iklan_meta,
-        "per_marketplace": _gabung_semua_marketplace(agregat_marketplace),
+        "per_marketplace": _gabung_semua_marketplace(agregat_marketplace, ringkasan_harian_per_mp),
         "biaya_iklan_per_marketplace": biaya_iklan_per_marketplace,
     }
     ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_omzet"] * 100) if ringkasan["total_omzet"] else 0
@@ -1558,6 +1591,85 @@ def parse_everpro_topup(headers, rows):
     if not per_marketplace and not platform_tak_dikenal:
         return None
     return {"marketplace": per_marketplace, "platform_tak_dikenal": platform_tak_dikenal}
+
+
+def baca_file_analitik_harian(file_storage):
+    """Baca file export 'Shop Analytics - Key metrics' -- laporan ringkasan harian
+    (GMV, Pesanan, Produk terjual, Pendapatan Bruto) dari dashboard Analitik, dipakai
+    untuk marketplace yang TIDAK menyediakan laporan Pesanan/Income per-produk (mis.
+    Tokopedia yang sejak digabung ke TikTok Shop Seller Center cuma bisa diakses lewat
+    filter channel di menu Analitik, bukan laporan Order/Income biasa).
+
+    Formatnya 2 blok dalam 1 sheet: 'Ringkasan data' (total+persentase periode, tidak
+    dipakai) lalu 'Data harian' (rincian per tanggal, ini yang diambil). Return
+    (None, None, None) kalau filenya bukan format ini sama sekali (biar bisa dicoba
+    parser lain), atau (None, None, pesan_error) kalau formatnya cocok tapi ada yang
+    tidak lengkap."""
+    filename = file_storage.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    raw = file_storage.read()
+    if ext in ("xlsx", "xlsm"):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+        except Exception:
+            return None, None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
+        ws = wb.active
+        semua = [list(row) for row in ws.iter_rows(values_only=True)]
+    elif ext == "csv":
+        text = raw.decode("utf-8-sig", errors="ignore")
+        semua = _parse_csv_delimiter_terbaik(text)
+    else:
+        return None, None, None
+
+    idx_data_harian = None
+    for i, row in enumerate(semua):
+        if row and str(row[0] or "").strip().lower() == "data harian":
+            idx_data_harian = i
+            break
+    if idx_data_harian is None:
+        return None, None, None
+
+    idx_header = idx_data_harian + 1
+    if idx_header >= len(semua):
+        return None, None, "Ditemukan bagian 'Data harian', tapi tidak ada baris header/data setelahnya."
+    headers_lower = [str(h or "").strip().lower() for h in semua[idx_header]]
+    kolom_wajib = {"tanggal", "gmv", "pesanan", "produk terjual", "pendapatan bruto"}
+    if not kolom_wajib.issubset(set(headers_lower)):
+        return None, None, (
+            "Ditemukan bagian 'Data harian', tapi kolom yang dibutuhkan (Tanggal/GMV/Pesanan/"
+            "Produk terjual/Pendapatan Bruto) tidak lengkap."
+        )
+
+    rows = []
+    for row in semua[idx_header + 1:]:
+        if not any(c not in (None, "") for c in row):
+            break
+        rows.append(row)
+    if not rows:
+        return None, None, "Ditemukan bagian 'Data harian', tapi tidak ada baris datanya."
+    return headers_lower, rows, None
+
+
+def parse_analitik_harian(headers_lower, rows):
+    """Agregasi hasil baca_file_analitik_harian jadi {tanggal: {omzet, income, qty,
+    jumlah_pesanan}} -- omzet dari GMV, income dari Pendapatan Bruto (lihat catatan
+    di RingkasanHarianMarketplace soal kenapa ini bukan 'penghasilan bersih' seperti
+    income marketplace lain)."""
+    idx = {h: i for i, h in enumerate(headers_lower)}
+    out = {}
+    for row in rows:
+        if len(row) <= max(idx.values()):
+            continue
+        tanggal = parse_tanggal_iklan(row[idx["tanggal"]])
+        if not tanggal:
+            continue
+        out[tanggal] = {
+            "omzet": round(parse_angka_iklan(row[idx["gmv"]])),
+            "income": round(parse_angka_iklan(row[idx["pendapatan bruto"]])),
+            "qty": round(parse_angka_iklan(row[idx["produk terjual"]])),
+            "jumlah_pesanan": round(parse_angka_iklan(row[idx["pesanan"]])),
+        }
+    return out
 
 
 SINGKATAN_BULAN_KHUSUS = {8: "ags"}  # Agustus umum disingkat "Ags", bukan "Agu"
@@ -8125,7 +8237,7 @@ def create_app():
     def profit_upload():
         hasil = {
             "order": None, "income": None, "iklan": None, "order_manual": None,
-            "ringkasan_resmi": None, "ringkasan_gabungan": None,
+            "ringkasan_resmi": None, "ringkasan_gabungan": None, "analitik_harian": None,
         }
 
         if request.method == "POST":
@@ -8133,11 +8245,13 @@ def create_app():
             file_income = request.files.get("file_income")
             file_iklan = request.files.get("file_iklan")
             file_order_manual = request.files.get("file_order_manual")
+            file_analitik_harian = request.files.get("file_analitik_harian")
 
             if (
                 not (file_order and file_order.filename) and not (file_income and file_income.filename)
                 and not (file_iklan and file_iklan.filename)
                 and not (file_order_manual and file_order_manual.filename)
+                and not (file_analitik_harian and file_analitik_harian.filename)
             ):
                 flash("Pilih minimal satu file terlebih dahulu.", "danger")
                 return redirect(url_for("profit_upload"))
@@ -8208,6 +8322,42 @@ def create_app():
                             "jumlah_income_otomatis": len(income_manual_item_list),
                             "preview_items": order_manual_item_list,
                         }
+
+            if file_analitik_harian and file_analitik_harian.filename:
+                headers_a, rows_a, error_a = baca_file_analitik_harian(file_analitik_harian)
+                if error_a:
+                    hasil["analitik_harian"] = {"ok": False, "nama": file_analitik_harian.filename, "pesan": error_a}
+                elif headers_a is None:
+                    hasil["analitik_harian"] = {
+                        "ok": False, "nama": file_analitik_harian.filename,
+                        "pesan": "File ini tidak dikenali sebagai laporan 'Shop Analytics - Key metrics' "
+                                 "(tidak ditemukan bagian 'Data harian').",
+                    }
+                else:
+                    agregat_a = parse_analitik_harian(headers_a, rows_a)
+                    nama_file_a_aman = secure_filename(file_analitik_harian.filename)
+                    waktu_impor = now_wib()
+                    for tanggal, nilai in agregat_a.items():
+                        existing = RingkasanHarianMarketplace.query.filter_by(
+                            marketplace="Tokopedia", tanggal=tanggal
+                        ).first()
+                        if not existing:
+                            existing = RingkasanHarianMarketplace(marketplace="Tokopedia", tanggal=tanggal)
+                            db.session.add(existing)
+                        existing.omzet = nilai["omzet"]
+                        existing.income = nilai["income"]
+                        existing.qty = nilai["qty"]
+                        existing.jumlah_pesanan = nilai["jumlah_pesanan"]
+                        existing.sumber_file = nama_file_a_aman
+                        existing.dibuat_pada = waktu_impor
+                    preview_items_a = sorted(
+                        ({"tanggal": t, **v} for t, v in agregat_a.items()),
+                        key=lambda x: x["tanggal"], reverse=True,
+                    )
+                    hasil["analitik_harian"] = {
+                        "ok": True, "nama": file_analitik_harian.filename, "jumlah": len(agregat_a),
+                        "marketplace": "Tokopedia", "preview_items": preview_items_a,
+                    }
 
             if file_iklan and file_iklan.filename:
                 headers_i, rows_i, _idx_header, error_i = baca_file_iklan(file_iklan)
@@ -8319,6 +8469,7 @@ def create_app():
                 or (hasil["income"] and hasil["income"]["ok"])
                 or (hasil["iklan"] and hasil["iklan"]["ok"])
                 or (hasil["order_manual"] and hasil["order_manual"]["ok"])
+                or (hasil["analitik_harian"] and hasil["analitik_harian"]["ok"])
             )
             jumlah_produk_belum_hpp = None
             if upload_sukses:

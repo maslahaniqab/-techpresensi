@@ -799,6 +799,27 @@ class PendapatanPesanan(db.Model):
     )
 
 
+class RingkasanHarianMarketplace(db.Model):
+    """Ringkasan Omzet/Penghasilan harian untuk marketplace yang TIDAK menyediakan
+    laporan Pesanan/Income per-produk (mis. Tokopedia, yang cuma punya dashboard
+    Analitik berisi GMV & Pendapatan Bruto harian, tanpa rincian SKU/produk terjual).
+    Beda dari PesananMarketplace+PendapatanPesanan yang per-baris-produk, ini cuma
+    angka total per hari -- jadi tidak bisa ikut dicocokkan ke HPP produk."""
+    id = db.Column(db.Integer, primary_key=True)
+    marketplace = db.Column(db.String(32), nullable=False)
+    tanggal = db.Column(db.Date, nullable=False)
+    omzet = db.Column(db.Integer, default=0)  # dari GMV
+    income = db.Column(db.Integer, default=0)  # dari Pendapatan Bruto
+    qty = db.Column(db.Integer, default=0)  # dari Produk terjual
+    jumlah_pesanan = db.Column(db.Integer, default=0)  # dari Pesanan
+    sumber_file = db.Column(db.String(256))
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    __table_args__ = (
+        db.UniqueConstraint("marketplace", "tanggal", name="uq_ringkasan_harian_mp_tgl"),
+    )
+
+
 class PermohonanBarang(db.Model):
     """Form Permohonan/Pengajuan Pengadaan Barang -- catatan permintaan internal buat
     nambah stok produk tertentu, dipantau statusnya. Beda dari Purchase Order: ini

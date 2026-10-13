@@ -46,6 +46,17 @@
         <input type="file" name="file_order_manual" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
       </div>
     </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="card p-3 h-100">
+        <div class="fw-semibold">📊 5. Analitik Tokopedia <span class="text-muted fw-normal">(opsional)</span></div>
+        <div class="text-muted small mb-3">
+          Tokopedia sudah tidak punya laporan Order/Income sendiri (sejak digabung ke TikTok Shop Seller
+          Center) -- upload file "Shop Analytics - Key metrics" dari menu Analitik (filter channel Tokopedia)
+          untuk isi Total Sales &amp; Penghasilan Tokopedia di Dashboard Profit. Tidak ada rincian per produk.
+        </div>
+        <input type="file" name="file_analitik_harian" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
+      </div>
+    </div>
   </div>
   <div class="text-muted small mb-2">Pilih dulu semua file yang mau diupload (boleh lebih dari satu), baru klik tombol di bawah ini.</div>
   <button type="submit" class="btn btn-primary mb-4" id="btn-upload-profit">Upload &amp; Proses</button>
@@ -87,7 +98,7 @@
 })();
 </script>
 
-{% if not hasil.order and not hasil.income and not hasil.iklan and not hasil.order_manual %}
+{% if not hasil.order and not hasil.income and not hasil.iklan and not hasil.order_manual and not hasil.analitik_harian %}
 <div class="card p-4 text-center text-muted small">
   Belum ada file yang diupload. Pilih file Order dan/atau Income di atas, hasilnya akan langsung tampil rapi di sini.
 </div>
@@ -320,6 +331,53 @@
   </div>
   {% else %}
   <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.order_manual.nama }}:</strong> {{ hasil.order_manual.pesan }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------- Hasil Analitik Tokopedia ---------- #}
+{% if hasil.analitik_harian %}
+<div class="mb-4">
+  {% if hasil.analitik_harian.ok %}
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <span class="fs-5">✅</span>
+    <span class="fw-semibold">File Analitik Tokopedia berhasil diproses</span>
+    <span class="badge {{ mp_badge.get('Tokopedia', 'bg-secondary') }}">Tokopedia</span>
+    <span class="text-muted small">{{ hasil.analitik_harian.jumlah }} hari &middot; {{ hasil.analitik_harian.nama }}</span>
+  </div>
+  <div class="alert alert-info small">
+    GMV dipakai mengisi Total Sales dan Pendapatan Bruto mengisi Total Penghasilan Tokopedia di Dashboard
+    Profit. Karena tidak ada rincian per produk/SKU, data ini tidak ikut dicocokkan ke HPP produk.
+  </div>
+  <div class="card p-3">
+    <div class="text-muted small mb-2">Semua {{ hasil.analitik_harian.preview_items|length }} hari berhasil diimpor. Tabelnya bisa di-scroll kalau datanya banyak, tidak perlu geser halaman.</div>
+    <div style="max-height: 620px; overflow-y: auto; overflow-x: auto;">
+    <table class="table table-sm align-middle mb-0">
+      <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
+        <tr>
+          <th>Tanggal</th>
+          <th class="text-end">Pesanan</th>
+          <th class="text-end">Produk Terjual</th>
+          <th class="text-end">GMV (Sales)</th>
+          <th class="text-end">Pendapatan Bruto</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in hasil.analitik_harian.preview_items %}
+        <tr>
+          <td class="small">{{ it.tanggal.strftime("%d/%m/%Y") if it.tanggal else "-" }}</td>
+          <td class="text-end">{{ it.jumlah_pesanan }}</td>
+          <td class="text-end">{{ it.qty }}</td>
+          <td class="text-end">{{ it.omzet | rupiah }}</td>
+          <td class="text-end">{{ it.income | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-danger small mb-0"><strong>❌ {{ hasil.analitik_harian.nama }}:</strong> {{ hasil.analitik_harian.pesan }}</div>
   {% endif %}
 </div>
 {% endif %}
