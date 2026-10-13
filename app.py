@@ -1016,6 +1016,7 @@ def _normalisasi_nama_varian(nama):
     n = re.sub(r",?\s*(Tampilan\s*Warna|Warna|Motif|Ukuran|Size)\s*:\s*", " - ", nama, flags=re.I)
     n = re.sub(r"(?:\s*-\s*){2,}", " - ", n)
     n = re.sub(r"\s*-\s*", " - ", n)
+    n = re.sub(r"\s*,\s*", ", ", n)  # "Maple,Standart" vs "Maple, Standart" -> disamain
     n = re.sub(r"\s+", " ", n).strip()
     return n.lower()
 
