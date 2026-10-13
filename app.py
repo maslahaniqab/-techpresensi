@@ -1066,7 +1066,8 @@ def hitung_profit_agregat(bulan=None):
             "total_omzet": 0, "total_income": 0, "total_hpp": 0, "total_profit": 0, "margin": 0,
             "jumlah_produk": 0, "jumlah_produk_ada_hpp": 0, "jumlah_pesanan": 0,
             "total_qty": 0, "total_potongan": 0, "total_biaya_admin": 0, "total_biaya_layanan": 0,
-            "total_biaya_lainnya": 0, "total_biaya_iklan": 0, "total_profit_real": 0, "margin_real": 0,
+            "total_biaya_lainnya": 0, "total_biaya_iklan": 0, "total_biaya_iklan_marketplace": 0,
+            "total_biaya_iklan_meta": 0, "total_profit_real": 0, "margin_real": 0,
         },
     }
     if not item_list:
@@ -1164,16 +1165,27 @@ def hitung_profit_agregat(bulan=None):
             total_biaya_layanan += inc.biaya_layanan or 0
             total_biaya_lainnya += inc.biaya_lainnya or 0
 
-    # Biaya iklan dari periode & marketplace yang sama (data dari Upload Data > File
-    # Data Iklan, tabel IklanMarketplace) -- supaya Dashboard Profit ikut menghitung
-    # potongan biaya iklan, bukan cuma HPP & fee marketplace.
+    # Biaya iklan dari periode yang sama, digabung dari 2 sumber:
+    # - IklanMarketplace (Upload Data > File Data Iklan per marketplace, mis. TikTok/
+    #   Shopee Ads, termasuk top up lewat Everpro)
+    # - IklanMeta (menu Iklan Meta) -- company-wide, gak terikat marketplace tertentu,
+    #   jadi tetap dihitung penuh walau order yang masuk cuma dari 1-2 marketplace.
+    # Sebelumnya Dashboard Profit cuma hitung IklanMarketplace, jadi biaya Meta Ads
+    # kelewat & Profit Real-nya kelihatan lebih besar dari yang sebenarnya.
     q_iklan = IklanMarketplace.query.filter(IklanMarketplace.marketplace.in_(marketplace_set))
+    q_meta = IklanMeta.query
     if tahun_f and bulan_f:
         q_iklan = q_iklan.filter(
             db.extract("year", IklanMarketplace.tanggal) == tahun_f,
             db.extract("month", IklanMarketplace.tanggal) == bulan_f,
         )
-    total_biaya_iklan = sum(r.biaya or 0 for r in q_iklan.all())
+        q_meta = q_meta.filter(
+            db.extract("year", IklanMeta.tanggal) == tahun_f,
+            db.extract("month", IklanMeta.tanggal) == bulan_f,
+        )
+    total_biaya_iklan_marketplace = sum(r.biaya or 0 for r in q_iklan.all())
+    total_biaya_iklan_meta = sum(r.biaya or 0 for r in q_meta.all())
+    total_biaya_iklan = total_biaya_iklan_marketplace + total_biaya_iklan_meta
 
     ringkasan = {
         "total_omzet": sum(p["omzet"] for p in daftar_produk),
@@ -1188,6 +1200,8 @@ def hitung_profit_agregat(bulan=None):
         "total_biaya_layanan": total_biaya_layanan,
         "total_biaya_lainnya": total_biaya_lainnya,
         "total_biaya_iklan": total_biaya_iklan,
+        "total_biaya_iklan_marketplace": total_biaya_iklan_marketplace,
+        "total_biaya_iklan_meta": total_biaya_iklan_meta,
     }
     ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_omzet"] * 100) if ringkasan["total_omzet"] else 0
     ringkasan["total_potongan"] = ringkasan["total_omzet"] - ringkasan["total_income"]

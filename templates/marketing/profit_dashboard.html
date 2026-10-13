@@ -136,7 +136,15 @@
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Biaya Iklan</div>
           <div class="fs-4 fw-bold">{{ ringkasan.total_biaya_iklan | rupiah }}</div>
-          <span class="badge bg-light text-dark">{{ '%.1f'|format(ad_ratio) }}% dari sales</span>
+          <span class="badge bg-light text-dark mb-2">{{ '%.1f'|format(ad_ratio) }}% dari sales</span>
+          <div class="small text-muted d-flex justify-content-between">
+            <span>Marketplace</span>
+            <span class="{{ 'text-danger fw-semibold' if not ringkasan.total_biaya_iklan_marketplace }}">{{ ringkasan.total_biaya_iklan_marketplace | rupiah }}{% if not ringkasan.total_biaya_iklan_marketplace %} (belum ada data){% endif %}</span>
+          </div>
+          <div class="small text-muted d-flex justify-content-between">
+            <span>Meta</span>
+            <span class="{{ 'text-danger fw-semibold' if not ringkasan.total_biaya_iklan_meta }}">{{ ringkasan.total_biaya_iklan_meta | rupiah }}{% if not ringkasan.total_biaya_iklan_meta %} (belum ada data){% endif %}</span>
+          </div>
         </div>
       </div>
     </div>
