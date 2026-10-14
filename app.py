@@ -9266,6 +9266,54 @@ def create_app():
             persen_sisa=persen_sisa,
         )
 
+    @app.route("/marketing/profit/biaya-iklan-manual", methods=["POST"])
+    @marketing_required
+    def profit_biaya_iklan_manual():
+        """Input manual Biaya Iklan untuk marketplace & bulan tertentu, dipakai kalau
+        belum ada laporan yang bisa diupload (mis. belum sempat download dari Ads
+        Center). Disimpan sebagai 1 baris di tanggal 1 bulan itu -- sama seperti cara
+        laporan ringkasan per-periode (mis. laporan CPC Shopee) disimpan, karena memang
+        cuma ada 1 angka total per bulan, bukan rincian harian."""
+        bulan = (request.form.get("bulan") or "").strip()
+        marketplace = (request.form.get("marketplace") or "").strip()
+        biaya_raw = (request.form.get("biaya") or "").strip()
+
+        if not bulan or "-" not in bulan:
+            flash("Pilih periode bulan tertentu dulu (bukan 'Semua Bulan') sebelum input manual.", "danger")
+            return redirect(url_for("profit_dashboard"))
+        try:
+            tahun_i, bulan_i = (int(x) for x in bulan.split("-"))
+            tanggal_target = date(tahun_i, bulan_i, 1)
+        except ValueError:
+            flash("Periode bulan tidak valid.", "danger")
+            return redirect(url_for("profit_dashboard"))
+
+        biaya_val = round(parse_angka_iklan(biaya_raw))
+        if biaya_val < 0:
+            flash("Biaya iklan tidak boleh minus.", "danger")
+            return redirect(url_for("profit_dashboard", bulan=bulan))
+
+        if marketplace == "Meta":
+            existing = IklanMeta.query.filter_by(tanggal=tanggal_target).first()
+            if not existing:
+                existing = IklanMeta(tanggal=tanggal_target)
+                db.session.add(existing)
+        elif marketplace in MARKETPLACE_LIST:
+            existing = IklanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal_target).first()
+            if not existing:
+                existing = IklanMarketplace(marketplace=marketplace, tanggal=tanggal_target)
+                db.session.add(existing)
+        else:
+            flash("Marketplace tidak dikenali.", "danger")
+            return redirect(url_for("profit_dashboard", bulan=bulan))
+
+        existing.biaya = biaya_val
+        existing.sumber_file = "Input manual"
+        existing.dibuat_pada = now_wib()
+        db.session.commit()
+        flash(f"Biaya Iklan {marketplace} bulan {bulan} berhasil disimpan manual: {rupiah(biaya_val)}.", "success")
+        return redirect(url_for("profit_dashboard", bulan=bulan))
+
     @app.route("/marketing/profit/dashboard/export")
     @marketing_required
     def profit_dashboard_export():

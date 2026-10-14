@@ -168,14 +168,20 @@
           <div class="fs-4 fw-bold">{{ ringkasan.total_biaya_iklan_gabungan | rupiah }}</div>
           <span class="badge bg-light text-dark mb-2">{{ '%.1f'|format((ringkasan.total_biaya_iklan_gabungan / ringkasan.total_omzet_gabungan * 100) if ringkasan.total_omzet_gabungan else 0) }}% dari sales</span>
           {% for m in ringkasan.biaya_iklan_per_marketplace %}
-          <div class="small text-muted d-flex justify-content-between">
+          <div class="small text-muted d-flex justify-content-between align-items-center">
             <span>{{ m.marketplace }}</span>
-            <span class="{{ 'text-danger fw-semibold' if not m.biaya }}">{{ m.biaya | rupiah }}{% if not m.biaya %} (belum ada data){% endif %}</span>
+            <span>
+              <span class="{{ 'text-danger fw-semibold' if not m.biaya }}">{{ m.biaya | rupiah }}{% if not m.biaya %} (belum ada data){% endif %}</span>
+              <a href="#" class="small ms-1 {{ 'disabled text-muted' if not bulan_filter }}" title="{{ 'Pilih periode bulan dulu di atas untuk bisa input manual' if not bulan_filter else 'Input manual Biaya Iklan ' + m.marketplace }}" {% if bulan_filter %}onclick="bukaEditBiayaIklan('{{ m.marketplace }}', {{ m.biaya }}); return false;"{% else %}onclick="return false;"{% endif %}>&#9998;</a>
+            </span>
           </div>
           {% endfor %}
-          <div class="small text-muted d-flex justify-content-between">
+          <div class="small text-muted d-flex justify-content-between align-items-center">
             <span>Meta</span>
-            <span class="{{ 'text-danger fw-semibold' if not ringkasan.total_biaya_iklan_meta }}">{{ ringkasan.total_biaya_iklan_meta | rupiah }}{% if not ringkasan.total_biaya_iklan_meta %} (belum ada data){% endif %}</span>
+            <span>
+              <span class="{{ 'text-danger fw-semibold' if not ringkasan.total_biaya_iklan_meta }}">{{ ringkasan.total_biaya_iklan_meta | rupiah }}{% if not ringkasan.total_biaya_iklan_meta %} (belum ada data){% endif %}</span>
+              <a href="#" class="small ms-1 {{ 'disabled text-muted' if not bulan_filter }}" title="{{ 'Pilih periode bulan dulu di atas untuk bisa input manual' if not bulan_filter else 'Input manual Biaya Iklan Meta' }}" {% if bulan_filter %}onclick="bukaEditBiayaIklan('Meta', {{ ringkasan.total_biaya_iklan_meta }}); return false;"{% else %}onclick="return false;"{% endif %}>&#9998;</a>
+            </span>
           </div>
         </div>
       </div>
@@ -352,6 +358,43 @@
   </table>
   {% endif %}
 </div>
+
+<div class="modal fade" id="modalBiayaIklanManual" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('profit_biaya_iklan_manual') }}">
+        <div class="modal-header">
+          <h6 class="modal-title mb-0">Input Manual Biaya Iklan</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">
+            Dipakai kalau belum ada laporan yang bisa diupload. Angka ini akan menimpa biaya
+            iklan marketplace &amp; periode ini yang sudah tercatat (kalau ada).
+          </p>
+          <input type="hidden" name="marketplace" id="inputManualMarketplace">
+          <input type="hidden" name="bulan" value="{{ bulan_filter }}">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Marketplace</label>
+            <input type="text" class="form-control form-control-sm" id="inputManualMarketplaceLabel" disabled>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Periode</label>
+            <input type="text" class="form-control form-control-sm" value="{{ bulan_filter }}" disabled>
+          </div>
+          <div>
+            <label class="form-label small mb-1">Biaya Iklan (Rp)</label>
+            <input type="number" min="0" step="1" name="biaya" id="inputManualBiaya" class="form-control form-control-sm" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-sm btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -371,4 +414,12 @@ new Chart(document.getElementById('chartProfit'), {
 });
 </script>
 {% endif %}
+<script>
+function bukaEditBiayaIklan(marketplace, biayaSekarang) {
+  document.getElementById('inputManualMarketplace').value = marketplace;
+  document.getElementById('inputManualMarketplaceLabel').value = marketplace;
+  document.getElementById('inputManualBiaya').value = biayaSekarang;
+  new bootstrap.Modal(document.getElementById('modalBiayaIklanManual')).show();
+}
+</script>
 {% endblock %}
