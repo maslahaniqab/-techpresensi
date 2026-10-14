@@ -31,8 +31,15 @@
     <div class="col-md-6 col-lg-3">
       <div class="card p-3 h-100">
         <div class="fw-semibold">📣 3. File Data Iklan <span class="text-muted fw-normal">(opsional)</span></div>
-        <div class="text-muted small mb-3">Dari Ads Center marketplace terkait. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
-        <input type="file" name="file_iklan" class="form-control auto-upload-input" accept=".csv,.xlsx,.xlsm">
+        <div class="text-muted small mb-2">Dari Ads Center marketplace terkait. Kalau nggak pasang iklan, lewati saja, tool tetap jalan normal.</div>
+        <input type="file" name="file_iklan" class="form-control auto-upload-input mb-2" accept=".csv,.xlsx,.xlsm">
+        <label class="form-label small mb-1">Marketplace (isi kalau formatnya generik & tidak kedeteksi otomatis)</label>
+        <select name="marketplace_iklan_manual" class="form-select form-select-sm">
+          <option value="">-- Pilih kalau perlu --</option>
+          {% for mp in ["Shopee", "TikTok Shop", "Lazada", "Tokopedia", "Blibli"] %}
+          <option value="{{ mp }}">{{ mp }}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
     <div class="col-md-6 col-lg-3">

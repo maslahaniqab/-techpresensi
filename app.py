@@ -8351,6 +8351,7 @@ def create_app():
             file_order = request.files.get("file_order")
             file_income = request.files.get("file_income")
             file_iklan = request.files.get("file_iklan")
+            marketplace_iklan_manual = (request.form.get("marketplace_iklan_manual") or "").strip()
             file_order_manual = request.files.get("file_order_manual")
             file_analitik_harian = request.files.get("file_analitik_harian")
 
@@ -8599,8 +8600,22 @@ def create_app():
                             "ok": False, "nama": file_iklan.filename,
                             "pesan": "Kolom Tanggal/Biaya Iklan tidak berhasil dikenali otomatis dari file ini.",
                         }
+                    elif not (marketplace_terdeteksi or marketplace_iklan_manual):
+                        # Dulu kalau tidak kedeteksi otomatis, langsung default ke "Shopee"
+                        # -- bahaya, karena laporan Campaign Overview dari TikTok Shop/
+                        # marketplace lain formatnya generik juga (kolomnya mirip-mirip,
+                        # tidak ada identitas marketplace di isinya), jadi gampang salah
+                        # tercatat sebagai Shopee padahal punya marketplace lain. Sekarang
+                        # kalau tidak kedeteksi otomatis, WAJIB pilih marketplace manual dulu.
+                        hasil["iklan"] = {
+                            "ok": False, "nama": file_iklan.filename,
+                            "pesan": "Sistem tidak bisa otomatis mengenali ini laporan iklan marketplace mana "
+                                     "(formatnya generik, tidak ada identitas marketplace di isinya). Pilih "
+                                     "marketplace-nya manual di dropdown sebelum upload, atau upload bareng "
+                                     "file Order/Income marketplace yang sama biar kedeteksi otomatis.",
+                        }
                     else:
-                        marketplace_iklan = marketplace_terdeteksi or "Shopee"
+                        marketplace_iklan = marketplace_terdeteksi or marketplace_iklan_manual
                         agregat_i, _dilewati_i, _contoh_i = proses_baris_upload(rows_i, mapping_i, butuh_produk=False)
                         waktu_impor = now_wib()
                         nama_file_iklan_aman = secure_filename(file_iklan.filename)
