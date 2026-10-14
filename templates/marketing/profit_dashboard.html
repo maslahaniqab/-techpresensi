@@ -140,6 +140,8 @@
             <span>{{ m.marketplace }}</span>
             {% if not m.ada_income %}
             <span class="text-danger fw-semibold">Rp 0 (belum ada data)</span>
+            {% elif m.potongan < 0 %}
+            <span class="text-muted" title="Pendapatan tercatat lebih besar dari Omzet -- untuk Tokopedia ini wajar karena angka Pendapatan dari Analitik kemungkinan masih termasuk ongkir, bukan net income seperti marketplace lain">Rp 0 (perlu dicek)</span>
             {% else %}
             <span>{{ m.potongan | rupiah }} ({{ '%.1f'|format((m.potongan / m.omzet * 100) if m.omzet else 0) }}%)</span>
             {% endif %}
