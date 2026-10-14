@@ -93,8 +93,11 @@
         <div class="text-uppercase small text-white-50 mb-2">Diagnosa Singkat</div>
         {% for d in diagnosa %}
         <div class="d-flex align-items-start gap-2 {{ 'mb-2' if not loop.last }}">
-          <span class="badge rounded-circle {{ 'bg-danger' if d.level == 'danger' else ('bg-warning text-dark' if d.level == 'warning' else 'bg-success') }}" style="width:22px;height:22px;">{{ loop.index }}</span>
-          <div class="small">{{ d.pesan }}</div>
+          <span class="badge rounded-circle {{ 'bg-danger' if d.level == 'danger' else ('bg-warning text-dark' if d.level == 'warning' else 'bg-success') }}" style="width:22px;height:22px;flex-shrink:0;">{{ loop.index }}</span>
+          <div class="small">
+            <div>{{ d.pesan }}</div>
+            {% if d.saran %}<div class="text-white-50 mt-1">&#128161; {{ d.saran }}</div>{% endif %}
+          </div>
         </div>
         {% endfor %}
       </div>

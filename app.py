@@ -9205,16 +9205,36 @@ def create_app():
 
         diagnosa = []
         if ad_ratio > 10:
-            diagnosa.append({"level": "danger", "pesan": f"Rasio biaya iklan {ad_ratio:.0f}% terlalu tinggi terhadap omzet"})
+            diagnosa.append({
+                "level": "danger", "pesan": f"Rasio biaya iklan {ad_ratio:.0f}% terlalu tinggi terhadap omzet",
+                "saran": "Matikan/turunkan budget campaign yang ROAS-nya rendah, fokuskan iklan ke produk margin "
+                         "tertinggi (lihat Insight & Rekomendasi), dan cek lagi campaign yang bidding-nya auto -- "
+                         "biasanya situ yang paling boros.",
+            })
         if not hpp_lengkap and r["jumlah_produk"] > 0:
             kurang = r["jumlah_produk"] - r["jumlah_produk_ada_hpp"]
-            diagnosa.append({"level": "warning", "pesan": f"{kurang} produk belum ada HPP — profitnya belum ikut terhitung"})
+            diagnosa.append({
+                "level": "warning", "pesan": f"{kurang} produk belum ada HPP — profitnya belum ikut terhitung",
+                "saran": "Lengkapi HPP-nya di menu Data Produk & HPP supaya Profit Real & Health Score terhitung penuh.",
+            })
         if hpp_lengkap and status_profit == "rugi":
-            diagnosa.append({"level": "danger", "pesan": "Profit real minus bulan ini — segera evaluasi harga jual & biaya"})
+            diagnosa.append({
+                "level": "danger", "pesan": "Profit real minus bulan ini — segera evaluasi harga jual & biaya",
+                "saran": "Cek produk yang rugi di Insight & Rekomendasi, lalu naikkan harga jual atau cari HPP lebih "
+                         "murah untuk produk itu. Kalau biaya iklan ikut jadi penyebab, kurangi dulu sementara "
+                         "sampai margin membaik.",
+            })
         elif hpp_lengkap and status_profit == "tipis":
-            diagnosa.append({"level": "warning", "pesan": f"Margin real cuma {r['margin_real']:.1f}% dari sales — tergolong tipis"})
+            diagnosa.append({
+                "level": "warning", "pesan": f"Margin real cuma {r['margin_real']:.1f}% dari sales — tergolong tipis",
+                "saran": "Cek produk bermargin tipis di Insight & Rekomendasi, kurangi diskon/voucher yang kurang "
+                         "efektif, dan alihkan budget iklan ke produk yang marginnya lebih sehat.",
+            })
         if not diagnosa and r["jumlah_produk"] > 0:
-            diagnosa.append({"level": "success", "pesan": "Tidak ada masalah besar terdeteksi pada periode ini"})
+            diagnosa.append({
+                "level": "success", "pesan": "Tidak ada masalah besar terdeteksi pada periode ini",
+                "saran": "Pertahankan -- pantau terus rasio biaya iklan & margin tiap bulan supaya tetap sehat.",
+            })
 
         produk_ada_income = [p for p in data["produk"] if p["ada_income"]]
         produk_ada_hpp = [p for p in produk_ada_income if p["ada_hpp"]]
