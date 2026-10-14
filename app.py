@@ -1634,6 +1634,66 @@ def parse_lazada_topup(headers, rows):
     return per_tanggal
 
 
+def parse_shopee_ringkasan_cpc(file_storage):
+    """Baca laporan 'Semua Laporan Iklan CPC - Shopee Indonesia' -- ini ringkasan per
+    CAMPAIGN untuk 1 periode penuh (ada baris metadata 'Periode,01/06/2026 - 30/06/2026'
+    di awal file), BUKAN laporan performa harian seperti 'Campaign_overview_data...'.
+    Kolom 'Tanggal Mulai' di tiap baris itu tanggal campaign-nya PERTAMA KALI DIBUAT/
+    jalan (bisa jauh di masa lalu), BUKAN tanggal biaya keluar -- kalau dipakai sebagai
+    tanggal biaya (lewat deteksi kolom otomatis biasa), biaya iklan jadi tercatat di
+    tanggal yang salah total. Laporan ini memang cuma kasih total per periode (bukan
+    rincian harian), jadi semua baris campaign dijumlahkan jadi 1 angka Biaya, dicatat
+    di tanggal AWAL periode dari baris 'Periode' itu. Return (None, None) kalau file-nya
+    bukan format ini sama sekali (biar bisa dicoba parser lain), atau (None, pesan_error)
+    kalau formatnya cocok tapi ada yang tidak lengkap."""
+    filename = file_storage.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    raw = file_storage.read()
+    if ext == "csv":
+        text = raw.decode("utf-8-sig", errors="ignore")
+        semua = _parse_csv_delimiter_terbaik(text)
+    elif ext in ("xlsx", "xlsm"):
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+        except Exception:
+            return None, "File Excel tidak bisa dibaca. Pastikan file tidak rusak."
+        ws = wb.active
+        semua = [list(row) for row in ws.iter_rows(values_only=True) if any(c not in (None, "") for c in row)]
+    else:
+        return None, None
+
+    tanggal_awal_periode = None
+    idx_header = None
+    for row in semua:
+        if not row:
+            continue
+        label = str(row[0] or "").strip().lower()
+        if label == "periode" and len(row) > 1 and not tanggal_awal_periode:
+            awal = str(row[1] or "").split("-")[0].strip()
+            tanggal_awal_periode = parse_tanggal_iklan(awal)
+        sel = {str(c or "").strip().lower() for c in row}
+        if {"nama iklan", "kode produk", "tanggal mulai", "biaya"}.issubset(sel):
+            idx_header = semua.index(row)
+            break
+    if idx_header is None:
+        return None, None
+    if not tanggal_awal_periode:
+        return None, "Ditemukan laporan 'Semua Laporan Iklan CPC', tapi baris 'Periode' tidak ketemu/tidak bisa dibaca."
+
+    headers_lower = [str(h or "").strip().lower() for h in semua[idx_header]]
+    idx = {h: i for i, h in enumerate(headers_lower)}
+    if "biaya" not in idx:
+        return None, "Ditemukan laporan 'Semua Laporan Iklan CPC', tapi kolom 'Biaya' tidak ketemu."
+
+    total_biaya = 0
+    for row in semua[idx_header + 1:]:
+        if len(row) <= idx["biaya"]:
+            continue
+        total_biaya += parse_angka_iklan(row[idx["biaya"]])
+
+    return {tanggal_awal_periode: total_biaya}, None
+
+
 def baca_file_analitik_harian(file_storage):
     """Baca file export 'Shop Analytics - Key metrics' -- laporan ringkasan harian
     (GMV, Pesanan, Produk terjual, Pendapatan Bruto) dari dashboard Analitik, dipakai
@@ -8399,6 +8459,38 @@ def create_app():
                         "ok": True, "nama": file_analitik_harian.filename, "jumlah": len(agregat_a),
                         "marketplace": "Tokopedia", "preview_items": preview_items_a,
                     }
+
+            if file_iklan and file_iklan.filename:
+                agregat_shopee_cpc, error_shopee_cpc = parse_shopee_ringkasan_cpc(file_iklan)
+                if error_shopee_cpc:
+                    hasil["iklan"] = {"ok": False, "nama": file_iklan.filename, "pesan": error_shopee_cpc}
+                    file_iklan = None
+                elif agregat_shopee_cpc is not None:
+                    nama_file_iklan_aman = secure_filename(file_iklan.filename)
+                    waktu_impor = now_wib()
+                    for tanggal, biaya in agregat_shopee_cpc.items():
+                        existing = IklanMarketplace.query.filter_by(marketplace="Shopee", tanggal=tanggal).first()
+                        if not existing:
+                            existing = IklanMarketplace(marketplace="Shopee", tanggal=tanggal)
+                            db.session.add(existing)
+                        existing.biaya = round(biaya)
+                        existing.sumber_file = nama_file_iklan_aman
+                        existing.dibuat_pada = waktu_impor
+                    hasil["iklan"] = {
+                        "ok": True, "nama": file_iklan.filename, "jumlah": len(agregat_shopee_cpc),
+                        "marketplace": "Shopee", "preview_items": [
+                            {"tanggal": t, "biaya": b, "platform": "Shopee (total 1 periode)"}
+                            for t, b in agregat_shopee_cpc.items()
+                        ],
+                        "format_ringkas": True,
+                        "pesan_tambahan": (
+                            "Laporan ini cuma kasih total biaya per PERIODE (bukan rincian harian), "
+                            "jadi semua biaya dicatat di tanggal awal periode laporannya."
+                        ),
+                    }
+                    file_iklan = None
+                else:
+                    file_iklan.seek(0)
 
             if file_iklan and file_iklan.filename:
                 headers_i, rows_i, _idx_header, error_i = baca_file_iklan(file_iklan)
