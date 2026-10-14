@@ -1154,6 +1154,7 @@ def hitung_profit_agregat(bulan=None):
     agregat_produk = {}
     tren_harian = {}
     agregat_marketplace = {}
+    omzet_ada_income = 0
 
     for kunci_order, items in by_order.items():
         inc = income_map.get(kunci_order)
@@ -1173,6 +1174,11 @@ def hitung_profit_agregat(bulan=None):
         if total_income_order is not None:
             mdata["income"] += total_income_order
             mdata["ada_income"] = True
+            # Cuma omzet dari pesanan yang SUDAH ada laporan Income-nya yang dihitung
+            # sebagai basis Total Potongan -- omzet dari pesanan yang Income-nya belum
+            # diupload (mis. Lazada baru ada laporan Order) jangan ikut dianggap
+            # "potongan 100%", itu cuma data yang belum lengkap, bukan potongan beneran.
+            omzet_ada_income += total_subtotal_order
 
         for it in items:
             if total_income_order is None:
@@ -1313,7 +1319,7 @@ def hitung_profit_agregat(bulan=None):
         "biaya_iklan_per_marketplace": biaya_iklan_per_marketplace,
     }
     ringkasan["margin"] = (ringkasan["total_profit"] / ringkasan["total_omzet"] * 100) if ringkasan["total_omzet"] else 0
-    ringkasan["total_potongan"] = ringkasan["total_omzet"] - ringkasan["total_income"]
+    ringkasan["total_potongan"] = omzet_ada_income - ringkasan["total_income"]
     ringkasan["total_profit_real"] = ringkasan["total_income"] - ringkasan["total_hpp"] - total_biaya_iklan
     ringkasan["margin_real"] = (
         ringkasan["total_profit_real"] / ringkasan["total_omzet"] * 100
