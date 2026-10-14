@@ -9325,6 +9325,59 @@ def create_app():
         flash(f"Biaya Iklan {marketplace} bulan {bulan} berhasil disimpan manual: {rupiah(biaya_val)}.", "success")
         return redirect(url_for("profit_dashboard", bulan=bulan))
 
+    @app.route("/marketing/profit/pesanan-manual", methods=["POST"])
+    @marketing_required
+    def profit_pesanan_manual():
+        """Input manual Pesanan/Sales/Penghasilan untuk marketplace yang TIDAK punya
+        laporan Order/Income per-produk (Tokopedia, Blibli) -- lihat RingkasanHarianMarketplace.
+        Sama seperti input manual Biaya Iklan, angka ini dianggap TOTAL 1 bulan penuh:
+        disimpan 1 baris di tanggal 1, baris lain di marketplace+bulan yang sama dihapus
+        dulu supaya tidak dobel-hitung kalau sebelumnya sudah ada upload file."""
+        bulan = (request.form.get("bulan") or "").strip()
+        marketplace = (request.form.get("marketplace") or "").strip()
+
+        if not bulan or "-" not in bulan:
+            flash("Pilih periode bulan tertentu dulu (bukan 'Semua Bulan') sebelum input manual.", "danger")
+            return redirect(url_for("profit_dashboard"))
+        if marketplace not in ("Tokopedia", "Blibli"):
+            flash("Input manual pesanan cuma untuk Tokopedia/Blibli (marketplace yang belum ada laporan Order/Income).", "danger")
+            return redirect(url_for("profit_dashboard", bulan=bulan))
+        try:
+            tahun_i, bulan_i = (int(x) for x in bulan.split("-"))
+            tanggal_target = date(tahun_i, bulan_i, 1)
+            tanggal_akhir_bulan = date(tahun_i, bulan_i, calendar.monthrange(tahun_i, bulan_i)[1])
+        except ValueError:
+            flash("Periode bulan tidak valid.", "danger")
+            return redirect(url_for("profit_dashboard"))
+
+        qty_val = round(parse_angka_iklan(request.form.get("qty") or "0"))
+        omzet_val = round(parse_angka_iklan(request.form.get("omzet") or "0"))
+        income_val = round(parse_angka_iklan(request.form.get("income") or "0"))
+        jumlah_pesanan_val = round(parse_angka_iklan(request.form.get("jumlah_pesanan") or "0"))
+        if min(qty_val, omzet_val, income_val, jumlah_pesanan_val) < 0:
+            flash("Angka tidak boleh minus.", "danger")
+            return redirect(url_for("profit_dashboard", bulan=bulan))
+
+        RingkasanHarianMarketplace.query.filter(
+            RingkasanHarianMarketplace.marketplace == marketplace,
+            RingkasanHarianMarketplace.tanggal >= tanggal_target,
+            RingkasanHarianMarketplace.tanggal <= tanggal_akhir_bulan,
+            RingkasanHarianMarketplace.tanggal != tanggal_target,
+        ).delete()
+        existing = RingkasanHarianMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal_target).first()
+        if not existing:
+            existing = RingkasanHarianMarketplace(marketplace=marketplace, tanggal=tanggal_target)
+            db.session.add(existing)
+        existing.qty = qty_val
+        existing.omzet = omzet_val
+        existing.income = income_val
+        existing.jumlah_pesanan = jumlah_pesanan_val
+        existing.sumber_file = "Input manual"
+        existing.dibuat_pada = now_wib()
+        db.session.commit()
+        flash(f"Pesanan {marketplace} bulan {bulan} berhasil disimpan manual.", "success")
+        return redirect(url_for("profit_dashboard", bulan=bulan))
+
     @app.route("/marketing/profit/dashboard/export")
     @marketing_required
     def profit_dashboard_export():

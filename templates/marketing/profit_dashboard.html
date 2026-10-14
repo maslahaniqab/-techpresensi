@@ -110,9 +110,14 @@
           <div class="fs-4 fw-bold">{{ ringkasan.total_qty_gabungan }} pcs</div>
           <span class="badge bg-light text-dark mb-2">{{ ringkasan.jumlah_pesanan_gabungan }} pesanan</span>
           {% for m in ringkasan.per_marketplace %}
-          <div class="small text-muted d-flex justify-content-between">
+          <div class="small text-muted d-flex justify-content-between align-items-center">
             <span>{{ m.marketplace }}</span>
-            <span class="{{ 'text-danger fw-semibold' if not m.qty }}">{{ m.qty }} pcs{% if not m.qty %} (belum ada data){% endif %}</span>
+            <span>
+              <span class="{{ 'text-danger fw-semibold' if not m.qty }}">{{ m.qty }} pcs{% if not m.qty %} (belum ada data){% endif %}</span>
+              {% if m.marketplace in ['Tokopedia', 'Blibli'] %}
+              <a href="#" class="small ms-1 {{ 'disabled text-muted' if not bulan_filter }}" title="{{ 'Pilih periode bulan dulu di atas untuk bisa input manual' if not bulan_filter else 'Input manual Pesanan ' + m.marketplace }}" {% if bulan_filter %}onclick="bukaEditPesanan('{{ m.marketplace }}', {{ m.qty }}, {{ m.omzet }}, {{ m.income }}, {{ m.jumlah_pesanan }}); return false;"{% else %}onclick="return false;"{% endif %}>&#9998;</a>
+              {% endif %}
+            </span>
           </div>
           {% endfor %}
         </div>
@@ -123,9 +128,14 @@
           <div class="fs-4 fw-bold">{{ ringkasan.total_omzet_gabungan | rupiah }}</div>
           <span class="badge bg-light text-dark mb-2">Subtotal Pesanan</span>
           {% for m in ringkasan.per_marketplace %}
-          <div class="small text-muted d-flex justify-content-between">
+          <div class="small text-muted d-flex justify-content-between align-items-center">
             <span>{{ m.marketplace }}</span>
-            <span class="{{ 'text-danger fw-semibold' if not m.omzet }}">{{ m.omzet | rupiah }}{% if not m.omzet %} (belum ada data){% endif %}</span>
+            <span>
+              <span class="{{ 'text-danger fw-semibold' if not m.omzet }}">{{ m.omzet | rupiah }}{% if not m.omzet %} (belum ada data){% endif %}</span>
+              {% if m.marketplace in ['Tokopedia', 'Blibli'] %}
+              <a href="#" class="small ms-1 {{ 'disabled text-muted' if not bulan_filter }}" title="{{ 'Pilih periode bulan dulu di atas untuk bisa input manual' if not bulan_filter else 'Input manual Pesanan ' + m.marketplace }}" {% if bulan_filter %}onclick="bukaEditPesanan('{{ m.marketplace }}', {{ m.qty }}, {{ m.omzet }}, {{ m.income }}, {{ m.jumlah_pesanan }}); return false;"{% else %}onclick="return false;"{% endif %}>&#9998;</a>
+              {% endif %}
+            </span>
           </div>
           {% endfor %}
         </div>
@@ -155,9 +165,14 @@
           <div class="fs-4 fw-bold text-success">{{ ringkasan.total_income_gabungan | rupiah }}</div>
           <span class="badge bg-success-subtle text-success-emphasis mb-2">Final dari Marketplace</span>
           {% for m in ringkasan.per_marketplace %}
-          <div class="small text-muted d-flex justify-content-between">
+          <div class="small text-muted d-flex justify-content-between align-items-center">
             <span>{{ m.marketplace }}</span>
-            <span class="{{ 'text-danger fw-semibold' if not m.income }}">{{ m.income | rupiah }}{% if not m.income %} (belum ada data){% endif %}</span>
+            <span>
+              <span class="{{ 'text-danger fw-semibold' if not m.income }}">{{ m.income | rupiah }}{% if not m.income %} (belum ada data){% endif %}</span>
+              {% if m.marketplace in ['Tokopedia', 'Blibli'] %}
+              <a href="#" class="small ms-1 {{ 'disabled text-muted' if not bulan_filter }}" title="{{ 'Pilih periode bulan dulu di atas untuk bisa input manual' if not bulan_filter else 'Input manual Pesanan ' + m.marketplace }}" {% if bulan_filter %}onclick="bukaEditPesanan('{{ m.marketplace }}', {{ m.qty }}, {{ m.omzet }}, {{ m.income }}, {{ m.jumlah_pesanan }}); return false;"{% else %}onclick="return false;"{% endif %}>&#9998;</a>
+              {% endif %}
+            </span>
           </div>
           {% endfor %}
         </div>
@@ -395,6 +410,55 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalPesananManual" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('profit_pesanan_manual') }}">
+        <div class="modal-header">
+          <h6 class="modal-title mb-0">Input Manual Pesanan</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">
+            Khusus marketplace yang belum ada laporan Order/Income (Tokopedia/Blibli). Angka ini
+            akan menimpa data pesanan marketplace &amp; periode ini yang sudah tercatat (kalau ada).
+          </p>
+          <input type="hidden" name="marketplace" id="inputPesananMarketplace">
+          <input type="hidden" name="bulan" value="{{ bulan_filter }}">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Marketplace</label>
+            <input type="text" class="form-control form-control-sm" id="inputPesananMarketplaceLabel" disabled>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Periode</label>
+            <input type="text" class="form-control form-control-sm" value="{{ bulan_filter }}" disabled>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Jumlah Pesanan</label>
+            <input type="number" min="0" step="1" name="jumlah_pesanan" id="inputPesananJumlah" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Total Penjualan (pcs)</label>
+            <input type="number" min="0" step="1" name="qty" id="inputPesananQty" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Total Sales (Rp)</label>
+            <input type="number" min="0" step="1" name="omzet" id="inputPesananOmzet" class="form-control form-control-sm" required>
+          </div>
+          <div>
+            <label class="form-label small mb-1">Total Penghasilan (Rp)</label>
+            <input type="number" min="0" step="1" name="income" id="inputPesananIncome" class="form-control form-control-sm" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-sm btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -420,6 +484,15 @@ function bukaEditBiayaIklan(marketplace, biayaSekarang) {
   document.getElementById('inputManualMarketplaceLabel').value = marketplace;
   document.getElementById('inputManualBiaya').value = biayaSekarang;
   new bootstrap.Modal(document.getElementById('modalBiayaIklanManual')).show();
+}
+function bukaEditPesanan(marketplace, qty, omzet, income, jumlahPesanan) {
+  document.getElementById('inputPesananMarketplace').value = marketplace;
+  document.getElementById('inputPesananMarketplaceLabel').value = marketplace;
+  document.getElementById('inputPesananJumlah').value = jumlahPesanan;
+  document.getElementById('inputPesananQty').value = qty;
+  document.getElementById('inputPesananOmzet').value = omzet;
+  document.getElementById('inputPesananIncome').value = income;
+  new bootstrap.Modal(document.getElementById('modalPesananManual')).show();
 }
 </script>
 {% endblock %}
