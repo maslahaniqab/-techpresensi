@@ -806,6 +806,9 @@ def parse_order_shopee(headers, rows_data):
             "subtotal_kotor": round(
                 parse_angka_iklan(ambil(row, "Harga Awal")) * parse_angka_iklan(ambil(row, "Jumlah"))
             ),
+            "metode_pembayaran": str(ambil(row, "Metode Pembayaran") or "").strip()[:64],
+            "alasan_pembatalan": str(ambil(row, "Alasan Pembatalan") or "").strip()[:256],
+            "status_pengembalian": str(ambil(row, "Status Pembatalan/ Pengembalian") or "").strip()[:64],
         })
     return hasil
 
@@ -2316,6 +2319,9 @@ def create_app():
             ("purchase_order", "jenis", "VARCHAR(16) NOT NULL DEFAULT 'Bahan Sendiri'"),
             ("purchase_order", "permohonan_id", "INTEGER"),
             ("permohonan_barang_item", "po_id", "INTEGER"),
+            ("pesanan_marketplace", "metode_pembayaran", "VARCHAR(64)"),
+            ("pesanan_marketplace", "alasan_pembatalan", "VARCHAR(256)"),
+            ("pesanan_marketplace", "status_pengembalian", "VARCHAR(64)"),
         ]:
             ada = {c["name"] for c in db.inspect(db.engine).get_columns(tabel)}
             if kolom not in ada:
@@ -8277,6 +8283,9 @@ def create_app():
             existing.status_pesanan = item["status_pesanan"]
             existing.jumlah = item["jumlah"]
             existing.subtotal = item["subtotal"]
+            existing.metode_pembayaran = item.get("metode_pembayaran") or None
+            existing.alasan_pembatalan = item.get("alasan_pembatalan") or None
+            existing.status_pengembalian = item.get("status_pengembalian") or None
             existing.sumber_file = nama_file_aman
             existing.dibuat_pada = waktu_impor
         if jumlah_dilewati:

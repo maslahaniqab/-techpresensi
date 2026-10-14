@@ -773,6 +773,9 @@ class PesananMarketplace(db.Model):
     sku = db.Column(db.String(128), default="")
     jumlah = db.Column(db.Integer, default=0)
     subtotal = db.Column(db.Integer, default=0)  # nilai jual baris ini (sebelum dipotong biaya platform)
+    metode_pembayaran = db.Column(db.String(64))  # mis. "COD (Bayar di Tempat)", buat telusuri kasus retur/batal
+    alasan_pembatalan = db.Column(db.String(256))  # alasan lengkap dari laporan Order, kalau pesanan batal
+    status_pengembalian = db.Column(db.String(64))  # status retur/refund dari laporan Order, kalau ada
     sumber_file = db.Column(db.String(256))
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
 

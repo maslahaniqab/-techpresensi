@@ -133,6 +133,7 @@
           <th>Produk</th>
           <th class="text-end">Qty</th>
           <th class="text-end">Subtotal</th>
+          <th>Metode Bayar</th>
         </tr>
       </thead>
       <tbody>
@@ -142,12 +143,14 @@
           <td class="small">{{ it.tanggal_pesanan.strftime("%d/%m/%Y") if it.tanggal_pesanan else "-" }}</td>
           <td>
             {% if it.status_pesanan in ('Selesai','Selesai Pesanan') %}<span class="badge bg-success-subtle text-success-emphasis">{{ it.status_pesanan }}</span>
-            {% elif it.status_pesanan in ('Batal','Dibatalkan','Cancelled','Cancel') %}<span class="badge bg-danger-subtle text-danger-emphasis">{{ it.status_pesanan }}</span>
+            {% elif it.status_pesanan in ('Batal','Dibatalkan','Cancelled','Cancel') %}<span class="badge bg-danger-subtle text-danger-emphasis" {% if it.alasan_pembatalan %}title="{{ it.alasan_pembatalan }}"{% endif %}>{{ it.status_pesanan }}</span>
+            {% if it.alasan_pembatalan %}<div class="text-muted" style="font-size: .7rem;">{{ it.alasan_pembatalan }}</div>{% endif %}
             {% else %}<span class="badge bg-secondary-subtle text-secondary-emphasis">{{ it.status_pesanan }}</span>{% endif %}
           </td>
           <td class="small">{{ it.nama_produk }}</td>
           <td class="text-end">{{ it.jumlah }}</td>
           <td class="text-end">{{ it.subtotal | rupiah }}</td>
+          <td class="small">{{ it.metode_pembayaran or '-' }}</td>
         </tr>
         {% endfor %}
       </tbody>
