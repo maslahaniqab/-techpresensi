@@ -107,8 +107,8 @@
       <div class="col-md-6 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Penjualan</div>
-          <div class="fs-4 fw-bold">{{ ringkasan.total_qty }} pcs</div>
-          <span class="badge bg-light text-dark mb-2">{{ ringkasan.jumlah_pesanan }} pesanan</span>
+          <div class="fs-4 fw-bold">{{ ringkasan.total_qty_gabungan }} pcs</div>
+          <span class="badge bg-light text-dark mb-2">{{ ringkasan.jumlah_pesanan_gabungan }} pesanan</span>
           {% for m in ringkasan.per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
             <span>{{ m.marketplace }}</span>
@@ -120,7 +120,7 @@
       <div class="col-md-6 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Sales</div>
-          <div class="fs-4 fw-bold">{{ ringkasan.total_omzet | rupiah }}</div>
+          <div class="fs-4 fw-bold">{{ ringkasan.total_omzet_gabungan | rupiah }}</div>
           <span class="badge bg-light text-dark mb-2">Subtotal Pesanan</span>
           {% for m in ringkasan.per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
@@ -133,8 +133,8 @@
       <div class="col-md-6 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Potongan</div>
-          <div class="fs-4 fw-bold text-danger">{{ ringkasan.total_potongan | rupiah }}</div>
-          <span class="badge bg-danger-subtle text-danger-emphasis mb-2">{{ '%.1f'|format((ringkasan.total_potongan / ringkasan.total_omzet * 100) if ringkasan.total_omzet else 0) }}% dari sales</span>
+          <div class="fs-4 fw-bold text-danger">{{ ringkasan.total_potongan_gabungan | rupiah }}</div>
+          <span class="badge bg-danger-subtle text-danger-emphasis mb-2">{{ '%.1f'|format((ringkasan.total_potongan_gabungan / ringkasan.total_omzet_gabungan * 100) if ringkasan.total_omzet_gabungan else 0) }}% dari sales</span>
           {% for m in ringkasan.per_marketplace | sort(attribute='potongan', reverse=true) %}
           <div class="small text-muted d-flex justify-content-between">
             <span>{{ m.marketplace }}</span>
@@ -152,7 +152,7 @@
       <div class="col-md-6 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Total Penghasilan</div>
-          <div class="fs-4 fw-bold text-success">{{ ringkasan.total_income | rupiah }}</div>
+          <div class="fs-4 fw-bold text-success">{{ ringkasan.total_income_gabungan | rupiah }}</div>
           <span class="badge bg-success-subtle text-success-emphasis mb-2">Final dari Marketplace</span>
           {% for m in ringkasan.per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
@@ -165,8 +165,8 @@
       <div class="col-md-6 col-6">
         <div class="card p-3 h-100">
           <div class="text-muted small text-uppercase">Biaya Iklan</div>
-          <div class="fs-4 fw-bold">{{ ringkasan.total_biaya_iklan | rupiah }}</div>
-          <span class="badge bg-light text-dark mb-2">{{ '%.1f'|format(ad_ratio) }}% dari sales</span>
+          <div class="fs-4 fw-bold">{{ ringkasan.total_biaya_iklan_gabungan | rupiah }}</div>
+          <span class="badge bg-light text-dark mb-2">{{ '%.1f'|format((ringkasan.total_biaya_iklan_gabungan / ringkasan.total_omzet_gabungan * 100) if ringkasan.total_omzet_gabungan else 0) }}% dari sales</span>
           {% for m in ringkasan.biaya_iklan_per_marketplace %}
           <div class="small text-muted d-flex justify-content-between">
             <span>{{ m.marketplace }}</span>

@@ -1111,6 +1111,8 @@ def hitung_profit_agregat(bulan=None):
             "total_biaya_lainnya": 0, "total_biaya_iklan": 0, "total_biaya_iklan_marketplace": 0,
             "total_biaya_iklan_meta": 0, "total_profit_real": 0, "margin_real": 0,
             "per_marketplace": [], "biaya_iklan_per_marketplace": [],
+            "total_qty_gabungan": 0, "jumlah_pesanan_gabungan": 0, "total_omzet_gabungan": 0,
+            "total_income_gabungan": 0, "total_potongan_gabungan": 0, "total_biaya_iklan_gabungan": 0,
         },
     }
     if not item_list:
@@ -1324,6 +1326,24 @@ def hitung_profit_agregat(bulan=None):
     ringkasan["margin_real"] = (
         ringkasan["total_profit_real"] / ringkasan["total_omzet"] * 100
     ) if ringkasan["total_omzet"] else 0
+
+    # Angka GABUNGAN (termasuk marketplace yang cuma punya ringkasan harian, mis.
+    # Tokopedia, yang tidak ikut masuk total_omzet/total_income/dst di atas karena tidak
+    # ada data per produknya) -- dipakai KHUSUS buat kartu Total Penjualan/Sales/Potongan/
+    # Penghasilan/Biaya Iklan di Dashboard Profit, supaya angka besar di atas benar-benar
+    # sama dengan hasil jumlah rincian per marketplace di bawahnya (sebelumnya beda,
+    # karena breakdown-nya include Tokopedia tapi totalnya tidak -- jadi kelihatan
+    # "tidak terkumulatif"). Profit Real/Margin/Health Score TETAP pakai angka yang hanya
+    # HPP-matched di atas (total_omzet dkk), bukan yang gabungan ini, karena Tokopedia
+    # tidak bisa ikut dihitung profitnya (tidak ada data SKU/HPP-nya).
+    ringkasan["total_qty_gabungan"] = sum(m["qty"] for m in ringkasan["per_marketplace"])
+    ringkasan["jumlah_pesanan_gabungan"] = sum(m["jumlah_pesanan"] for m in ringkasan["per_marketplace"])
+    ringkasan["total_omzet_gabungan"] = sum(m["omzet"] for m in ringkasan["per_marketplace"])
+    ringkasan["total_income_gabungan"] = sum(m["income"] for m in ringkasan["per_marketplace"])
+    ringkasan["total_potongan_gabungan"] = sum(m["potongan"] for m in ringkasan["per_marketplace"])
+    ringkasan["total_biaya_iklan_gabungan"] = (
+        sum(m["biaya"] for m in biaya_iklan_per_marketplace) + total_biaya_iklan_meta
+    )
 
     tren = [tren_harian[t] for t in sorted(tren_harian.keys())]
     return {"produk": daftar_produk, "tren": tren, "ringkasan": ringkasan}
