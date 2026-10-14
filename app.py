@@ -9271,9 +9271,10 @@ def create_app():
     def profit_biaya_iklan_manual():
         """Input manual Biaya Iklan untuk marketplace & bulan tertentu, dipakai kalau
         belum ada laporan yang bisa diupload (mis. belum sempat download dari Ads
-        Center). Disimpan sebagai 1 baris di tanggal 1 bulan itu -- sama seperti cara
-        laporan ringkasan per-periode (mis. laporan CPC Shopee) disimpan, karena memang
-        cuma ada 1 angka total per bulan, bukan rincian harian."""
+        Center). Angka ini dianggap TOTAL untuk 1 bulan penuh -- disimpan sebagai 1
+        baris di tanggal 1 bulan itu, dan baris-baris LAIN di marketplace+bulan yang
+        sama (mis. dari upload file sebelumnya) dihapus dulu, supaya tidak dobel-hitung
+        (angka manual + angka dari file jadi ketambahan, bukan menggantikan)."""
         bulan = (request.form.get("bulan") or "").strip()
         marketplace = (request.form.get("marketplace") or "").strip()
         biaya_raw = (request.form.get("biaya") or "").strip()
@@ -9284,6 +9285,7 @@ def create_app():
         try:
             tahun_i, bulan_i = (int(x) for x in bulan.split("-"))
             tanggal_target = date(tahun_i, bulan_i, 1)
+            tanggal_akhir_bulan = date(tahun_i, bulan_i, calendar.monthrange(tahun_i, bulan_i)[1])
         except ValueError:
             flash("Periode bulan tidak valid.", "danger")
             return redirect(url_for("profit_dashboard"))
@@ -9294,11 +9296,20 @@ def create_app():
             return redirect(url_for("profit_dashboard", bulan=bulan))
 
         if marketplace == "Meta":
+            IklanMeta.query.filter(
+                IklanMeta.tanggal >= tanggal_target, IklanMeta.tanggal <= tanggal_akhir_bulan,
+                IklanMeta.tanggal != tanggal_target,
+            ).delete()
             existing = IklanMeta.query.filter_by(tanggal=tanggal_target).first()
             if not existing:
                 existing = IklanMeta(tanggal=tanggal_target)
                 db.session.add(existing)
         elif marketplace in MARKETPLACE_LIST:
+            IklanMarketplace.query.filter(
+                IklanMarketplace.marketplace == marketplace,
+                IklanMarketplace.tanggal >= tanggal_target, IklanMarketplace.tanggal <= tanggal_akhir_bulan,
+                IklanMarketplace.tanggal != tanggal_target,
+            ).delete()
             existing = IklanMarketplace.query.filter_by(marketplace=marketplace, tanggal=tanggal_target).first()
             if not existing:
                 existing = IklanMarketplace(marketplace=marketplace, tanggal=tanggal_target)
