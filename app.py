@@ -6662,10 +6662,10 @@ def create_app():
         }
 
     def _nilai_item(items, label):
-        for l, v in items:
-            if l == label:
-                return v
-        return 0
+        # Bisa ada beberapa baris Input manual dengan label/kategori yang SAMA (mis. input
+        # gaji per-karyawan beberapa kali dengan kategori "Beban Gaji ... Tambahan Manual"
+        # yang sama) -- harus dijumlah semua, bukan cuma ambil baris pertama yang ketemu.
+        return sum(v for l, v in items if l == label)
 
     @app.route("/keuangan/laba-rugi")
     @modul_required("laba_rugi")
