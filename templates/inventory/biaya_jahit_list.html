@@ -2,6 +2,17 @@
 {% block title %}Biaya Produksi (Menjahit){% endblock %}
 {% block content %}
 
+<style>
+  /* Centang visual di dropdown pilih-banyak-produk (class ditambah lewat JS ke
+     wrapper .choices, karena Choices.js membungkus <select> jadi anaknya). */
+  .choices-multi-ceklis .choices__item--selectable::before {
+    content: "\2610"; margin-right: 8px; color: #6c757d;
+  }
+  .choices-multi-ceklis .choices__item--selectable.is-selected::before {
+    content: "\2611"; color: #0d6efd;
+  }
+</style>
+
 <div class="mb-3">
   <h3 class="mb-1">Biaya Produksi (Menjahit)</h3>
   <p class="text-muted small mb-0">
@@ -15,9 +26,8 @@
   <div class="fw-semibold small mb-2">+ Tambah / Update Tarif</div>
   <form method="post" class="row g-2 align-items-end">
     <div class="col-md-5 col-6">
-      <label class="form-label small">Produk</label>
-      <select name="produk_id" class="form-select form-select-sm produk-search" required>
-        <option value="">Pilih produk&hellip;</option>
+      <label class="form-label small">Produk <span class="text-muted">(boleh centang beberapa sekaligus)</span></label>
+      <select name="produk_id[]" id="selProdukBiayaJahit" class="form-select form-select-sm" multiple required>
         {% for p in daftar_produk %}
         <option value="{{ p.id }}">{{ p.nama_produk }}{% if p.sku %} — SKU: {{ p.sku }}{% endif %}</option>
         {% endfor %}
@@ -116,4 +126,22 @@
   </table>
 </div>
 
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var sel = document.getElementById("selProdukBiayaJahit");
+  if (!sel || !window.Choices) return;
+  var instance = new Choices(sel, {
+    searchEnabled: true,
+    shouldSort: false,
+    removeItemButton: true,
+    renderSelectedChoices: "always",
+    placeholderValue: "Pilih produk...",
+    searchPlaceholderValue: "Ketik untuk cari...",
+    noResultsText: "Tidak ditemukan",
+    noChoicesText: "Tidak ada pilihan",
+    fuseOptions: { threshold: 0.3 },
+  });
+  instance.containerOuter.element.classList.add("choices-multi-ceklis");
+});
+</script>
 {% endblock %}

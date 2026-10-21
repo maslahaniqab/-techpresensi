@@ -3646,27 +3646,42 @@ def create_app():
     @modul_required("biaya_jahit")
     def biaya_jahit_list():
         if request.method == "POST":
-            produk_id = request.form.get("produk_id", type=int)
-            produk = db.session.get(Produk, produk_id) if produk_id else None
+            produk_ids = [i for i in request.form.getlist("produk_id[]", type=int) if i]
             vendor_id = request.form.get("vendor_id", type=int)
             vendor = db.session.get(Vendor, vendor_id) if vendor_id else None
             biaya = round(parse_angka_iklan(request.form.get("biaya_per_pcs")))
 
-            if not produk or biaya <= 0:
-                flash("Pilih Produk dan isi Biaya per Pcs (harus lebih dari 0).", "danger")
+            if not produk_ids or biaya <= 0:
+                flash("Pilih minimal 1 Produk dan isi Biaya per Pcs (harus lebih dari 0).", "danger")
                 return redirect(url_for("biaya_jahit_list"))
 
-            sudah_ada = BiayaJahit.query.filter_by(
-                produk_id=produk.id, vendor_id=vendor.id if vendor else None,
-            ).first()
-            if sudah_ada:
-                sudah_ada.biaya_per_pcs = biaya
-                pesan = f"Tarif jahit {produk.nama_produk}{' (' + vendor.nama_vendor + ')' if vendor else ' (default, semua vendor)'} diperbarui."
+            target_vendor = f" ({vendor.nama_vendor})" if vendor else " (default, semua vendor)"
+            if len(produk_ids) == 1:
+                produk = db.session.get(Produk, produk_ids[0])
+                if not produk:
+                    flash("Produk tidak ditemukan.", "danger")
+                    return redirect(url_for("biaya_jahit_list"))
+                sudah_ada = BiayaJahit.query.filter_by(produk_id=produk.id, vendor_id=vendor.id if vendor else None).first()
+                if sudah_ada:
+                    sudah_ada.biaya_per_pcs = biaya
+                    pesan = f"Tarif jahit {produk.nama_produk}{target_vendor} diperbarui."
+                else:
+                    db.session.add(BiayaJahit(produk_id=produk.id, vendor_id=vendor.id if vendor else None, biaya_per_pcs=biaya))
+                    pesan = f"Tarif jahit {produk.nama_produk}{target_vendor} disimpan."
             else:
-                db.session.add(BiayaJahit(
-                    produk_id=produk.id, vendor_id=vendor.id if vendor else None, biaya_per_pcs=biaya,
-                ))
-                pesan = f"Tarif jahit {produk.nama_produk}{' (' + vendor.nama_vendor + ')' if vendor else ' (default, semua vendor)'} disimpan."
+                jumlah_baru = jumlah_update = 0
+                for pid in produk_ids:
+                    if not db.session.get(Produk, pid):
+                        continue
+                    sudah_ada = BiayaJahit.query.filter_by(produk_id=pid, vendor_id=vendor.id if vendor else None).first()
+                    if sudah_ada:
+                        sudah_ada.biaya_per_pcs = biaya
+                        jumlah_update += 1
+                    else:
+                        db.session.add(BiayaJahit(produk_id=pid, vendor_id=vendor.id if vendor else None, biaya_per_pcs=biaya))
+                        jumlah_baru += 1
+                biaya_fmt = f"{biaya:,}".replace(",", ".")
+                pesan = f"Tarif jahit Rp {biaya_fmt}{target_vendor} diterapkan ke {len(produk_ids)} produk -- {jumlah_baru} baru, {jumlah_update} diperbarui."
             db.session.commit()
             flash(pesan, "success")
             return redirect(url_for("biaya_jahit_list"))
