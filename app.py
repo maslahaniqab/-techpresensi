@@ -4729,8 +4729,12 @@ def create_app():
         return f"https://wa.me/?text={quote(pesan)}"
 
     def teks_item_permohonan(p):
+        # it.produk bisa None kalau produknya sudah dihapus dari Data Produk setelah
+        # permohonan ini dibuat (data lama) -- jangan sampai bikin SELURUH halaman
+        # daftar permohonan crash gara-gara 1 baris begini, tampilkan nama fallback.
         return "\n".join(
-            f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}"
+            f"- {it.produk.nama_produk if it.produk else '[Produk sudah dihapus]'}"
+            + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}"
             for it in p.item_list
         )
 
@@ -4912,7 +4916,8 @@ def create_app():
             p.id: {
                 "nomor": p.nomor_permohonan,
                 "items": [
-                    {"id": it.id, "nama": it.produk.nama_produk, "warna": it.warna or "", "qty": it.qty,
+                    {"id": it.id, "nama": it.produk.nama_produk if it.produk else "[Produk sudah dihapus]",
+                     "warna": it.warna or "", "qty": it.qty,
                      "status": it.status, "centang": it.status in ("Menunggu", "Diproses"),
                      "po": it.po.nomor_po if it.po else ""}
                     for it in p.item_list
@@ -4994,7 +4999,8 @@ def create_app():
 
     def _kirim_wa_status_permohonan(p, status, catatan=None):
         daftar_teks = "\n".join(
-            f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in p.item_list
+            f"- {it.produk.nama_produk if it.produk else '[Produk sudah dihapus]'}"
+            + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in p.item_list
         )
         pesan = (
             f"*PERMOHONAN {p.nomor_permohonan} - {status.upper()}*\n"
@@ -5012,7 +5018,8 @@ def create_app():
 
     def _kirim_wa_permohonan_kembali(p, kembali, status_sisa, alasan):
         daftar_teks = "\n".join(
-            f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in kembali
+            f"- {it.produk.nama_produk if it.produk else '[Produk sudah dihapus]'}"
+            + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in kembali
         )
         pesan = (
             f"*PERMOHONAN {p.nomor_permohonan} - {status_sisa.upper()}*\n"
@@ -5064,7 +5071,8 @@ def create_app():
 
         if kembali and p.pemohon_id and not (current_user.role == "pegawai" and current_user.id == p.pemohon_id):
             daftar_teks = "\n".join(
-                f"- {it.produk.nama_produk}" + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in kembali
+                f"- {it.produk.nama_produk if it.produk else '[Produk sudah dihapus]'}"
+                + (f" ({it.warna})" if it.warna else "") + f" x {it.qty}" for it in kembali
             )
             db.session.add(Notifikasi(
                 employee_id=p.pemohon_id, permohonan_id=p.id, popup=True,

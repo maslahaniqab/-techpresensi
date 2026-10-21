@@ -66,7 +66,7 @@
           {% set item_bg = {"Diproses": "#cfe2ff", "Kendala Bahan": "#f8d7da", "Ditolak": "#e2e3e5"} %}
           {% for it in p.item_list %}
           <div class="mb-1">
-            <span class="{{ 'text-decoration-line-through text-muted' if it.status == 'Ditolak' }}">{{ it.produk.nama_produk }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span></span>
+            <span class="{{ 'text-decoration-line-through text-muted' if it.status == 'Ditolak' }}">{{ it.produk.nama_produk if it.produk else '[Produk sudah dihapus]' }}{% if it.warna %} <span class="text-muted">({{ it.warna }})</span>{% endif %} <span class="text-muted">&times; {{ it.qty }}</span></span>
             {% if it.po %}<a href="{{ url_for('purchase_order_detail', po_id=it.po_id) }}" class="badge text-decoration-none" style="background-color:#e2e3e5; color:#212529;" title="Purchase Order untuk produk ini">{{ it.po.nomor_po }}</a>{% endif %}
             {% if it.status != 'Menunggu' %}<span class="badge" style="background-color: {{ item_bg.get(it.status, '#eee') }}; color:#212529;">{{ 'Akan diproduksi' if it.status == 'Diproses' else it.status }}</span>{% endif %}
             {% if it.alasan_tolak and it.status in ('Kendala Bahan', 'Ditolak') %}<div class="text-danger" style="font-size:.78rem;">{{ it.alasan_tolak }}</div>{% endif %}

@@ -40,7 +40,7 @@
       {% for it in p.item_list %}
       <tr>
         <td>{{ loop.index }}</td>
-        <td>{{ it.produk.nama_produk }}</td>
+        <td>{{ it.produk.nama_produk if it.produk else '[Produk sudah dihapus]' }}</td>
         <td>{{ it.produk.sku or "-" }}</td>
         <td>{{ it.warna or "-" }}</td>
         <td>{{ it.qty }}</td>
