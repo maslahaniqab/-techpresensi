@@ -2,6 +2,18 @@
 {% block title %}Permohonan Barang{% endblock %}
 {% block content %}
 
+<style>
+  /* Centang visual (bukan select bawaan) di dropdown pilih-banyak-produk -- class
+     "choices-multi-ceklis" ditambahkan lewat JS ke wrapper .choices (Choices.js
+     membungkus <select> aslinya jadi ANAK dari .choices, bukan sibling). */
+  .choices-multi-ceklis .choices__item--selectable::before {
+    content: "\2610"; margin-right: 8px; color: #6c757d;
+  }
+  .choices-multi-ceklis .choices__item--selectable.is-selected::before {
+    content: "\2611"; color: #0d6efd;
+  }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <h3 class="mb-1">Permohonan Pengadaan Barang</h3>
@@ -128,6 +140,10 @@
               <label class="form-label small mb-0">Daftar Produk *</label>
               <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahProdukEditPB">+ Tambah Produk</button>
             </div>
+            <div class="mb-2">
+              <label class="form-label small mb-1 text-muted">Atau centang beberapa produk sekaligus (otomatis jadi baris terpisah):</label>
+              <select id="selProdukMultiEditPB" class="form-select form-select-sm" multiple></select>
+            </div>
             <table class="table table-sm align-middle mb-0">
               <thead><tr><th>Nama Produk</th><th style="width:20%;">Warna</th><th style="width:14%;">Qty</th><th style="width:36px;"></th></tr></thead>
               <tbody id="tbodyProdukEditPB"></tbody>
@@ -202,6 +218,10 @@
             <div class="d-flex justify-content-between align-items-center mb-1">
               <label class="form-label small mb-0">Daftar Produk *</label>
               <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahProdukPB">+ Tambah Produk</button>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small mb-1 text-muted">Atau centang beberapa produk sekaligus (otomatis jadi baris terpisah):</label>
+              <select id="selProdukMultiPB" class="form-select form-select-sm" multiple></select>
             </div>
             <table class="table table-sm align-middle mb-0">
               <thead><tr><th>Nama Produk</th><th style="width:20%;">Warna</th><th style="width:14%;">Qty</th><th style="width:36px;"></th></tr></thead>
@@ -287,16 +307,60 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Dropdown centang-banyak: pilih beberapa produk sekaligus, tiap yang dicentang
+  // otomatis jadi 1 baris baru di tabel (baris kosong awal dipakai utk pilihan pertama,
+  // biar tidak nyisa 1 baris "Pilih produk..." kosong kalau user pakai cara ini).
+  function pasangMultiPilih(selId, tbody) {
+    var sel = document.getElementById(selId);
+    if (!sel) return;
+    var opsi = "";
+    for (var i = 0; i < IDS.length; i++) {
+      var label = PRODUK[i] + (SKU[i] ? " — SKU: " + SKU[i] : "");
+      opsi += '<option value="' + IDS[i] + '">' + label.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</option>";
+    }
+    sel.innerHTML = opsi;
+    var instance = new Choices(sel, {
+      searchEnabled: true,
+      shouldSort: false,
+      removeItemButton: true,
+      renderSelectedChoices: "always",
+      placeholderValue: "Ketik atau centang produk...",
+      searchPlaceholderValue: "Ketik untuk cari...",
+      noResultsText: "Tidak ditemukan",
+      noChoicesText: "Tidak ada pilihan",
+      fuseOptions: { threshold: 0.3 },
+    });
+    instance.containerOuter.element.classList.add("choices-multi-ceklis");
+    sel.addEventListener("change", function () {
+      var dipilih = Array.from(sel.selectedOptions).map(function (o) { return o.value; });
+      dipilih.forEach(function (id) {
+        var sudahAda = Array.from(tbody.querySelectorAll('select[name="produk_id[]"]'))
+          .some(function (s) { return s.value === id; });
+        if (sudahAda) return;
+        var barisKosong = Array.from(tbody.querySelectorAll('select[name="produk_id[]"]')).find(function (s) { return !s.value; });
+        if (barisKosong) {
+          if (barisKosong._choicesInstance) barisKosong._choicesInstance.setChoiceByValue(id);
+          else barisKosong.value = id;
+        } else {
+          tambahBaris(tbody, { produk_id: id, warna: "", qty: "" });
+        }
+      });
+      instance.removeActiveItems();
+    });
+  }
+
   var tbodyBaru = document.getElementById("tbodyProdukPB");
   if (tbodyBaru) {
     pasangTabel(tbodyBaru, "btnTambahProdukPB");
     tambahBaris(tbodyBaru);
+    pasangMultiPilih("selProdukMultiPB", tbodyBaru);
   }
 
   {% if current_user.role == 'admin' %}
   var tbodyEdit = document.getElementById("tbodyProdukEditPB");
   if (tbodyEdit) {
     pasangTabel(tbodyEdit, "btnTambahProdukEditPB");
+    pasangMultiPilih("selProdukMultiEditPB", tbodyEdit);
     var modalEdit = new bootstrap.Modal(document.getElementById("modalEditPermohonan"));
     document.querySelectorAll(".btn-edit-pb").forEach(function (btn) {
       btn.addEventListener("click", function () {
