@@ -24,7 +24,8 @@
 
 <div class="card p-3 mb-4">
   <div class="fw-semibold small mb-2">+ Tambah / Update Tarif</div>
-  <form method="post" class="row g-2 align-items-end">
+  <div id="flashBiayaJahit"></div>
+  <form method="post" id="formTambahBiayaJahit" class="row g-2 align-items-end">
     <div class="col-md-5 col-6">
       <label class="form-label small">Produk <span class="text-muted">(boleh centang beberapa sekaligus)</span></label>
       <select name="produk_id[]" id="selProdukBiayaJahit" class="form-select form-select-sm" multiple required>
@@ -91,7 +92,7 @@
   {% endif %}
 </div>
 
-<div class="card p-3" style="overflow-x:auto;">
+<div class="card p-3" id="kartuTabelBiayaJahit" style="overflow-x:auto;">
   <table class="table table-sm table-hover align-middle mb-0">
     <thead>
       <tr>
@@ -142,6 +143,42 @@ document.addEventListener("DOMContentLoaded", function () {
     fuseOptions: { threshold: 0.3 },
   });
   instance.containerOuter.element.classList.add("choices-multi-ceklis");
+
+  // Submit lewat AJAX (bukan reload halaman penuh) -- biar proses pilih produk yang
+  // sedang dibuka/dicentang tidak hilang & tidak perlu scroll ulang tiap kali nambah
+  // 1 tarif, khusus buat yang mau input banyak tarif berturut-turut.
+  var form = document.getElementById("formTambahBiayaJahit");
+  var flashArea = document.getElementById("flashBiayaJahit");
+  if (form) {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var tombol = form.querySelector('button[type="submit"]');
+      tombol.disabled = true;
+      fetch(window.location.href, {
+        method: "POST",
+        body: new FormData(form),
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      })
+        .then(function (resp) { return resp.text(); })
+        .then(function (html) {
+          var doc = new DOMParser().parseFromString(html, "text/html");
+          var tabelBaru = doc.getElementById("kartuTabelBiayaJahit");
+          var tabelLama = document.getElementById("kartuTabelBiayaJahit");
+          if (tabelBaru && tabelLama) tabelLama.replaceWith(tabelBaru);
+          flashArea.innerHTML = "";
+          doc.querySelectorAll(".alert").forEach(function (a) { flashArea.appendChild(a); });
+          setTimeout(function () { flashArea.innerHTML = ""; }, 4000);
+          instance.removeActiveItems();
+          form.querySelector('[name="biaya_per_pcs"]').value = "";
+        })
+        .catch(function () {
+          flashArea.innerHTML = '<div class="alert alert-danger">Gagal menyimpan, coba lagi.</div>';
+        })
+        .finally(function () {
+          tombol.disabled = false;
+        });
+    });
+  }
 });
 </script>
 {% endblock %}
