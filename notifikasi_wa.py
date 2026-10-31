@@ -17,6 +17,17 @@ def verifikasi_sig_permohonan(permohonan_id, sig, secret_key):
     return hmac.compare_digest(harapan, sig)
 
 
+def link_pdf_payroll(payroll_id, secret_key):
+    base = os.environ.get("PUBLIC_BASE_URL", "https://maslahaportal.online").rstrip("/")
+    sig = hmac.new(secret_key.encode(), f"payroll:{payroll_id}".encode(), hashlib.sha256).hexdigest()[:24]
+    return f"{base}/publik/slip-gaji/{payroll_id}/{sig}.pdf"
+
+
+def verifikasi_sig_payroll(payroll_id, sig, secret_key):
+    harapan = hmac.new(secret_key.encode(), f"payroll:{payroll_id}".encode(), hashlib.sha256).hexdigest()[:24]
+    return hmac.compare_digest(harapan, sig)
+
+
 def kirim_wa(pesan, tujuan="", nomor=None):
     url = os.environ.get("NOTIFICATION_SERVICE_URL", "").rstrip("/")
     api_key = os.environ.get("NOTIF_API_KEY", "")

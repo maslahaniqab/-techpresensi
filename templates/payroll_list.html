@@ -48,11 +48,14 @@
     <input type="hidden" name="bulan" value="{{ bulan }}">
     <input type="hidden" name="tahun" value="{{ tahun }}">
     {% if payrolls %}
-    <div class="d-flex align-items-center gap-2 mb-3">
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
       <button type="submit" class="btn btn-outline-primary btn-sm" onclick="return confirm('Kirim slip gaji ke email semua karyawan yang dicentang?');">
         Kirim Slip Terpilih ke Email
       </button>
-      <span class="text-muted small">Centang karyawan lalu klik tombol ini untuk kirim slip PDF ke email masing-masing sekaligus.</span>
+      <button type="submit" formaction="{{ url_for('penggajian_kirim_wa_massal') }}" class="btn btn-outline-success btn-sm" onclick="return confirm('Kirim slip gaji ke WhatsApp semua karyawan yang dicentang?');">
+        Kirim Slip Terpilih ke WhatsApp
+      </button>
+      <span class="text-muted small">Centang karyawan lalu pilih kirim ke Email atau WhatsApp (otomatis via Fonnte) sekaligus.</span>
     </div>
     {% endif %}
     <div class="table-responsive">

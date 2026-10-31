@@ -182,8 +182,11 @@
     <strong>3)</strong> lampirkan file PDF yang sudah diunduh ke chat WhatsApp yang terbuka.
   </div>
   <a href="{{ wa_link }}" target="_blank" class="btn btn-success w-100 no-print">
-    Buka WhatsApp
+    Buka WhatsApp (Manual)
   </a>
+  <form method="post" action="{{ url_for('penggajian_kirim_wa_otomatis', payroll_id=p.id) }}" class="no-print mt-2">
+    <button type="submit" class="btn btn-outline-success w-100">Kirim Otomatis via WhatsApp (Fonnte)</button>
+  </form>
   {% else %}
   <p class="text-danger small text-center mb-0 no-print">No. HP karyawan belum diisi, tidak bisa kirim ke WhatsApp.</p>
   {% endif %}

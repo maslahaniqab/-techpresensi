@@ -1,7 +1,14 @@
 import os
 import io
 import re
-from notifikasi_wa import kirim_wa, kirim_wa_grup, link_pdf_permohonan, verifikasi_sig_permohonan
+from notifikasi_wa import (
+    kirim_wa,
+    kirim_wa_grup,
+    link_pdf_permohonan,
+    verifikasi_sig_permohonan,
+    link_pdf_payroll,
+    verifikasi_sig_payroll,
+)
 import csv
 import math
 import calendar
@@ -4806,6 +4813,14 @@ def create_app():
         buffer.seek(0)
         return send_file(buffer, mimetype="application/pdf")
 
+    @app.route("/publik/slip-gaji/<int:payroll_id>/<sig>.pdf")
+    def payroll_publik_pdf(payroll_id, sig):
+        if not verifikasi_sig_payroll(payroll_id, sig, app.config["SECRET_KEY"]):
+            abort_404()
+        payroll = db.session.get(Payroll, payroll_id) or abort_404()
+        pdf_bytes = buat_slip_pdf_bytes(payroll, get_settings())
+        return send_file(BytesIO(pdf_bytes), mimetype="application/pdf")
+
     @app.route("/inventory/master-data/permohonan-barang/<int:permohonan_id>/download")
     @modul_required("permohonan_barang")
     def permohonan_barang_download(permohonan_id):
@@ -6324,6 +6339,25 @@ def create_app():
         except Exception as e:
             return False, str(e)
 
+    def kirim_wa_otomatis_slip(payroll, settings):
+        nomor = normalisasi_no_hp_wa(payroll.employee.no_hp)
+        if not nomor:
+            return False, "No. HP karyawan belum diisi."
+
+        label_total = "GAJI BRUTO" if payroll.tipe_pegawai == "Freelance" else "PENERIMAAN BERSIH"
+        link_pdf = link_pdf_payroll(payroll.id, app.config["SECRET_KEY"])
+        pesan = (
+            f"Halo {payroll.employee.nama},\n\n"
+            f"Berikut slip gaji Anda periode {BULAN_NAMA[payroll.bulan]} {payroll.tahun} dari "
+            f"{settings.nama_perusahaan}.\n\n"
+            f"{label_total}: {rupiah(payroll.gaji_bersih)}\n"
+            f"({terbilang_rupiah(payroll.gaji_bersih)})\n\n"
+            "Status: SUDAH DIBAYAR\n\n"
+            f"Rincian lengkap (PDF): {link_pdf}\n\n"
+            "Terima kasih atas kerja keras Anda selama ini. Jika ada pertanyaan silakan hubungi admin."
+        )
+        return kirim_wa(pesan, nomor=[nomor])
+
     def kirim_notifikasi_pengajuan_izin(pengajuan, settings):
         smtp_email = os.environ.get("SMTP_EMAIL")
         smtp_password = os.environ.get("SMTP_APP_PASSWORD")
@@ -6476,6 +6510,49 @@ def create_app():
             flash(f"Slip berhasil dikirim ke email {len(berhasil)} karyawan: {', '.join(berhasil)}.", "success")
         if gagal:
             flash(f"Gagal mengirim ke {len(gagal)} karyawan: {'; '.join(gagal)}.", "danger")
+
+        return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
+
+    @app.route("/penggajian/<int:payroll_id>/kirim-wa-otomatis", methods=["POST"])
+    @modul_required("penggajian")
+    def penggajian_kirim_wa_otomatis(payroll_id):
+        payroll = db.session.get(Payroll, payroll_id) or abort_404()
+        settings = get_settings()
+        berhasil, pesan_error = kirim_wa_otomatis_slip(payroll, settings)
+        if berhasil:
+            flash(f"Slip gaji berhasil dikirim via WhatsApp ke {payroll.employee.nama}.", "success")
+        else:
+            flash(f"Gagal mengirim WhatsApp: {pesan_error}", "danger")
+        return redirect(url_for("penggajian_detail", payroll_id=payroll.id))
+
+    @app.route("/penggajian/kirim-wa-massal", methods=["POST"])
+    @modul_required("penggajian")
+    def penggajian_kirim_wa_massal():
+        bulan = int(request.form.get("bulan", today_wib().month))
+        tahun = int(request.form.get("tahun", today_wib().year))
+        payroll_ids = [int(x) for x in request.form.getlist("payroll_ids")]
+
+        if not payroll_ids:
+            flash("Pilih minimal satu slip untuk dikirim ke WhatsApp.", "warning")
+            return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
+
+        settings = get_settings()
+        berhasil = []
+        gagal = []
+        for payroll_id in payroll_ids:
+            payroll = db.session.get(Payroll, payroll_id)
+            if not payroll:
+                continue
+            ok, pesan_error = kirim_wa_otomatis_slip(payroll, settings)
+            if ok:
+                berhasil.append(payroll.employee.nama)
+            else:
+                gagal.append(f"{payroll.employee.nama} ({pesan_error})")
+
+        if berhasil:
+            flash(f"Slip berhasil dikirim via WhatsApp ke {len(berhasil)} karyawan: {', '.join(berhasil)}.", "success")
+        if gagal:
+            flash(f"Gagal mengirim WhatsApp ke {len(gagal)} karyawan: {'; '.join(gagal)}.", "danger")
 
         return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
