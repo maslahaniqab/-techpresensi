@@ -6285,7 +6285,7 @@ def create_app():
         pisa.CreatePDF(html, dest=buffer, link_callback=pdf_link_callback)
         return buffer.getvalue()
 
-    def kirim_email_slip(payroll, settings):
+    def kirim_email_slip(payroll, settings, server=None):
         email_tujuan = (payroll.employee.email or "").strip()
         if not email_tujuan:
             return False, "Karyawan belum punya alamat email terdaftar."
@@ -6313,10 +6313,13 @@ def create_app():
         )
 
         try:
-            with smtplib.SMTP("smtp.gmail.com", 587) as server:
-                server.starttls()
-                server.login(smtp_email, smtp_password)
+            if server is not None:
                 server.send_message(msg)
+            else:
+                with smtplib.SMTP("smtp.gmail.com", 587) as server_baru:
+                    server_baru.starttls()
+                    server_baru.login(smtp_email, smtp_password)
+                    server_baru.send_message(msg)
             return True, None
         except Exception as e:
             return False, str(e)
@@ -6443,17 +6446,31 @@ def create_app():
             return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
         settings = get_settings()
+        smtp_email = os.environ.get("SMTP_EMAIL")
+        smtp_password = os.environ.get("SMTP_APP_PASSWORD")
         berhasil = []
         gagal = []
-        for payroll_id in payroll_ids:
-            payroll = db.session.get(Payroll, payroll_id)
-            if not payroll:
-                continue
-            ok, pesan_error = kirim_email_slip(payroll, settings)
-            if ok:
-                berhasil.append(payroll.employee.nama)
-            else:
-                gagal.append(f"{payroll.employee.nama} ({pesan_error})")
+
+        if not smtp_email or not smtp_password:
+            flash("Pengiriman email belum dikonfigurasi di server (SMTP_EMAIL/SMTP_APP_PASSWORD).", "danger")
+            return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
+
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                for payroll_id in payroll_ids:
+                    payroll = db.session.get(Payroll, payroll_id)
+                    if not payroll:
+                        continue
+                    ok, pesan_error = kirim_email_slip(payroll, settings, server=server)
+                    if ok:
+                        berhasil.append(payroll.employee.nama)
+                    else:
+                        gagal.append(f"{payroll.employee.nama} ({pesan_error})")
+        except Exception as e:
+            flash(f"Gagal konek ke server email: {e}", "danger")
+            return redirect(url_for("penggajian_list", bulan=bulan, tahun=tahun))
 
         if berhasil:
             flash(f"Slip berhasil dikirim ke email {len(berhasil)} karyawan: {', '.join(berhasil)}.", "success")
