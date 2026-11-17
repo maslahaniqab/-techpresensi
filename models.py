@@ -82,6 +82,7 @@ class Employee(UserMixin, db.Model):
     co_host_bulan_ini = db.Column(db.String(8), default="Tidak")  # Ya / Tidak
     status = db.Column(db.String(16), default="Aktif")  # Aktif / Nonaktif
     akses_marketing = db.Column(db.Boolean, default=False, nullable=False)
+    akses_profitabilitas = db.Column(db.Boolean, default=False, nullable=False)
 
     attendances = db.relationship(
         "Attendance", backref="employee", cascade="all, delete-orphan"

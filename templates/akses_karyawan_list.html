@@ -51,12 +51,12 @@
               </div>
             </td>
             <td>
-              <input type="checkbox" class="form-check-input akses-marketing-sync" role="switch" name="marketing_{{ k.id }}"
-                     data-pair="profitabilitas_{{ k.id }}" {{ 'checked' if k.akses_marketing else '' }}>
+              <input type="checkbox" class="form-check-input" role="switch" name="marketing_{{ k.id }}"
+                     {{ 'checked' if k.akses_marketing else '' }}>
             </td>
             <td>
-              <input type="checkbox" class="form-check-input akses-marketing-sync" role="switch" name="profitabilitas_{{ k.id }}"
-                     data-pair="marketing_{{ k.id }}" {{ 'checked' if k.akses_marketing else '' }}>
+              <input type="checkbox" class="form-check-input" role="switch" name="profitabilitas_{{ k.id }}"
+                     {{ 'checked' if k.akses_profitabilitas else '' }}>
             </td>
             {% for kelompok, daftar in daftar_modul %}
               {% for key, label in daftar %}
@@ -78,12 +78,4 @@
   <button type="submit" class="btn btn-primary mt-3">Simpan Semua Akses</button>
   {% endif %}
 </form>
-<script>
-document.querySelectorAll('.akses-marketing-sync').forEach(function (cb) {
-  cb.addEventListener('change', function () {
-    var pair = document.querySelector('[name="' + cb.dataset.pair + '"]');
-    if (pair) pair.checked = cb.checked;
-  });
-});
-</script>
 {% endblock %}

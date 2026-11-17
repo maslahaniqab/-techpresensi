@@ -2066,6 +2066,21 @@ def create_app():
             return redirect(url_for("login"))
         return wrapper
 
+    def profit_required(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for("login"))
+            role = getattr(current_user, "role", None)
+            if role == "admin":
+                return f(*args, **kwargs)
+            if role == "pegawai" and current_user.akses_profitabilitas:
+                return f(*args, **kwargs)
+            if role == "pegawai":
+                return redirect(url_for("pegawai_dashboard"))
+            return redirect(url_for("login"))
+        return wrapper
+
     def modul_required(modul_key):
         def decorator(f):
             @wraps(f)
@@ -2230,6 +2245,11 @@ def create_app():
         if "akses_marketing" not in kolom_employee:
             db.session.execute(db.text(
                 "ALTER TABLE employee ADD COLUMN akses_marketing BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            db.session.commit()
+        if "akses_profitabilitas" not in kolom_employee:
+            db.session.execute(db.text(
+                "ALTER TABLE employee ADD COLUMN akses_profitabilitas BOOLEAN NOT NULL DEFAULT 0"
             ))
             db.session.commit()
         kolom_payroll = {c["name"] for c in db.inspect(db.engine).get_columns("payroll")}
@@ -2639,6 +2659,7 @@ def create_app():
                 co_host_bulan_ini=request.form.get("co_host_bulan_ini", "Tidak"),
                 status=request.form.get("status", "Aktif"),
                 akses_marketing=request.form.get("akses_marketing") == "on",
+                akses_profitabilitas=request.form.get("akses_profitabilitas") == "on",
             )
             password_baru = request.form.get("password_baru", "")
             if password_baru:
@@ -2688,6 +2709,7 @@ def create_app():
             emp.co_host_bulan_ini = request.form.get("co_host_bulan_ini", "Tidak")
             emp.status = request.form.get("status", "Aktif")
             emp.akses_marketing = request.form.get("akses_marketing") == "on"
+            emp.akses_profitabilitas = request.form.get("akses_profitabilitas") == "on"
             password_baru = request.form.get("password_baru", "")
             if password_baru:
                 emp.set_password(password_baru)
@@ -7481,10 +7503,8 @@ def create_app():
         semua_modul_key = [key for _, daftar in DAFTAR_MODUL_AKSES for key, _ in daftar]
 
         for emp in karyawan:
-            emp.akses_marketing = (
-                request.form.get(f"marketing_{emp.id}") == "on"
-                or request.form.get(f"profitabilitas_{emp.id}") == "on"
-            )
+            emp.akses_marketing = request.form.get(f"marketing_{emp.id}") == "on"
+            emp.akses_profitabilitas = request.form.get(f"profitabilitas_{emp.id}") == "on"
 
             dicentang = {
                 key for key in semua_modul_key
@@ -8580,7 +8600,7 @@ def create_app():
         return income_item_list
 
     @app.route("/marketing/profit/upload", methods=["GET", "POST"])
-    @marketing_required
+    @profit_required
     def profit_upload():
         hasil = {
             "order": None, "income": None, "iklan": None, "order_manual": None,
@@ -8904,7 +8924,7 @@ def create_app():
         return render_template("marketing/profit_upload.html", aktif="upload", hasil=hasil, jumlah_produk_belum_hpp=None)
 
     @app.route("/marketing/profit/order-manual/template")
-    @marketing_required
+    @profit_required
     def profit_order_manual_template():
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -8934,7 +8954,7 @@ def create_app():
         )
 
     @app.route("/marketing/profit/data")
-    @marketing_required
+    @profit_required
     def profit_order_income():
         cari = request.args.get("cari", "").strip()
         bulan_filter = request.args.get("bulan", "")
@@ -9161,7 +9181,7 @@ def create_app():
     }
 
     @app.route("/marketing/profit/data/belum-income")
-    @marketing_required
+    @profit_required
     def profit_belum_income_detail():
         """Halaman khusus rincian pesanan yang belum ketemu data Income-nya -- dipisah
         dari tab Order & Income (yang isinya banyak angka lain) supaya statusnya jelas
@@ -9185,7 +9205,7 @@ def create_app():
         )
 
     @app.route("/marketing/profit/data/belum-income/download")
-    @marketing_required
+    @profit_required
     def profit_belum_income_download():
         kategori_filter = request.args.get("kategori", "")
         marketplace_filter = request.args.get("marketplace", "")
@@ -9269,7 +9289,7 @@ def create_app():
         return daftar
 
     @app.route("/marketing/profit/hpp", methods=["GET", "POST"])
-    @marketing_required
+    @profit_required
     def profit_hpp():
         if request.method == "POST":
             nama_list = request.form.getlist("nama_produk")
@@ -9303,7 +9323,7 @@ def create_app():
         return render_template("marketing/profit_hpp.html", aktif="hpp", daftar=_daftar_produk_untuk_hpp())
 
     @app.route("/marketing/profit/hpp/template")
-    @marketing_required
+    @profit_required
     def profit_hpp_template():
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -9320,7 +9340,7 @@ def create_app():
         )
 
     @app.route("/marketing/profit/hpp/upload", methods=["POST"])
-    @marketing_required
+    @profit_required
     def profit_hpp_upload():
         file = request.files.get("file")
         if not file or not file.filename:
@@ -9382,7 +9402,7 @@ def create_app():
         return redirect(url_for("profit_hpp"))
 
     @app.route("/marketing/profit/dashboard")
-    @marketing_required
+    @profit_required
     def profit_dashboard():
         bulan_filter = request.args.get("bulan", "")
         data = hitung_profit_agregat(bulan_filter or None)
@@ -9507,7 +9527,7 @@ def create_app():
         )
 
     @app.route("/marketing/profit/biaya-iklan-manual", methods=["POST"])
-    @marketing_required
+    @profit_required
     def profit_biaya_iklan_manual():
         """Input manual Biaya Iklan untuk marketplace & bulan tertentu, dipakai kalau
         belum ada laporan yang bisa diupload (mis. belum sempat download dari Ads
@@ -9566,7 +9586,7 @@ def create_app():
         return redirect(url_for("profit_dashboard", bulan=bulan))
 
     @app.route("/marketing/profit/pesanan-manual", methods=["POST"])
-    @marketing_required
+    @profit_required
     def profit_pesanan_manual():
         """Input manual Pesanan/Sales/Penghasilan untuk marketplace yang TIDAK punya
         laporan Order/Income per-produk (Tokopedia, Blibli) -- lihat RingkasanHarianMarketplace.
@@ -9619,7 +9639,7 @@ def create_app():
         return redirect(url_for("profit_dashboard", bulan=bulan))
 
     @app.route("/marketing/profit/dashboard/export")
-    @marketing_required
+    @profit_required
     def profit_dashboard_export():
         bulan_filter = request.args.get("bulan", "")
         data = hitung_profit_agregat(bulan_filter or None)
@@ -9648,7 +9668,7 @@ def create_app():
         )
 
     @app.route("/marketing/profit/insight")
-    @marketing_required
+    @profit_required
     def profit_insight():
         bulan_filter = request.args.get("bulan", "")
         data = hitung_profit_agregat(bulan_filter or None)
@@ -9690,7 +9710,7 @@ def create_app():
         )
 
     @app.route("/marketing/profit/kalkulator")
-    @marketing_required
+    @profit_required
     def kalkulator_biaya_profit():
         daftar_produk = Produk.query.order_by(Produk.nama_produk).all()
         produk_json = {

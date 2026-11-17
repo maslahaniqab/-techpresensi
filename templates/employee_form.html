@@ -164,6 +164,12 @@
         <label class="form-check-label" for="akses_marketing">Akses Menu Marketing</label>
         <div class="form-text">Jika dicentang, karyawan ini bisa membuka menu Marketing (Analisa Iklan, Performa Produk, Proyeksi Budget) saat login di halaman pegawai.</div>
       </div>
+      <div class="form-check mt-2">
+        <input type="checkbox" name="akses_profitabilitas" id="akses_profitabilitas" class="form-check-input"
+               {{ 'checked' if karyawan and karyawan.akses_profitabilitas else '' }}>
+        <label class="form-check-label" for="akses_profitabilitas">Akses Menu Profitabilitas</label>
+        <div class="form-text">Jika dicentang, karyawan ini bisa membuka menu Profitabilitas (Upload Data, Order & Income, HPP, Dashboard Profit, Insight, Kalkulator) saat login di halaman pegawai. Terpisah dari akses Marketing.</div>
+      </div>
     </div>
 
     <button type="submit" class="btn btn-primary">Simpan</button>

@@ -310,7 +310,7 @@
   {% for item in menu_keuangan %}{% if item[3] in akses_pegawai %}{% set ns_keu.list = ns_keu.list + [item] %}{% endif %}{% endfor %}
   {% if ns_keu.list %}{{ nav_section('navKeuanganP', 'Keuangan', ns_keu.list) }}{% endif %}
 
-  {% if current_user.akses_marketing %}{{ nav_section('navProfitP', 'Profitabilitas', menu_profit) }}{% endif %}
+  {% if current_user.akses_profitabilitas %}{{ nav_section('navProfitP', 'Profitabilitas', menu_profit) }}{% endif %}
 
   {% set ns_md = namespace(list=[]) %}
   {% for item in menu_master_data %}{% if item[3] in akses_pegawai %}{% set ns_md.list = ns_md.list + [item] %}{% endif %}{% endfor %}
