@@ -7481,7 +7481,10 @@ def create_app():
         semua_modul_key = [key for _, daftar in DAFTAR_MODUL_AKSES for key, _ in daftar]
 
         for emp in karyawan:
-            emp.akses_marketing = request.form.get(f"marketing_{emp.id}") == "on"
+            emp.akses_marketing = (
+                request.form.get(f"marketing_{emp.id}") == "on"
+                or request.form.get(f"profitabilitas_{emp.id}") == "on"
+            )
 
             dicentang = {
                 key for key in semua_modul_key
