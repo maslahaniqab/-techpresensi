@@ -59,8 +59,11 @@ from models import (
     PurchaseOrderBahanPakai, PurchaseOrderPembayaran, PermohonanBarang, BiayaJahit,
     KategoriProduk, AksesKaryawan, PesananManual, PesananManualItem, Notifikasi, PermohonanBarangItem,
     PenerimaanBarangJadi, SnapshotNilaiInventory, PengajuanKoreksiAbsensi,
-    RingkasanHarianMarketplace,
+    RingkasanHarianMarketplace, Retur,
 )
+
+STATUS_RETUR_BARANG = ("Retur", "Cancel")
+KONDISI_RETUR_BARANG = ("Utuh", "Rusak", "Hilang")
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
 STATUS_PERMOHONAN_BUTUH_CATATAN = ("Kendala Bahan", "Ditolak")
@@ -189,6 +192,7 @@ DAFTAR_MODUL_AKSES = [
     ]),
     ("Pendapatan", [
         ("pendapatan_penjualan", "Penjualan"),
+        ("retur", "Retur / Cancel"),
     ]),
 ]
 MODUL_LABEL = {key: label for _, daftar in DAFTAR_MODUL_AKSES for key, label in daftar}
@@ -7139,6 +7143,63 @@ def create_app():
             download_name=f"order_manual_{today_wib().strftime('%Y%m%d')}.xlsx",
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+    # ---------- PENDAPATAN: RETUR / CANCEL ----------
+    @app.route("/pendapatan/retur", methods=["GET", "POST"])
+    @modul_required("retur")
+    def retur_list():
+        if request.method == "POST":
+            try:
+                tanggal_pesanan = datetime.strptime(request.form.get("tanggal_pesanan", ""), "%Y-%m-%d").date()
+            except ValueError:
+                tanggal_pesanan = None
+
+            status_barang = request.form.get("status_barang", "").strip()
+            if status_barang not in STATUS_RETUR_BARANG:
+                status_barang = STATUS_RETUR_BARANG[0]
+
+            kondisi_barang = request.form.get("kondisi_barang", "").strip()
+            if kondisi_barang not in KONDISI_RETUR_BARANG:
+                kondisi_barang = KONDISI_RETUR_BARANG[0]
+
+            ekspedisi = request.form.get("ekspedisi", "").strip()
+            if ekspedisi not in EKSPEDISI_LIST:
+                ekspedisi = ""
+
+            nama_pembeli = request.form.get("nama_pembeli", "").strip()
+
+            if not tanggal_pesanan or not nama_pembeli:
+                flash("Tanggal Pesanan dan Nama Pembeli wajib diisi.", "danger")
+                return redirect(url_for("retur_list"))
+
+            db.session.add(Retur(
+                tanggal_pesanan=tanggal_pesanan,
+                no_resi=request.form.get("no_resi", "").strip()[:64] or None,
+                no_pesanan=request.form.get("no_pesanan", "").strip()[:64] or None,
+                ekspedisi=ekspedisi or None,
+                nama_pembeli=nama_pembeli,
+                alasan=request.form.get("alasan", "").strip()[:512] or None,
+                status_barang=status_barang,
+                kondisi_barang=kondisi_barang,
+            ))
+            db.session.commit()
+            flash("Data retur/cancel berhasil disimpan.", "success")
+            return redirect(url_for("retur_list"))
+
+        daftar = Retur.query.order_by(Retur.tanggal_pesanan.desc(), Retur.id.desc()).all()
+        return render_template(
+            "pendapatan/retur_list.html", daftar=daftar,
+            ekspedisi_list=EKSPEDISI_LIST, status_list=STATUS_RETUR_BARANG, kondisi_list=KONDISI_RETUR_BARANG,
+        )
+
+    @app.route("/pendapatan/retur/<int:retur_id>/hapus", methods=["POST"])
+    @modul_required("retur")
+    def retur_hapus(retur_id):
+        r = db.session.get(Retur, retur_id) or abort_404()
+        db.session.delete(r)
+        db.session.commit()
+        flash("Data retur/cancel dihapus.", "info")
+        return redirect(url_for("retur_list"))
 
     def _finalisasi_import_penjualan(data_tmp, mapping):
         """Proses+simpan data penjualan. Mengembalikan (berhasil, pesan)."""

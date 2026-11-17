@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Retur / Cancel{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h3 class="mb-0">Retur / Cancel</h3>
+  <p class="text-muted small mb-0">Catatan pesanan yang retur atau dibatalkan. Tanggal input terisi otomatis saat disimpan.</p>
+</div>
+
+<div class="card p-3 mb-4">
+  <h5 class="mb-3">Form Retur / Cancel</h5>
+  <form method="post" action="{{ url_for('retur_list') }}">
+    <div class="row g-3">
+      <div class="col-md-3 col-6">
+        <label class="form-label">Tanggal Pesanan</label>
+        <input type="date" name="tanggal_pesanan" class="form-control" required>
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label">No Pesanan</label>
+        <input type="text" name="no_pesanan" class="form-control" maxlength="64">
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label">No Resi</label>
+        <input type="text" name="no_resi" class="form-control" maxlength="64">
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label">Ekspedisi</label>
+        <select name="ekspedisi" class="form-select">
+          <option value="">- Pilih Ekspedisi -</option>
+          {% for e in ekspedisi_list %}
+          <option value="{{ e }}">{{ e }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 col-12">
+        <label class="form-label">Nama Pembeli</label>
+        <input type="text" name="nama_pembeli" class="form-control" required>
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label">Status Barang</label>
+        <select name="status_barang" class="form-select">
+          {% for s in status_list %}
+          <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label">Kondisi Barang</label>
+        <select name="kondisi_barang" class="form-select">
+          {% for k in kondisi_list %}
+          <option value="{{ k }}">{{ k }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Alasan Retur / Cancel</label>
+        <textarea name="alasan" class="form-control" rows="2" maxlength="512"></textarea>
+      </div>
+    </div>
+    <div class="text-center mt-4">
+      <button type="submit" class="btn btn-primary px-5">Simpan</button>
+    </div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h5 class="mb-3">List Retur / Cancel</h5>
+  <div class="table-responsive" style="max-height: 620px; overflow-y: auto;">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead style="position: sticky; top: 0; background: #eef1f6;">
+        <tr>
+          <th>Tanggal Pesanan</th>
+          <th>No Pesanan</th>
+          <th>Ekspedisi / Resi</th>
+          <th>Nama Pembeli</th>
+          <th>Status</th>
+          <th>Kondisi Barang</th>
+          <th>Alasan</th>
+          <th>Tanggal Input</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in daftar %}
+        <tr>
+          <td class="small text-nowrap">{{ r.tanggal_pesanan.strftime('%d/%m/%Y') }}</td>
+          <td class="small">{{ r.no_pesanan or "-" }}</td>
+          <td class="small">{{ r.ekspedisi or "-" }}{% if r.no_resi %}<div class="text-muted">{{ r.no_resi }}</div>{% endif %}</td>
+          <td class="small">{{ r.nama_pembeli }}</td>
+          <td class="small">
+            <span class="badge {{ 'bg-danger' if r.status_barang == 'Cancel' else 'bg-warning text-dark' }}">{{ r.status_barang }}</span>
+          </td>
+          <td class="small">
+            <span class="badge {{ 'bg-success' if r.kondisi_barang == 'Utuh' else ('bg-secondary' if r.kondisi_barang == 'Hilang' else 'bg-danger') }}">{{ r.kondisi_barang }}</span>
+          </td>
+          <td class="small" style="max-width:220px;">{{ r.alasan or "-" }}</td>
+          <td class="small text-muted text-nowrap">{{ r.dibuat_pada.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('retur_hapus', retur_id=r.id) }}" onsubmit="return confirm('Hapus data retur ini?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-4">Belum ada data retur/cancel. Isi form di atas untuk mulai.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

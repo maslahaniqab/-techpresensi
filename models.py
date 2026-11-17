@@ -873,6 +873,20 @@ class PermohonanBarangItem(db.Model):
     produk = db.relationship("Produk")
 
 
+class Retur(db.Model):
+    """Catatan pesanan yang retur atau dibatalkan (marketplace/ekspedisi)."""
+    id = db.Column(db.Integer, primary_key=True)
+    tanggal_pesanan = db.Column(db.Date, nullable=False)
+    no_resi = db.Column(db.String(64))
+    no_pesanan = db.Column(db.String(64))
+    ekspedisi = db.Column(db.String(64))
+    nama_pembeli = db.Column(db.String(128))
+    alasan = db.Column(db.String(512))  # alasan retur/cancel
+    status_barang = db.Column(db.String(16), nullable=False, default="Retur")  # Retur / Cancel
+    kondisi_barang = db.Column(db.String(16), nullable=False, default="Utuh")  # Utuh / Rusak / Hilang
+    dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+
 class Notifikasi(db.Model):
     """Kotak masuk di portal untuk karyawan (mis. Supervisor menerima permohonan barang baru)."""
     id = db.Column(db.Integer, primary_key=True)
