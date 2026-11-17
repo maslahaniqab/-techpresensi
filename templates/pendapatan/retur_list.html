@@ -68,7 +68,7 @@
         </select>
       </div>
       <div class="col-12">
-        <div class="form-text">Kalau Kondisi Barang <strong>Rusak</strong> atau <strong>Hilang</strong>, Qty &times; Harga Barang otomatis tercatat sebagai kerugian di Laporan Laba/Rugi bulan sesuai Tanggal Pesanan.</div>
+        <div class="form-text">Kalau Kondisi Barang <strong>Rusak</strong>, <strong>Hilang</strong>, atau <strong>Tidak Sesuai</strong>, Qty &times; Harga Barang otomatis tercatat sebagai kerugian di Laporan Laba/Rugi bulan sesuai Tanggal Pesanan. Kondisi <strong>Utuh</strong> tidak dihitung kerugian karena barangnya masih bisa dijual lagi.</div>
       </div>
       <div class="col-12">
         <label class="form-label">Alasan Retur / Cancel</label>
@@ -112,7 +112,7 @@
             <span class="badge {{ 'bg-danger' if r.status_barang == 'Cancel' else 'bg-warning text-dark' }}">{{ r.status_barang }}</span>
           </td>
           <td class="small">
-            <span class="badge {{ 'bg-success' if r.kondisi_barang == 'Utuh' else ('bg-secondary' if r.kondisi_barang == 'Hilang' else 'bg-danger') }}">{{ r.kondisi_barang }}</span>
+            <span class="badge {{ 'bg-success' if r.kondisi_barang == 'Utuh' else ('bg-secondary' if r.kondisi_barang == 'Hilang' else ('bg-warning text-dark' if r.kondisi_barang == 'Tidak Sesuai' else 'bg-danger')) }}">{{ r.kondisi_barang }}</span>
           </td>
           <td class="text-end small {{ 'text-danger fw-semibold' if r.kerugian else 'text-muted' }}">{{ r.kerugian | rupiah if r.kerugian else "-" }}</td>
           <td class="small" style="max-width:220px;">{{ r.alasan or "-" }}</td>

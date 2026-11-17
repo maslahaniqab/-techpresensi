@@ -63,7 +63,7 @@ from models import (
 )
 
 STATUS_RETUR_BARANG = ("Retur", "Cancel")
-KONDISI_RETUR_BARANG = ("Utuh", "Rusak", "Hilang")
+KONDISI_RETUR_BARANG = ("Utuh", "Rusak", "Hilang", "Tidak Sesuai")
 
 STATUS_PERMOHONAN = ("Menunggu", "Diproses", "Kendala Bahan", "Selesai", "Ditolak")
 STATUS_PERMOHONAN_BUTUH_CATATAN = ("Kendala Bahan", "Ditolak")
@@ -6694,11 +6694,11 @@ def create_app():
         kerugian_retur_total = sum(
             r.kerugian for r in Retur.query.filter(
                 Retur.tanggal_pesanan >= awal, Retur.tanggal_pesanan <= akhir,
-                Retur.kondisi_barang.in_(("Rusak", "Hilang")),
+                Retur.kondisi_barang.in_(Retur.KONDISI_RUGI),
             ).all()
         )
         if kerugian_retur_total:
-            beban_non_op_items.append(("Kerugian Barang Rusak/Hilang (Retur)", kerugian_retur_total))
+            beban_non_op_items.append(("Kerugian Barang Rusak/Hilang/Tidak Sesuai (Retur)", kerugian_retur_total))
         beban_operasional_manual_items = [
             (i.deskripsi, i.jumlah)
             for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Operasional")
