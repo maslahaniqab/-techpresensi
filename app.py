@@ -6690,6 +6690,14 @@ def create_app():
             for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Non Operasional")
             .order_by(ItemLabaRugi.id).all()
         ]
+        kerugian_retur_total = sum(
+            r.kerugian for r in Retur.query.filter(
+                Retur.tanggal_pesanan >= awal, Retur.tanggal_pesanan <= akhir,
+                Retur.kondisi_barang.in_(("Rusak", "Hilang")),
+            ).all()
+        )
+        if kerugian_retur_total:
+            beban_non_op_items.append(("Kerugian Barang Rusak/Hilang (Retur)", kerugian_retur_total))
         beban_operasional_manual_items = [
             (i.deskripsi, i.jumlah)
             for i in ItemLabaRugi.query.filter_by(bulan=bulan, tahun=tahun, kelompok="Beban Operasional")
@@ -7168,6 +7176,19 @@ def create_app():
 
             nama_pembeli = request.form.get("nama_pembeli", "").strip()
 
+            produk_id_raw = request.form.get("produk_id", "").strip()
+            produk = db.session.get(Produk, int(produk_id_raw)) if produk_id_raw.isdigit() else None
+            nama_produk = request.form.get("nama_produk", "").strip() or (produk.nama_produk if produk else "")
+
+            try:
+                qty = max(int(request.form.get("qty") or 1), 1)
+            except ValueError:
+                qty = 1
+            try:
+                harga_satuan = max(round(float(request.form.get("harga_satuan") or 0)), 0)
+            except ValueError:
+                harga_satuan = 0
+
             if not tanggal_pesanan or not nama_pembeli:
                 flash("Tanggal Pesanan dan Nama Pembeli wajib diisi.", "danger")
                 return redirect(url_for("retur_list"))
@@ -7178,6 +7199,10 @@ def create_app():
                 no_pesanan=request.form.get("no_pesanan", "").strip()[:64] or None,
                 ekspedisi=ekspedisi or None,
                 nama_pembeli=nama_pembeli,
+                produk_id=produk.id if produk else None,
+                nama_produk=nama_produk[:128] or None,
+                qty=qty,
+                harga_satuan=harga_satuan,
                 alasan=request.form.get("alasan", "").strip()[:512] or None,
                 status_barang=status_barang,
                 kondisi_barang=kondisi_barang,
@@ -7187,8 +7212,12 @@ def create_app():
             return redirect(url_for("retur_list"))
 
         daftar = Retur.query.order_by(Retur.tanggal_pesanan.desc(), Retur.id.desc()).all()
+        produk_master = [
+            {"id": p.id, "nama": p.nama_produk, "sku": p.sku or "", "harga": p.harga_normal or 0}
+            for p in Produk.query.order_by(Produk.nama_produk).all()
+        ]
         return render_template(
-            "pendapatan/retur_list.html", daftar=daftar,
+            "pendapatan/retur_list.html", daftar=daftar, produk_master=produk_master,
             ekspedisi_list=EKSPEDISI_LIST, status_list=STATUS_RETUR_BARANG, kondisi_list=KONDISI_RETUR_BARANG,
         )
 

@@ -35,6 +35,22 @@
         <label class="form-label">Nama Pembeli</label>
         <input type="text" name="nama_pembeli" class="form-control" required>
       </div>
+      <div class="col-md-6 col-12">
+        <label class="form-label">Produk <span class="text-muted small fw-normal">(ketik &amp; pilih dari Data Produk, biar Harga Barang otomatis terisi)</span></label>
+        <input type="hidden" name="produk_id" id="returProdukId">
+        <input type="text" name="nama_produk" id="returProdukInput" class="form-control" list="daftarProdukRetur" autocomplete="off" placeholder="Cari nama / SKU produk...">
+        <datalist id="daftarProdukRetur">
+          {% for p in produk_master %}<option value="{{ p.nama }}" label="{{ p.sku }}"></option>{% endfor %}
+        </datalist>
+      </div>
+      <div class="col-md-2 col-4">
+        <label class="form-label">Qty</label>
+        <input type="number" min="1" step="1" name="qty" id="returQty" class="form-control" value="1">
+      </div>
+      <div class="col-md-4 col-8">
+        <label class="form-label">Harga Barang / pcs (Rp)</label>
+        <input type="number" min="0" step="1" name="harga_satuan" id="returHarga" class="form-control" placeholder="mis. 150000">
+      </div>
       <div class="col-md-3 col-6">
         <label class="form-label">Status Barang</label>
         <select name="status_barang" class="form-select">
@@ -50,6 +66,9 @@
           <option value="{{ k }}">{{ k }}</option>
           {% endfor %}
         </select>
+      </div>
+      <div class="col-12">
+        <div class="form-text">Kalau Kondisi Barang <strong>Rusak</strong> atau <strong>Hilang</strong>, Qty &times; Harga Barang otomatis tercatat sebagai kerugian di Laporan Laba/Rugi bulan sesuai Tanggal Pesanan.</div>
       </div>
       <div class="col-12">
         <label class="form-label">Alasan Retur / Cancel</label>
@@ -72,8 +91,10 @@
           <th>No Pesanan</th>
           <th>Ekspedisi / Resi</th>
           <th>Nama Pembeli</th>
+          <th>Produk</th>
           <th>Status</th>
           <th>Kondisi Barang</th>
+          <th class="text-end">Kerugian</th>
           <th>Alasan</th>
           <th>Tanggal Input</th>
           <th></th>
@@ -86,12 +107,14 @@
           <td class="small">{{ r.no_pesanan or "-" }}</td>
           <td class="small">{{ r.ekspedisi or "-" }}{% if r.no_resi %}<div class="text-muted">{{ r.no_resi }}</div>{% endif %}</td>
           <td class="small">{{ r.nama_pembeli }}</td>
+          <td class="small">{{ r.nama_produk or "-" }}{% if r.harga_satuan %}<div class="text-muted">{{ r.qty }} &times; {{ r.harga_satuan | rupiah }}</div>{% endif %}</td>
           <td class="small">
             <span class="badge {{ 'bg-danger' if r.status_barang == 'Cancel' else 'bg-warning text-dark' }}">{{ r.status_barang }}</span>
           </td>
           <td class="small">
             <span class="badge {{ 'bg-success' if r.kondisi_barang == 'Utuh' else ('bg-secondary' if r.kondisi_barang == 'Hilang' else 'bg-danger') }}">{{ r.kondisi_barang }}</span>
           </td>
+          <td class="text-end small {{ 'text-danger fw-semibold' if r.kerugian else 'text-muted' }}">{{ r.kerugian | rupiah if r.kerugian else "-" }}</td>
           <td class="small" style="max-width:220px;">{{ r.alasan or "-" }}</td>
           <td class="small text-muted text-nowrap">{{ r.dibuat_pada.strftime('%d/%m/%Y %H:%M') }}</td>
           <td class="text-end">
@@ -101,10 +124,43 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted py-4">Belum ada data retur/cancel. Isi form di atas untuk mulai.</td></tr>
+        <tr><td colspan="11" class="text-center text-muted py-4">Belum ada data retur/cancel. Isi form di atas untuk mulai.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<script>
+(function () {
+  var PRODUK = {{ produk_master | tojson }};
+  var byNama = {}, bySku = {};
+  PRODUK.forEach(function (p) {
+    byNama[p.nama.toLowerCase()] = p;
+    if (p.sku) bySku[p.sku.toLowerCase()] = p;
+  });
+
+  var input = document.getElementById('returProdukInput');
+  var idEl = document.getElementById('returProdukId');
+  var hargaEl = document.getElementById('returHarga');
+  if (!input) return;
+
+  function pilihProduk() {
+    var teks = input.value.trim().toLowerCase();
+    var p = byNama[teks] || bySku[teks];
+    if (p) {
+      input.value = p.nama;
+      idEl.value = p.id;
+      if (!hargaEl.value) hargaEl.value = p.harga || '';
+    } else {
+      idEl.value = '';
+    }
+  }
+  input.addEventListener('change', pilihProduk);
+  input.addEventListener('input', function () {
+    var teks = input.value.trim().toLowerCase();
+    if (byNama[teks] || bySku[teks]) pilihProduk();
+  });
+})();
+</script>
 {% endblock %}

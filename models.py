@@ -874,17 +874,31 @@ class PermohonanBarangItem(db.Model):
 
 
 class Retur(db.Model):
-    """Catatan pesanan yang retur atau dibatalkan (marketplace/ekspedisi)."""
+    """Catatan pesanan yang retur atau dibatalkan (marketplace/ekspedisi). Kalau kondisi
+    barangnya Rusak/Hilang, qty x harga_satuan otomatis tercatat sbg kerugian di Laba/Rugi
+    bulan tanggal_pesanan (lihat kerugian() & hitung_labarugi_periode di app.py)."""
     id = db.Column(db.Integer, primary_key=True)
     tanggal_pesanan = db.Column(db.Date, nullable=False)
     no_resi = db.Column(db.String(64))
     no_pesanan = db.Column(db.String(64))
     ekspedisi = db.Column(db.String(64))
     nama_pembeli = db.Column(db.String(128))
+    produk_id = db.Column(db.Integer, db.ForeignKey("produk.id"))
+    nama_produk = db.Column(db.String(128))
+    qty = db.Column(db.Integer, nullable=False, default=1)
+    harga_satuan = db.Column(db.Integer, nullable=False, default=0)  # harga jual normal per pcs
     alasan = db.Column(db.String(512))  # alasan retur/cancel
     status_barang = db.Column(db.String(16), nullable=False, default="Retur")  # Retur / Cancel
     kondisi_barang = db.Column(db.String(16), nullable=False, default="Utuh")  # Utuh / Rusak / Hilang
     dibuat_pada = db.Column(db.DateTime, default=now_wib)
+
+    produk = db.relationship("Produk")
+
+    @property
+    def kerugian(self):
+        if self.kondisi_barang in ("Rusak", "Hilang"):
+            return (self.qty or 0) * (self.harga_satuan or 0)
+        return 0
 
 
 class Notifikasi(db.Model):
