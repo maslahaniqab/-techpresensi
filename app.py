@@ -281,6 +281,7 @@ WARNA_MARKETPLACE_FALLBACK = "#9aa0a6"
 EKSPEDISI_LIST = [
     "JNE", "J&T Express", "J&T Cargo", "SiCepat", "AnterAja", "Ninja Xpress", "ID Express",
     "Pos Indonesia", "Lion Parcel", "SAP Express", "Wahana", "Paxel", "Gojek / Grab (Instan)",
+    "SPX Express", "SPX Instant", "SPX Hemat",
     "Ambil di Tempat", "Lainnya",
 ]
 
