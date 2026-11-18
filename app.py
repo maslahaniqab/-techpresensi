@@ -204,6 +204,19 @@ BATAS_GAJI_BPJS_KESEHATAN = 12_000_000
 PERSEN_BPJS_KESEHATAN_KARYAWAN = 0.01
 PERSEN_BPJS_KESEHATAN_PERUSAHAAN = 0.04
 
+# Skema BPJS Ketenagakerjaan (PP 46/2015 & PP 45/2015): bagian karyawan = JHT 2% + JP 1%
+# (dipotong dari gaji); bagian perusahaan = JKK + JKM + JHT 3,7% + JP 2% (tidak dipotong,
+# cuma dicatat di slip). JKK dipakai kelas risiko terendah 0,24% -- naikkan kalau kelas
+# risiko usaha beda. Dasar JHT/JKK/JKM = gaji pokok + tunjangan tetap; JP ada batas atas
+# upah -- BATAS_GAJI_BPJS_JP perlu disesuaikan tiap BPJS umumkan batas baru (tiap Maret).
+PERSEN_BPJS_JHT_KARYAWAN = 0.02
+PERSEN_BPJS_JP_KARYAWAN = 0.01
+PERSEN_BPJS_JHT_PERUSAHAAN = 0.037
+PERSEN_BPJS_JP_PERUSAHAAN = 0.02
+PERSEN_BPJS_JKK_PERUSAHAAN = 0.0024
+PERSEN_BPJS_JKM_PERUSAHAAN = 0.003
+BATAS_GAJI_BPJS_JP = 10_547_400
+
 KATEGORI_PENGELUARAN_RUTIN = [
     "Internet Indihome",
     "Internet Biznet",
@@ -2252,7 +2265,16 @@ def create_app():
                 "ALTER TABLE employee ADD COLUMN akses_profitabilitas BOOLEAN NOT NULL DEFAULT 0"
             ))
             db.session.commit()
+        if "bpjs_tk_terdaftar" not in kolom_employee:
+            db.session.execute(db.text(
+                "ALTER TABLE employee ADD COLUMN bpjs_tk_terdaftar BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            db.session.commit()
         kolom_payroll = {c["name"] for c in db.inspect(db.engine).get_columns("payroll")}
+        for kolom in ("bpjs_jp", "bpjs_tk_perusahaan"):
+            if kolom not in kolom_payroll:
+                db.session.execute(db.text(f"ALTER TABLE payroll ADD COLUMN {kolom} INTEGER DEFAULT 0"))
+                db.session.commit()
         if "jumlah_lembur" not in kolom_payroll:
             db.session.execute(db.text("ALTER TABLE payroll ADD COLUMN jumlah_lembur INTEGER DEFAULT 0"))
             db.session.commit()
@@ -2655,6 +2677,7 @@ def create_app():
                 bpjs_jkm=int(request.form.get("bpjs_jkm") or 0),
                 bpjs_jht=int(request.form.get("bpjs_jht") or 0),
                 bpjs_kesehatan_terdaftar=request.form.get("bpjs_kesehatan_terdaftar") == "on",
+                bpjs_tk_terdaftar=request.form.get("bpjs_tk_terdaftar") == "on",
                 tarif_unit_freelance=int(request.form.get("tarif_unit_freelance") or 0),
                 co_host_bulan_ini=request.form.get("co_host_bulan_ini", "Tidak"),
                 status=request.form.get("status", "Aktif"),
@@ -2705,6 +2728,7 @@ def create_app():
             emp.bpjs_jkm = int(request.form.get("bpjs_jkm") or 0)
             emp.bpjs_jht = int(request.form.get("bpjs_jht") or 0)
             emp.bpjs_kesehatan_terdaftar = request.form.get("bpjs_kesehatan_terdaftar") == "on"
+            emp.bpjs_tk_terdaftar = request.form.get("bpjs_tk_terdaftar") == "on"
             emp.tarif_unit_freelance = int(request.form.get("tarif_unit_freelance") or 0)
             emp.co_host_bulan_ini = request.form.get("co_host_bulan_ini", "Tidak")
             emp.status = request.form.get("status", "Aktif")
@@ -5969,9 +5993,25 @@ def create_app():
         # per karyawan tetap tampil, hanya saja tidak lagi mengurangi gaji_bersih.
         potongan_telat = 0
 
-        bpjs_jkk = emp.bpjs_jkk or 0
-        bpjs_jkm = emp.bpjs_jkm or 0
-        bpjs_jht = emp.bpjs_jht or 0
+        if emp.bpjs_tk_terdaftar:
+            # Skema otomatis BPJS Ketenagakerjaan: JHT 2% + JP 1% dipotong dari karyawan;
+            # JKK/JKM/JHT/JP bagian perusahaan cuma dicatat. Input nominal JKK/JKM/JHT
+            # manual di form karyawan diabaikan selama skema otomatis ini aktif.
+            basis_jp = min(total_pokok, BATAS_GAJI_BPJS_JP)
+            bpjs_jkk = 0
+            bpjs_jkm = 0
+            bpjs_jht = round(total_pokok * PERSEN_BPJS_JHT_KARYAWAN)
+            bpjs_jp = round(basis_jp * PERSEN_BPJS_JP_KARYAWAN)
+            bpjs_tk_perusahaan = (
+                round(total_pokok * (PERSEN_BPJS_JKK_PERUSAHAAN + PERSEN_BPJS_JKM_PERUSAHAAN + PERSEN_BPJS_JHT_PERUSAHAAN))
+                + round(basis_jp * PERSEN_BPJS_JP_PERUSAHAAN)
+            )
+        else:
+            bpjs_jkk = emp.bpjs_jkk or 0
+            bpjs_jkm = emp.bpjs_jkm or 0
+            bpjs_jht = emp.bpjs_jht or 0
+            bpjs_jp = 0
+            bpjs_tk_perusahaan = 0
 
         if emp.bpjs_kesehatan_terdaftar:
             basis_bpjs_kesehatan = min(total_pokok, BATAS_GAJI_BPJS_KESEHATAN)
@@ -6008,7 +6048,7 @@ def create_app():
             total_pokok
             - potongan_alpha
             - potongan_telat
-            - bpjs_jkk - bpjs_jkm - bpjs_jht - bpjs_kesehatan
+            - bpjs_jkk - bpjs_jkm - bpjs_jht - bpjs_jp - bpjs_kesehatan
             + uang_lembur
             + bonus_target
         )
@@ -6037,6 +6077,8 @@ def create_app():
         payroll.bpjs_jkk = bpjs_jkk
         payroll.bpjs_jkm = bpjs_jkm
         payroll.bpjs_jht = bpjs_jht
+        payroll.bpjs_jp = bpjs_jp
+        payroll.bpjs_tk_perusahaan = bpjs_tk_perusahaan
         payroll.bpjs_kesehatan = bpjs_kesehatan
         payroll.bpjs_kesehatan_perusahaan = bpjs_kesehatan_perusahaan
         payroll.gaji_bersih = gaji_bersih
@@ -6112,6 +6154,8 @@ def create_app():
         payroll.bpjs_jkk = 0
         payroll.bpjs_jkm = 0
         payroll.bpjs_jht = 0
+        payroll.bpjs_jp = 0
+        payroll.bpjs_tk_perusahaan = 0
         payroll.bpjs_kesehatan = 0
         payroll.bpjs_kesehatan_perusahaan = 0
         payroll.gaji_bersih = gaji_bersih

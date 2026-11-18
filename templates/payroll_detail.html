@@ -142,10 +142,22 @@
           <td>Jaminan Hari Tua (JHT)</td>
           <td class="text-end text-danger">- {{ p.bpjs_jht | rupiah }}</td>
         </tr>
+        {% if p.bpjs_jp %}
+        <tr>
+          <td>Jaminan Pensiun (JP 1%)</td>
+          <td class="text-end text-danger">- {{ p.bpjs_jp | rupiah }}</td>
+        </tr>
+        {% endif %}
         <tr>
           <td>Jaminan Kesehatan (1%)</td>
           <td class="text-end text-danger">- {{ p.bpjs_kesehatan | rupiah }}</td>
         </tr>
+        {% if p.bpjs_tk_perusahaan %}
+        <tr>
+          <td class="text-muted">BPJS Ketenagakerjaan Ditanggung Perusahaan</td>
+          <td class="text-end text-muted">{{ p.bpjs_tk_perusahaan | rupiah }}</td>
+        </tr>
+        {% endif %}
         {% if p.bpjs_kesehatan_perusahaan %}
         <tr>
           <td class="text-muted">BPJS Kesehatan Ditanggung Perusahaan (4%)</td>

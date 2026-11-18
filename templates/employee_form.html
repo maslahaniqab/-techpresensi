@@ -85,7 +85,19 @@
           <input type="number" name="bpjs_jht" class="form-control" min="0" value="{{ karyawan.bpjs_jht if karyawan else 0 }}">
         </div>
       </div>
-      <div class="form-check mt-2">
+      <div class="form-check mt-3">
+        <input type="checkbox" class="form-check-input" id="bpjs_tk_terdaftar" name="bpjs_tk_terdaftar"
+               {{ 'checked' if karyawan and karyawan.bpjs_tk_terdaftar else '' }}>
+        <label class="form-check-label" for="bpjs_tk_terdaftar">
+          Terdaftar BPJS Ketenagakerjaan (hitung otomatis)
+        </label>
+        <div class="form-text">
+          Kalau dicentang, potongan dihitung otomatis tiap generate slip gaji dari gaji pokok + tunjangan:
+          JHT 2% dan JP 1% dipotong dari gaji karyawan. Bagian perusahaan (JKK 0,24%, JKM 0,3%, JHT 3,7%, JP 2%)
+          cuma dicatat di slip, tidak dipotong. Isian nominal JKK/JKM/JHT di atas diabaikan selama ini dicentang.
+        </div>
+      </div>
+      <div class="form-check mt-3">
         <input type="checkbox" class="form-check-input" id="bpjs_kesehatan_terdaftar" name="bpjs_kesehatan_terdaftar"
                {{ 'checked' if karyawan and karyawan.bpjs_kesehatan_terdaftar else '' }}>
         <label class="form-check-label" for="bpjs_kesehatan_terdaftar">

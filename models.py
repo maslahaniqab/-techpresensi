@@ -78,6 +78,7 @@ class Employee(UserMixin, db.Model):
     bpjs_jht = db.Column(db.Integer, nullable=False, default=0)
     bpjs_kesehatan = db.Column(db.Integer, nullable=False, default=0)
     bpjs_kesehatan_terdaftar = db.Column(db.Boolean, nullable=False, default=False)
+    bpjs_tk_terdaftar = db.Column(db.Boolean, nullable=False, default=False)
     tarif_unit_freelance = db.Column(db.Integer, nullable=False, default=0)  # 0 = pakai default di Pengaturan
     co_host_bulan_ini = db.Column(db.String(8), default="Tidak")  # Ya / Tidak
     status = db.Column(db.String(16), default="Aktif")  # Aktif / Nonaktif
@@ -155,6 +156,8 @@ class Payroll(db.Model):
     bpjs_jht = db.Column(db.Integer, default=0)
     bpjs_kesehatan = db.Column(db.Integer, default=0)
     bpjs_kesehatan_perusahaan = db.Column(db.Integer, default=0)
+    bpjs_jp = db.Column(db.Integer, default=0)
+    bpjs_tk_perusahaan = db.Column(db.Integer, default=0)  # total iuran BPJS TK yg ditanggung perusahaan (JKK+JKM+JHT+JP), info saja
     gaji_bersih = db.Column(db.Integer, default=0)
 
     status = db.Column(db.String(16), default="Draft")  # Draft / Dibayar
