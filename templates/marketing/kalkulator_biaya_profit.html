@@ -3,7 +3,19 @@
 {% block content %}
 
 <h3 class="mb-1">Kalkulator Biaya & Profit</h3>
-<p class="text-muted small mb-3">Simulasi potongan marketplace &amp; proyeksi profit per produk &mdash; dari rumus kalkulator TikTok Shop yang sudah dipakai sebelumnya.</p>
+<p class="text-muted small mb-3">Simulasi potongan marketplace &amp; proyeksi profit per produk &mdash; dari rumus kalkulator TikTok Shop yang sudah dipakai sebelumnya, sekarang bisa pilih per marketplace.</p>
+
+<div class="card p-3 mb-3">
+  <div class="mb-3">
+    <label class="form-label small">Pilih Marketplace</label>
+    <select id="selMarketplace" class="form-select">
+      <option value="shopee">Shopee Mall</option>
+      <option value="tiktok">TikTok Shop Mall</option>
+      <option value="lazada">Lazada Mall (LazMall)</option>
+    </select>
+  </div>
+  <div id="catatanMarketplace" class="alert alert-warning small mb-0"></div>
+</div>
 
 <div class="card p-3 mb-3">
   <div class="mb-3">
@@ -39,23 +51,23 @@
   <div class="fw-semibold small mb-2">Persentase Biaya (bisa diubah sesuai kebutuhan)</div>
   <div class="row g-3">
     <div class="col-md-3 col-6">
-      <label class="form-label small">Admin (Mall) %</label>
+      <label class="form-label small" id="lblAdmin">Admin (Mall) %</label>
       <input type="number" step="0.01" id="pctAdmin" class="form-control form-control-sm" value="10">
     </div>
     <div class="col-md-3 col-6">
-      <label class="form-label small">Layanan Promo Xtra %</label>
+      <label class="form-label small" id="lblLayanan1">Layanan Promo Xtra %</label>
       <input type="number" step="0.01" id="pctLayanan1" class="form-control form-control-sm" value="4.55">
     </div>
     <div class="col-md-3 col-6">
-      <label class="form-label small">Layanan Promo Xtra (flat Rp)</label>
+      <label class="form-label small" id="lblFlatLayanan1">Layanan Promo Xtra (flat Rp)</label>
       <input type="number" id="flatLayanan1" class="form-control form-control-sm" value="1250">
     </div>
     <div class="col-md-3 col-6">
-      <label class="form-label small">Komisi Dinamis %</label>
+      <label class="form-label small" id="lblLayanan2">Komisi Dinamis %</label>
       <input type="number" step="0.01" id="pctLayanan2" class="form-control form-control-sm" value="5.5">
     </div>
     <div class="col-md-3 col-6">
-      <label class="form-label small">Komisi Affiliate (AMS) %</label>
+      <label class="form-label small" id="lblAms">Komisi Affiliate (AMS) %</label>
       <input type="number" step="0.01" id="pctAms" class="form-control form-control-sm" value="3">
     </div>
     <div class="col-md-3 col-6">
@@ -80,10 +92,10 @@
       </tr>
     </thead>
     <tbody>
-      <tr><td>Admin (Mall)</td><td class="text-end" id="outAdmin0"></td><td class="text-end" id="outAdmin1"></td><td class="text-end" id="outAdmin2"></td></tr>
-      <tr><td>Layanan &mdash; Promo Xtra</td><td class="text-end" id="outL1_0"></td><td class="text-end" id="outL1_1"></td><td class="text-end" id="outL1_2"></td></tr>
-      <tr><td>Layanan &mdash; Komisi Dinamis</td><td class="text-end" id="outL2_0"></td><td class="text-end" id="outL2_1"></td><td class="text-end" id="outL2_2"></td></tr>
-      <tr><td>AMS &mdash; Komisi Affiliate</td><td class="text-end" id="outAms0"></td><td class="text-end" id="outAms1"></td><td class="text-end" id="outAms2"></td></tr>
+      <tr><td id="rowAdmin">Admin (Mall)</td><td class="text-end" id="outAdmin0"></td><td class="text-end" id="outAdmin1"></td><td class="text-end" id="outAdmin2"></td></tr>
+      <tr><td id="rowL1">Layanan &mdash; Promo Xtra</td><td class="text-end" id="outL1_0"></td><td class="text-end" id="outL1_1"></td><td class="text-end" id="outL1_2"></td></tr>
+      <tr><td id="rowL2">Layanan &mdash; Komisi Dinamis</td><td class="text-end" id="outL2_0"></td><td class="text-end" id="outL2_1"></td><td class="text-end" id="outL2_2"></td></tr>
+      <tr><td id="rowAms">AMS &mdash; Komisi Affiliate</td><td class="text-end" id="outAms0"></td><td class="text-end" id="outAms1"></td><td class="text-end" id="outAms2"></td></tr>
       <tr class="fw-semibold"><td>Total Biaya MP</td><td class="text-end" id="outTotalMp0"></td><td class="text-end" id="outTotalMp1"></td><td class="text-end" id="outTotalMp2"></td></tr>
       <tr><td>Iklan (opsional)</td><td class="text-end" id="outIklan0"></td><td class="text-end" id="outIklan1"></td><td class="text-end" id="outIklan2"></td></tr>
       <tr><td>Operasional Store (opsional)</td><td class="text-end" id="outOps0"></td><td class="text-end" id="outOps1"></td><td class="text-end" id="outOps2"></td></tr>
@@ -104,9 +116,83 @@
 <script>
   const PRODUK = {{ produk_json | tojson }};
 
+  // Preset per marketplace -- khusus kategori Fashion Muslim.
+  // Shopee: bersumber dari berita (Bisnis.com/Katadata) soal kenaikan biaya admin 2026 --
+  // Fashion Muslim masuk kategori tarif tertinggi (10%), + biaya layanan pembayaran 1,8%
+  // (maks Rp50.000/kuantitas, tidak disimulasikan capping-nya di sini) + biaya proses
+  // pesanan flat Rp1.250.
+  // TikTok: rumus yang sudah dipakai user sebelumnya (data asli, bukan perkiraan).
+  // Lazada: sumbernya lemah/tidak resmi utk Indonesia 2026 -- ditandai jelas sbg PERKIRAAN,
+  // wajib dicocokkan ke Seller Center Lazada sendiri sebelum dipakai serius.
+  const PRESET = {
+    shopee: {
+      nama: "Shopee Mall",
+      labelAdmin: "Biaya Administrasi %",
+      labelL1: "Biaya Layanan Pembayaran %",
+      labelFlatL1: "Biaya Proses Pesanan (flat Rp)",
+      labelL2: "Biaya Program % (opsional)",
+      labelAms: "Komisi Affiliate Shopee % (opsional)",
+      rowAdmin: "Biaya Administrasi",
+      rowL1: "Layanan Pembayaran + Proses Pesanan",
+      rowL2: "Biaya Program (opsional)",
+      rowAms: "Komisi Affiliate Shopee",
+      pctAdmin: 10, pctL1: 1.8, flatL1: 1250, pctL2: 0, pctAms: 0,
+      catatan: "Fashion Muslim masuk kategori tarif admin TERTINGGI Shopee Mall (10%) -- bukan rata-rata semua kategori. Biaya Layanan Pembayaran 1,8% ada batas maksimal Rp50.000/kuantitas yang tidak disimulasikan di sini. Sumber: berita Bisnis.com & Katadata soal kenaikan biaya admin Shopee 2026 -- cek lagi ke Seller Center Shopee Anda untuk angka pasti saat ini.",
+    },
+    tiktok: {
+      nama: "TikTok Shop Mall",
+      labelAdmin: "Admin (Mall) %",
+      labelL1: "Layanan Promo Xtra %",
+      labelFlatL1: "Layanan Promo Xtra (flat Rp)",
+      labelL2: "Komisi Dinamis %",
+      labelAms: "Komisi Affiliate (AMS) %",
+      rowAdmin: "Admin (Mall)",
+      rowL1: "Layanan — Promo Xtra",
+      rowL2: "Layanan — Komisi Dinamis",
+      rowAms: "AMS — Komisi Affiliate",
+      pctAdmin: 10, pctL1: 4.55, flatL1: 1250, pctL2: 5.5, pctAms: 3,
+      catatan: "Rumus & angka ini dari kalkulator TikTok Shop yang sudah dipakai sebelumnya (data asli, bukan perkiraan).",
+    },
+    lazada: {
+      nama: "Lazada Mall (LazMall)",
+      labelAdmin: "Biaya Komisi % (perkiraan)",
+      labelL1: "Biaya Gratis Ongkir Max % (opsional)",
+      labelFlatL1: "Biaya Proses Pesanan (flat Rp)",
+      labelL2: "Biaya Program % (opsional)",
+      labelAms: "Komisi Affiliate % (opsional)",
+      rowAdmin: "Biaya Komisi",
+      rowL1: "Gratis Ongkir Max + Proses Pesanan",
+      rowL2: "Biaya Program (opsional)",
+      rowAms: "Komisi Affiliate (opsional)",
+      pctAdmin: 4.5, pctL1: 3, flatL1: 1250, pctL2: 0, pctAms: 0,
+      catatan: "⚠ PERKIRAAN, BELUM TERVERIFIKASI -- pencarian tidak menemukan tarif resmi LazMall Indonesia 2026 utk Fashion Muslim. Biaya Komisi 4,5% & Gratis Ongkir Max 3% cuma estimasi kasar dari sumber tidak resmi. WAJIB dicocokkan ke Seller Center Lazada Anda sebelum dipakai untuk keputusan harga.",
+    },
+  };
+
   function rupiah(n) {
     n = Math.round(n || 0);
     return "Rp " + n.toLocaleString("id-ID");
+  }
+
+  function terapkanPreset(key) {
+    const p = PRESET[key];
+    if (!p) return;
+    document.getElementById("lblAdmin").textContent = p.labelAdmin;
+    document.getElementById("lblLayanan1").textContent = p.labelL1;
+    document.getElementById("lblFlatLayanan1").textContent = p.labelFlatL1;
+    document.getElementById("lblLayanan2").textContent = p.labelL2;
+    document.getElementById("lblAms").textContent = p.labelAms;
+    document.getElementById("rowAdmin").textContent = p.rowAdmin;
+    document.getElementById("rowL1").textContent = p.rowL1;
+    document.getElementById("rowL2").textContent = p.rowL2;
+    document.getElementById("rowAms").textContent = p.rowAms;
+    document.getElementById("pctAdmin").value = p.pctAdmin;
+    document.getElementById("pctLayanan1").value = p.pctL1;
+    document.getElementById("flatLayanan1").value = p.flatL1;
+    document.getElementById("pctLayanan2").value = p.pctL2;
+    document.getElementById("pctAms").value = p.pctAms;
+    document.getElementById("catatanMarketplace").textContent = p.nama + " — " + p.catatan;
+    hitungUlang();
   }
 
   function hitungUlang() {
@@ -162,6 +248,10 @@
     }
   }
 
+  document.getElementById("selMarketplace").addEventListener("change", function () {
+    terapkanPreset(this.value);
+  });
+
   document.getElementById("selProduk").addEventListener("change", function () {
     const p = PRODUK[this.value];
     if (!p) return;
@@ -177,6 +267,6 @@
     el.addEventListener("focus", function () { this.select(); });
   });
 
-  hitungUlang();
+  terapkanPreset("shopee");
 </script>
 {% endblock %}
