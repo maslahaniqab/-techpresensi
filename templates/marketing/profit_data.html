@@ -207,8 +207,8 @@
         <td class="small">{{ p.no_pesanan }}</td>
         <td>{{ p.tanggal_pesanan.strftime("%d/%m/%Y") }}</td>
         <td>
-          {% if p.status_pesanan in ('Selesai','Selesai Pesanan') %}<span class="badge bg-success-subtle text-success-emphasis">{{ p.status_pesanan }}</span>
-          {% elif p.status_pesanan in ('Batal','Dibatalkan','Cancelled','Cancel') %}<span class="badge bg-danger-subtle text-danger-emphasis">{{ p.status_pesanan }}</span>
+          {% if p.status_pesanan in status_selesai_list %}<span class="badge bg-success-subtle text-success-emphasis">{{ p.status_pesanan }}</span>
+          {% elif p.status_pesanan in status_batal_list %}<span class="badge bg-danger-subtle text-danger-emphasis">{{ p.status_pesanan }}</span>
           {% else %}<span class="badge bg-secondary-subtle text-secondary-emphasis">{{ p.status_pesanan }}</span>{% endif %}
         </td>
         <td class="small">{{ p.nama_produk }}</td>

@@ -1033,8 +1033,8 @@ PARSER_INCOME_MARKETPLACE = {
 }
 
 
-STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel", "returned")
-STATUS_SELESAI_MARKETPLACE = ("Selesai", "Selesai Pesanan")
+STATUS_BATAL_MARKETPLACE = ("Batal", "Dibatalkan", "Cancelled", "Cancel", "canceled", "returned")
+STATUS_SELESAI_MARKETPLACE = ("Selesai", "Selesai Pesanan", "delivered")
 
 
 def _normalisasi_nama_varian(nama):
@@ -9144,6 +9144,8 @@ def create_app():
             total_omzet_bersih=total_omzet_bersih,
             total_nilai_batal=total_nilai_batal,
             total_jumlah_batal=total_jumlah_batal,
+            status_batal_list=STATUS_BATAL_MARKETPLACE,
+            status_selesai_list=STATUS_SELESAI_MARKETPLACE,
         )
 
     BATAS_HARI_FOLLOWUP_KONFIRMASI = 7
