@@ -97,8 +97,26 @@
 <div class="card p-3">
   <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
     <div class="text-muted small">Menampilkan {{ daftar | length }} pesanan</div>
-    <a href="{{ url_for('profit_belum_income_download', kategori=kategori_filter, marketplace=marketplace_filter, cari=cari) }}" class="btn btn-outline-primary btn-sm">⬇️ Download File (Excel)</a>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if daftar %}
+      <form method="post" action="{{ url_for('profit_belum_income_update_status_massal') }}" class="d-flex gap-2"
+            onsubmit="return confirm('Tandai SEMUA ' + {{ daftar | length }} + ' pesanan yang sedang tampil ini jadi status terpilih? Dipakai kalau status aslinya sudah berubah di marketplace tapi belum sempat upload ulang file.');">
+        <input type="hidden" name="kategori" value="{{ kategori_filter }}">
+        <input type="hidden" name="marketplace" value="{{ marketplace_filter }}">
+        <input type="hidden" name="cari" value="{{ cari }}">
+        <select name="status_baru" class="form-select form-select-sm" required>
+          <option value="">Tandai semua yang tampil jadi...</option>
+          {% for nilai, label in status_pilihan %}
+          <option value="{{ nilai }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-outline-success btn-sm text-nowrap">Terapkan ke Semua</button>
+      </form>
+      {% endif %}
+      <a href="{{ url_for('profit_belum_income_download', kategori=kategori_filter, marketplace=marketplace_filter, cari=cari) }}" class="btn btn-outline-primary btn-sm">⬇️ Download File (Excel)</a>
+    </div>
   </div>
+  <p class="text-muted small mb-2">Status asli berubah di marketplace (mis. pembeli sudah konfirmasi) tapi belum sempat upload ulang file? Update status langsung di sini, per pesanan atau sekaligus semua yang tampil.</p>
   <div class="table-responsive" style="max-height: 620px; overflow-y: auto;">
     <table class="table table-sm align-middle mb-0">
       <thead style="position: sticky; top: 0; background: #eef1f6; z-index: 1;">
@@ -111,6 +129,7 @@
           <th class="text-end">Umur</th>
           <th>Produk</th>
           <th class="text-end">Subtotal</th>
+          <th style="min-width:230px;">Aksi</th>
         </tr>
       </thead>
       <tbody>
@@ -139,9 +158,24 @@
             {{ d.produk_list[0] }}{% if d.jumlah_produk > 1 %} <span class="text-muted">(+{{ d.jumlah_produk - 1 }} produk lain)</span>{% endif %}
           </td>
           <td class="text-end small">{{ d.subtotal | rupiah }}</td>
+          <td>
+            <form method="post" action="{{ url_for('profit_belum_income_update_status') }}" class="d-flex gap-1">
+              <input type="hidden" name="marketplace" value="{{ d.marketplace }}">
+              <input type="hidden" name="no_pesanan" value="{{ d.no_pesanan }}">
+              <input type="hidden" name="kategori_filter" value="{{ kategori_filter }}">
+              <input type="hidden" name="marketplace_filter" value="{{ marketplace_filter }}">
+              <input type="hidden" name="cari" value="{{ cari }}">
+              <select name="status_baru" class="form-select form-select-sm">
+                {% for nilai, label in status_pilihan %}
+                <option value="{{ nilai }}" {{ 'selected' if d.status_pesanan == nilai }}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">Update</button>
+            </form>
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-4">Tidak ada pesanan yang cocok dengan filter ini.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">Tidak ada pesanan yang cocok dengan filter ini.</td></tr>
         {% endfor %}
       </tbody>
     </table>

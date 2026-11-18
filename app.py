@@ -9180,6 +9180,16 @@ def create_app():
         "perlu_ditelusuri": "Perlu Ditelusuri",
     }
 
+    # Pilihan status manual -- nilainya sengaja disamakan persis dengan yang dikenali
+    # klasifikasi() di _susun_belum_income() supaya pesanan langsung pindah kategori
+    # yang benar begitu statusnya diupdate manual.
+    STATUS_PILIHAN_BELUM_INCOME = [
+        ("Selesai", "Selesai"),
+        ("Pesanan diterima, pembeli belum konfirmasi", "Sudah Sampai, Menunggu Konfirmasi Pembeli"),
+        ("Diproses/Dikirim", "Masih Dikirim / Diproses"),
+        ("Batal", "Dibatalkan"),
+    ]
+
     @app.route("/marketing/profit/data/belum-income")
     @profit_required
     def profit_belum_income_detail():
@@ -9202,7 +9212,58 @@ def create_app():
             daftar_marketplace=daftar_marketplace,
             cari=cari,
             batas_hari_followup=BATAS_HARI_FOLLOWUP_KONFIRMASI,
+            status_pilihan=STATUS_PILIHAN_BELUM_INCOME,
         )
+
+    @app.route("/marketing/profit/data/belum-income/update-status", methods=["POST"])
+    @profit_required
+    def profit_belum_income_update_status():
+        """Update status_pesanan manual (tanpa upload ulang file) -- buat kasus status
+        di marketplace sudah berubah (mis. pembeli sudah konfirmasi) tapi data terakhir
+        yang diupload masih yang lama."""
+        marketplace = request.form.get("marketplace", "").strip()
+        no_pesanan = request.form.get("no_pesanan", "").strip()
+        status_baru = request.form.get("status_baru", "").strip()
+        if marketplace and no_pesanan and status_baru:
+            jumlah = PesananMarketplace.query.filter_by(
+                marketplace=marketplace, no_pesanan=no_pesanan
+            ).update({"status_pesanan": status_baru})
+            db.session.commit()
+            if jumlah:
+                flash(f"Status pesanan {no_pesanan} diperbarui jadi \"{status_baru}\".", "success")
+            else:
+                flash(f"Pesanan {no_pesanan} tidak ditemukan.", "danger")
+        return redirect(url_for(
+            "profit_belum_income_detail",
+            kategori=request.form.get("kategori_filter", ""),
+            marketplace=request.form.get("marketplace_filter", ""),
+            cari=request.form.get("cari", ""),
+        ))
+
+    @app.route("/marketing/profit/data/belum-income/update-status-massal", methods=["POST"])
+    @profit_required
+    def profit_belum_income_update_status_massal():
+        """Sama seperti update-status tapi untuk SEMUA pesanan yang sedang tampil di
+        filter saat ini sekaligus -- buat kasus banyak pesanan lama yang kemungkinan
+        besar sudah berubah status di marketplace (mis. otomatis selesai setelah
+        beberapa hari) tapi belum sempat diupload ulang satu-satu."""
+        kategori_filter = request.form.get("kategori", "")
+        marketplace_filter = request.form.get("marketplace", "")
+        cari = request.form.get("cari", "").strip()
+        status_baru = request.form.get("status_baru", "").strip()
+        if status_baru:
+            daftar, _ringkasan, _mp = _susun_belum_income(kategori_filter, marketplace_filter, cari)
+            jumlah = 0
+            for d in daftar:
+                PesananMarketplace.query.filter_by(
+                    marketplace=d["marketplace"], no_pesanan=d["no_pesanan"]
+                ).update({"status_pesanan": status_baru})
+                jumlah += 1
+            db.session.commit()
+            flash(f"{jumlah} pesanan ditandai \"{status_baru}\".", "success")
+        return redirect(url_for(
+            "profit_belum_income_detail", kategori=kategori_filter, marketplace=marketplace_filter, cari=cari,
+        ))
 
     @app.route("/marketing/profit/data/belum-income/download")
     @profit_required
