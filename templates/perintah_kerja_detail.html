@@ -19,7 +19,7 @@
 <div class="card p-3">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
-      <thead><tr><th>Karyawan</th><th>WA</th><th>Dibaca</th><th>Selesai</th></tr></thead>
+      <thead><tr><th>Karyawan</th><th>WA</th><th>Dibaca</th><th>Selesai</th><th>Catatan &amp; Bukti</th></tr></thead>
       <tbody>
         {% for p in penerima %}
         <tr>
@@ -28,6 +28,11 @@
           <td class="small">{{ p.dibaca_pada.strftime('%d/%m %H:%M') if p.dibaca_pada else '-' }}</td>
           <td class="small">
             {% if p.selesai_pada %}<span class="badge bg-success">{{ p.selesai_pada.strftime('%d/%m %H:%M') }}</span>{% else %}<span class="text-muted">Belum</span>{% endif %}
+          </td>
+          <td class="small">
+            {% if p.catatan_selesai %}<div>{{ p.catatan_selesai }}</div>{% endif %}
+            {% if p.bukti_filename %}<a href="{{ url_for('static', filename='uploads/perintah/' + p.bukti_filename) }}" target="_blank">📎 {{ p.bukti_nama_asli or 'Lihat bukti' }}</a>
+            {% elif not p.catatan_selesai %}<span class="text-muted">-</span>{% endif %}
           </td>
         </tr>
         {% endfor %}

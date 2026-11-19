@@ -11,7 +11,12 @@
     .muted { color: #6B645A; font-size: 14px; }
     .isi { white-space: pre-line; margin: 14px 0; font-size: 15px; line-height: 1.5; }
     .tombol { display: inline-block; width: 100%; box-sizing: border-box; padding: 12px; border: 0; border-radius: 8px; background: #2E6B58; color: #fff; font-size: 16px; cursor: pointer; }
-    .sudah { background: #E7EFEA; color: #1F4D3F; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; }
+    .sudah { background: #E7EFEA; color: #1F4D3F; padding: 12px; border-radius: 8px; }
+    .sudah .judul { font-weight: 600; margin-bottom: 6px; }
+    .sudah a { color: #1F4D3F; }
+    .label { font-size: 14px; font-weight: 600; margin: 14px 0 4px 0; display: block; }
+    .bantu { font-size: 13px; color: #6B645A; margin: 0 0 6px 0; }
+    textarea, input[type="file"] { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #E2DCD1; border-radius: 8px; font-family: inherit; font-size: 14px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -22,9 +27,18 @@
     {% if perintah.deskripsi %}<div class="isi">{{ perintah.deskripsi }}</div>{% endif %}
 
     {% if p.selesai_pada %}
-      <div class="sudah">Sudah ditandai selesai ({{ p.selesai_pada.strftime('%d/%m/%Y %H:%M') }})</div>
+      <div class="sudah">
+        <div class="judul">Sudah ditandai selesai ({{ p.selesai_pada.strftime('%d/%m/%Y %H:%M') }})</div>
+        {% if p.catatan_selesai %}<div>Catatan: {{ p.catatan_selesai }}</div>{% endif %}
+        {% if p.bukti_filename %}<div>Bukti: <a href="{{ url_for('static', filename='uploads/perintah/' + p.bukti_filename) }}" target="_blank">{{ p.bukti_nama_asli or 'Lihat file' }}</a></div>{% endif %}
+      </div>
     {% else %}
-      <form method="post" action="{{ url_for('perintah_publik_selesai', token=p.token) }}">
+      <form method="post" action="{{ url_for('perintah_publik_selesai', token=p.token) }}" enctype="multipart/form-data">
+        <label class="label" for="catatan">Catatan (opsional)</label>
+        <textarea name="catatan" id="catatan" rows="3" placeholder="mis. sudah dikerjakan, ada kendala di..."></textarea>
+        <label class="label" for="bukti">Foto/Dokumen Bukti (opsional)</label>
+        <p class="bantu">PDF, Word, atau gambar (JPG/PNG), maks 10 MB.</p>
+        <input type="file" name="bukti" id="bukti" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
         <button type="submit" class="tombol">Tandai Selesai</button>
       </form>
     {% endif %}

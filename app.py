@@ -2013,12 +2013,17 @@ def create_app():
     os.makedirs(laporan_upload_folder, exist_ok=True)
     app.config["LAPORAN_UPLOAD_FOLDER"] = laporan_upload_folder
 
+    perintah_upload_folder = os.path.join(upload_folder, "perintah")
+    os.makedirs(perintah_upload_folder, exist_ok=True)
+    app.config["PERINTAH_UPLOAD_FOLDER"] = perintah_upload_folder
+
     # Batas ukuran file upload di seluruh aplikasi, supaya server tidak kehabisan
     # memori/disk (paket hosting free tier) gara-gara file besar -- ini yang bikin
     # aplikasi lemot kalau tidak dibatasi.
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
     EKSTENSI_DOKUMEN_IZIN = {"pdf", "doc", "docx", "jpg", "jpeg", "png"}
+    EKSTENSI_BUKTI_PERINTAH = {"pdf", "doc", "docx", "jpg", "jpeg", "png"}
     EKSTENSI_LAMPIRAN_LAPORAN = {
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
         "jpg", "jpeg", "png", "csv", "txt", "zip",
@@ -2265,6 +2270,15 @@ def create_app():
                 "ALTER TABLE employee ADD COLUMN akses_profitabilitas BOOLEAN NOT NULL DEFAULT 0"
             ))
             db.session.commit()
+        kolom_penerima_perintah = {c["name"] for c in db.inspect(db.engine).get_columns("penerima_perintah")}
+        for kolom, ddl in [
+            ("bukti_filename", "ALTER TABLE penerima_perintah ADD COLUMN bukti_filename VARCHAR(256)"),
+            ("bukti_nama_asli", "ALTER TABLE penerima_perintah ADD COLUMN bukti_nama_asli VARCHAR(256)"),
+            ("catatan_selesai", "ALTER TABLE penerima_perintah ADD COLUMN catatan_selesai VARCHAR(512)"),
+        ]:
+            if kolom not in kolom_penerima_perintah:
+                db.session.execute(db.text(ddl))
+                db.session.commit()
         if "bpjs_tk_terdaftar" not in kolom_employee:
             db.session.execute(db.text(
                 "ALTER TABLE employee ADD COLUMN bpjs_tk_terdaftar BOOLEAN NOT NULL DEFAULT 0"
@@ -9928,6 +9942,18 @@ def create_app():
     def perintah_publik_selesai(token):
         p = PenerimaPerintah.query.filter_by(token=token).first() or abort_404()
         if not p.selesai_pada:
+            bukti_file = request.files.get("bukti")
+            bukti_ada = bool(bukti_file and bukti_file.filename)
+            if bukti_ada and bukti_file.filename.rsplit(".", 1)[-1].lower() not in EKSTENSI_BUKTI_PERINTAH:
+                flash("Format bukti tidak didukung. Gunakan PDF, Word, atau gambar (JPG/PNG).", "danger")
+                return redirect(url_for("perintah_publik", token=token))
+            if bukti_ada:
+                ext = bukti_file.filename.rsplit(".", 1)[-1].lower()
+                bukti_filename = secure_filename(f"perintah_{p.id}_{now_wib().strftime('%Y%m%d_%H%M%S')}.{ext}")
+                bukti_file.save(os.path.join(app.config["PERINTAH_UPLOAD_FOLDER"], bukti_filename))
+                p.bukti_filename = bukti_filename
+                p.bukti_nama_asli = secure_filename(bukti_file.filename)[:256]
+            p.catatan_selesai = request.form.get("catatan", "").strip()[:512] or None
             p.selesai_pada = now_wib()
             db.session.commit()
         return redirect(url_for("perintah_publik", token=token))

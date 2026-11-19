@@ -264,6 +264,9 @@ class PenerimaPerintah(db.Model):
     wa_terkirim = db.Column(db.Boolean, default=False)
     dibaca_pada = db.Column(db.DateTime)
     selesai_pada = db.Column(db.DateTime)
+    bukti_filename = db.Column(db.String(256))  # foto/dokumen bukti penyelesaian (opsional)
+    bukti_nama_asli = db.Column(db.String(256))
+    catatan_selesai = db.Column(db.String(512))  # catatan opsional saat menandai selesai
 
     employee = db.relationship("Employee")
 
